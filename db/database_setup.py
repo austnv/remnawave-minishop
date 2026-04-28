@@ -1,9 +1,13 @@
 import logging
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
+from bot.utils.date_utils import month_start
 from config.settings import Settings
-from .models import Base
+from db.dal import subscription_dal
+from db.models import Base, Subscription
 from .migrator import run_database_migrations
 
 async_engine = None
@@ -137,6 +141,49 @@ async def init_db(settings: Settings, session_factory: sessionmaker):
                         "default_price": default_price,
                     },
                 )
+                month_anchor = month_start()
+                active_subs = await session.execute(
+                    select(Subscription).where(Subscription.is_active == True)
+                )
+                for sub in active_subs.scalars().all():
+                    tariff_key = sub.tariff_key or default_tariff.key
+                    try:
+                        tariff = settings.tariffs_config.require(tariff_key)
+                    except Exception:
+                        continue
+
+                    update_data = {
+                        "tariff_key": tariff.key,
+                        "topup_balance_bytes": int(sub.topup_balance_bytes or 0),
+                    }
+                    if tariff.billing_model == "period":
+                        baseline_source = (
+                            sub.tier_baseline_bytes
+                            if sub.tier_baseline_bytes is not None
+                            else (sub.traffic_limit_bytes if sub.traffic_limit_bytes is not None else tariff.monthly_bytes)
+                        )
+                        baseline = int(baseline_source or 0)
+                        update_data.update(
+                            {
+                                "tier_baseline_bytes": baseline,
+                                "traffic_limit_bytes": baseline + int(sub.topup_balance_bytes or 0),
+                                "period_start_at": month_anchor,
+                                "effective_monthly_price_rub": (
+                                    sub.effective_monthly_price_rub
+                                    if sub.effective_monthly_price_rub is not None
+                                    else default_price
+                                ),
+                            }
+                        )
+                    else:
+                        update_data.update(
+                            {
+                                "tier_baseline_bytes": 0,
+                                "period_start_at": None,
+                                "effective_monthly_price_rub": None,
+                            }
+                        )
+                    await subscription_dal.update_subscription(session, sub.subscription_id, update_data)
                 await session.commit()
             except Exception:
                 await session.rollback()

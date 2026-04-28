@@ -8,7 +8,7 @@ from bot.middlewares.i18n import JsonI18n
 
 from db.dal import user_dal, subscription_dal, promo_code_dal, payment_dal, user_billing_dal, tariff_dal
 from config.tariffs_config import Tariff
-from bot.utils.date_utils import add_months
+from bot.utils.date_utils import add_months, month_start
 from bot.utils.config_link import prepare_config_links
 from db.models import User, Subscription
 
@@ -825,7 +825,7 @@ class SubscriptionService:
         if target.billing_model == "period":
             update_data["tier_baseline_bytes"] = target.monthly_bytes
             update_data["traffic_limit_bytes"] = target.monthly_bytes + int(sub.topup_balance_bytes or 0)
-            update_data["period_start_at"] = sub.period_start_at or now
+            update_data["period_start_at"] = month_start()
             update_data["effective_monthly_price_rub"] = target.period_price(1, "rub") or target.min_period_price_rub()
             if mode == "recalc_days" and options.get("recalc_days") is not None:
                 update_data["end_date"] = now + timedelta(days=int(options["recalc_days"]))
@@ -1077,7 +1077,7 @@ class SubscriptionService:
 
         topup_balance_bytes = int(getattr(current_active_sub, "topup_balance_bytes", 0) or 0)
         tier_baseline_bytes = tariff.monthly_bytes if tariff else self.settings.user_traffic_limit_bytes
-        period_start_at = (
+        period_start_at = month_start() if tariff else (
             datetime.now(timezone.utc)
             if starts_after_lapse or not current_active_sub or not getattr(current_active_sub, "period_start_at", None)
             else current_active_sub.period_start_at
@@ -1380,6 +1380,8 @@ class SubscriptionService:
                 tariff = self._resolve_tariff(local_active_sub.tariff_key)
             except Exception:
                 tariff = None
+        billing_model_display = tariff.billing_model if tariff else ("traffic" if getattr(self.settings, "traffic_sale_mode", False) else "period")
+        traffic_limit_strategy = "MONTH" if billing_model_display == "period" else panel_traffic_strategy
 
         return {
             "user_id": panel_user_data.get("uuid"),
@@ -1389,11 +1391,11 @@ class SubscriptionService:
             "connect_button_url": connect_button_url,
             "traffic_limit_bytes": panel_traffic_limit,
             "traffic_used_bytes": panel_traffic_used,
-            "traffic_limit_strategy": panel_traffic_strategy,
+            "traffic_limit_strategy": traffic_limit_strategy,
             "tariff_key": local_active_sub.tariff_key if local_active_sub else None,
             "tariff_name": tariff.name(db_user.language_code or self.settings.DEFAULT_LANGUAGE) if tariff else None,
             "tariff_description": tariff.description(db_user.language_code or self.settings.DEFAULT_LANGUAGE) if tariff else None,
-            "billing_model": tariff.billing_model if tariff else ("traffic" if getattr(self.settings, "traffic_sale_mode", False) else "period"),
+            "billing_model": billing_model_display,
             "tier_baseline_bytes": local_active_sub.tier_baseline_bytes if local_active_sub else None,
             "topup_balance_bytes": local_active_sub.topup_balance_bytes if local_active_sub else 0,
             "period_start_at": local_active_sub.period_start_at if local_active_sub else None,

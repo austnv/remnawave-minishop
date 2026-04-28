@@ -2209,6 +2209,7 @@ def _serialize_subscription(
         "tariff_name": active.get("tariff_name"),
         "tariff_description": active.get("tariff_description"),
         "billing_model": active.get("billing_model"),
+        "traffic_limit_strategy": active.get("traffic_limit_strategy"),
         "tier_baseline_bytes": _coerce_int_or_none(active.get("tier_baseline_bytes")),
         "topup_balance_bytes": _coerce_int_or_none(active.get("topup_balance_bytes")),
         "period_start_at": active.get("period_start_at").isoformat() if active.get("period_start_at") else None,

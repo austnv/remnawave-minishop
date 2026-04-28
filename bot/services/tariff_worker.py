@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from aiogram import Bot
@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from bot.middlewares.i18n import JsonI18n
 from bot.services.panel_api_service import PanelApiService
 from bot.services.subscription_service import SubscriptionService
+from bot.utils.date_utils import month_start
 from config.settings import Settings
 from db.dal import subscription_dal, tariff_dal
 from db.models import Subscription
@@ -77,44 +78,54 @@ class TariffTrafficWorker:
                 sub.traffic_limit_bytes = limit
 
             if tariff.billing_model == "period":
-                await self._maybe_reset_period(session, sub, tariff, used)
+                reset_happened = await self._maybe_reset_period(session, sub, tariff, used)
+                if reset_happened:
+                    used = 0
+                    sub.traffic_used_bytes = 0
             await self._maybe_warn_or_throttle(session, sub, tariff, used, limit)
 
-    async def _maybe_reset_period(self, session: AsyncSession, sub: Subscription, tariff, used: Optional[int]) -> None:
-        if not sub.period_start_at:
-            sub.period_start_at = datetime.now(timezone.utc)
-            return
+    async def _maybe_reset_period(self, session: AsyncSession, sub: Subscription, tariff, used: Optional[int]) -> bool:
         now = datetime.now(timezone.utc)
-        next_reset = sub.period_start_at + timedelta(days=30)
-        if now < next_reset or sub.end_date <= now:
-            return
+        current_month_start = month_start(now)
+        if not sub.period_start_at:
+            await subscription_dal.update_subscription(
+                session,
+                sub.subscription_id,
+                {"period_start_at": current_month_start},
+            )
+            sub.period_start_at = current_month_start
+            return False
+        stored_month_start = month_start(sub.period_start_at)
+        if stored_month_start == current_month_start or sub.end_date <= now:
+            return False
 
-        used_now = int(used or sub.traffic_used_bytes or 0)
-        baseline = int(sub.tier_baseline_bytes or tariff.monthly_bytes)
-        topup_used = max(0, used_now - baseline)
-        new_topup = max(0, int(sub.topup_balance_bytes or 0) - topup_used)
         await self.panel_service.reset_user_traffic(sub.panel_user_uuid)
-        new_limit = baseline + new_topup
-        payload = self.subscription_service._build_panel_update_payload(
-            panel_user_uuid=sub.panel_user_uuid,
-            expire_at=sub.end_date,
-            status="ACTIVE",
-            traffic_limit_bytes=new_limit,
-        )
-        payload["activeInternalSquads"] = tariff.squad_uuids
-        await self.panel_service.update_user_details_on_panel(sub.panel_user_uuid, payload, log_response=False)
+        restore_throttled = bool(sub.is_throttled)
+        restore_succeeded = True
+        if restore_throttled:
+            for squad_uuid in tariff.squad_uuids:
+                restore_succeeded = await self.panel_service.add_users_to_internal_squad(
+                    squad_uuid,
+                    [sub.panel_user_uuid],
+                ) and restore_succeeded
+        should_clear_throttle = restore_throttled and restore_succeeded
         await subscription_dal.update_subscription(
             session,
             sub.subscription_id,
             {
-                "period_start_at": next_reset,
+                "period_start_at": current_month_start,
                 "traffic_used_bytes": 0,
-                "traffic_limit_bytes": new_limit,
-                "topup_balance_bytes": new_topup,
-                "is_throttled": False,
+                "is_throttled": False if should_clear_throttle else sub.is_throttled,
+                "status_from_panel": "ACTIVE" if should_clear_throttle else sub.status_from_panel,
             },
         )
+        sub.period_start_at = current_month_start
+        sub.traffic_used_bytes = 0
+        if should_clear_throttle:
+            sub.is_throttled = False
+            sub.status_from_panel = "ACTIVE"
         await tariff_dal.clear_period_warnings(session, sub.subscription_id)
+        return True
 
     async def _maybe_warn_or_throttle(
         self,
