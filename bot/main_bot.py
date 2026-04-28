@@ -30,6 +30,7 @@ from bot.routers import build_root_router
 from bot.services.yookassa_service import YooKassaService
 from bot.services.panel_api_service import PanelApiService
 from bot.services.subscription_service import SubscriptionService
+from bot.services.tariff_worker import TariffTrafficWorker
 from bot.services.referral_service import ReferralService
 from bot.services.promo_code_service import PromoCodeService
 from bot.services.stars_service import StarsService
@@ -273,6 +274,15 @@ async def run_bot(settings_param: Settings):
         dp[key] = service
     dp["panel_service"] = services["panel_service"]
     dp["async_session_factory"] = local_async_session_factory
+    tariff_worker = TariffTrafficWorker(
+        settings_param,
+        local_async_session_factory,
+        services["panel_service"],
+        services["subscription_service"],
+        bot,
+        i18n_instance,
+    )
+    dp["tariff_worker"] = tariff_worker
 
     # Wrap startup/shutdown handlers to satisfy aiogram event signature (no args passed)
     async def _on_startup_wrapper():
@@ -306,6 +316,8 @@ async def run_bot(settings_param: Settings):
         await build_and_start_web_app(dp, bot, settings_param, local_async_session_factory)
 
     main_tasks.append(asyncio.create_task(web_server_task(), name="AIOHTTPServerTask"))
+    if settings_param.tariffs_config:
+        main_tasks.append(asyncio.create_task(tariff_worker.run(), name="TariffTrafficWorker"))
 
     # Recurring billing moved to panel webhook (24h before expiry). No periodic task needed here.
 
