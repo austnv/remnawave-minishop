@@ -102,9 +102,17 @@ class WebAppPaymentCreatePayload(BaseModel):
     months: Any = None
     traffic_gb: Any = None
     tariff_key: Optional[constr(max_length=128)] = None
+    sale_mode: Optional[constr(max_length=64)] = None
     description: Optional[constr(max_length=4096)] = None
     comment: Optional[constr(max_length=4096)] = None
     note: Optional[constr(max_length=4096)] = None
+
+
+class WebAppTariffChangePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tariff_key: constr(min_length=1, max_length=128)
+    mode: constr(min_length=1, max_length=64)
 
 
 class WebAppLanguagePayload(BaseModel):
@@ -195,6 +203,10 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_post("/api/trial/activate", activate_trial_route)
     app.router.add_get("/api/devices", devices_route)
     app.router.add_post("/api/devices/disconnect", disconnect_device_route)
+    app.router.add_get("/api/tariffs/topup-options", tariff_topup_options_route)
+    app.router.add_get("/api/tariffs/change-options", tariff_change_options_route)
+    app.router.add_post("/api/tariffs/change", tariff_change_route)
+    app.router.add_post("/api/tariffs/change-payment", tariff_change_payment_route)
     app.router.add_post("/api/payments", create_payment_route)
     app.router.add_get("/api/payments/{payment_id}", payment_status_route)
 
@@ -1373,8 +1385,39 @@ async def create_payment_route(request: web.Request) -> web.Response:
     traffic_mode = bool(settings.traffic_sale_mode)
     sale_mode = "subscription"
     traffic_gb_for_payment: Optional[float] = None
+    requested_sale_mode = _sale_mode_base(str(payment_payload.sale_mode or ""))
 
-    if tariffs_config:
+    if tariffs_config and requested_sale_mode == "topup":
+        tariff_key = str(payment_payload.tariff_key or "").strip()
+        if not tariff_key:
+            return _json_error(400, "invalid_plan", "Tariff is not selected")
+        try:
+            tariff = tariffs_config.require(tariff_key)
+        except Exception:
+            return _json_error(400, "invalid_plan", "Tariff is not available")
+        try:
+            traffic_gb = float(
+                payment_payload.traffic_gb
+                if payment_payload.traffic_gb is not None
+                else payment_payload.months
+            )
+        except (TypeError, ValueError):
+            return _json_error(400, "invalid_plan", "Invalid traffic package")
+        packages = tariffs_config.topup_packages_for(tariff)
+        rub_packages = {float(package.gb): float(package.price) for package in (packages.rub if packages else [])}
+        stars_packages = {float(package.gb): int(float(package.price)) for package in (packages.stars if packages else [])}
+        package_key = _resolve_numeric_option_key(rub_packages, traffic_gb)
+        stars_package_key = _resolve_numeric_option_key(stars_packages, traffic_gb)
+        price = rub_packages.get(package_key) if package_key is not None else None
+        stars_price = stars_packages.get(stars_package_key) if stars_package_key is not None else None
+        if price is None and method != "stars":
+            return _json_error(400, "invalid_plan", "Traffic package is not available")
+        if method == "stars" and (stars_price is None or int(stars_price) <= 0):
+            return _json_error(400, "invalid_plan", "Stars price is not configured")
+        payment_units = int(traffic_gb) if float(traffic_gb).is_integer() else traffic_gb
+        traffic_gb_for_payment = float(payment_units)
+        sale_mode = f"topup@{tariff.key}"
+    elif tariffs_config:
         tariff_key = str(payment_payload.tariff_key or "").strip()
         if not tariff_key:
             return _json_error(400, "invalid_plan", "Tariff is not selected")
@@ -1559,6 +1602,148 @@ async def activate_trial_route(request: web.Request) -> web.Response:
                 "config_link": config_link,
                 "connect_url": connect_url or config_link,
             }
+        )
+
+
+async def tariff_topup_options_route(request: web.Request) -> web.Response:
+    user_id = _require_user_id(request)
+    settings: Settings = request.app["settings"]
+    config = settings.tariffs_config
+    if not config:
+        return _json_error(404, "tariffs_unavailable", "Tariffs are not configured")
+
+    async_session_factory: sessionmaker = request.app["async_session_factory"]
+    async with async_session_factory() as session:
+        db_user = await user_dal.get_user_by_id(session, user_id)
+        if not db_user or db_user.is_banned:
+            return _json_error(403, "access_denied", "Access denied")
+        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        if not sub or not sub.tariff_key:
+            return _json_error(400, "subscription_required", "Active tariff subscription is required")
+        lang = db_user.language_code or settings.DEFAULT_LANGUAGE
+        tariff = config.require(sub.tariff_key)
+        plans = _serialize_topup_packages(settings, tariff, config.topup_packages_for(tariff), lang)
+        return web.json_response(
+            {
+                "ok": True,
+                "tariff_key": tariff.key,
+                "tariff_name": tariff.name(lang),
+                "traffic_percent": _traffic_percent(sub.traffic_used_bytes, sub.traffic_limit_bytes),
+                "warning_levels": settings.tariff_traffic_warning_levels,
+                "plans": plans,
+            }
+        )
+
+
+async def tariff_change_options_route(request: web.Request) -> web.Response:
+    user_id = _require_user_id(request)
+    settings: Settings = request.app["settings"]
+    config = settings.tariffs_config
+    if not config:
+        return _json_error(404, "tariffs_unavailable", "Tariffs are not configured")
+
+    async_session_factory: sessionmaker = request.app["async_session_factory"]
+    subscription_service: SubscriptionService = request.app["subscription_service"]
+    async with async_session_factory() as session:
+        db_user = await user_dal.get_user_by_id(session, user_id)
+        if not db_user or db_user.is_banned:
+            return _json_error(403, "access_denied", "Access denied")
+        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        if not sub or not sub.tariff_key:
+            return _json_error(400, "subscription_required", "Active tariff subscription is required")
+        lang = db_user.language_code or settings.DEFAULT_LANGUAGE
+        current = config.require(sub.tariff_key)
+        targets = []
+        for tariff in config.enabled_tariffs:
+            if tariff.key == current.key:
+                continue
+            options = subscription_service.calculate_tariff_switch_options(sub, tariff)
+            targets.append(_serialize_tariff_change_target(settings, config, tariff, options, lang))
+        return web.json_response(
+            {
+                "ok": True,
+                "current": {
+                    "tariff_key": current.key,
+                    "title": current.name(lang),
+                    "description": current.description(lang),
+                    "billing_model": current.billing_model,
+                },
+                "targets": targets,
+            }
+        )
+
+
+async def tariff_change_route(request: web.Request) -> web.Response:
+    user_id = _require_user_id(request)
+    payload = await _read_json(request)
+    change_payload, validation_error = _validate_model_payload(WebAppTariffChangePayload, payload)
+    if validation_error:
+        return validation_error
+    mode = str(change_payload.mode or "").strip()
+    if mode not in {"recalc_days", "convert_days_to_gb"}:
+        return _json_error(400, "invalid_change_mode", "This tariff change requires payment")
+
+    settings: Settings = request.app["settings"]
+    if not settings.tariffs_config:
+        return _json_error(404, "tariffs_unavailable", "Tariffs are not configured")
+    async_session_factory: sessionmaker = request.app["async_session_factory"]
+    subscription_service: SubscriptionService = request.app["subscription_service"]
+    async with async_session_factory() as session:
+        db_user = await user_dal.get_user_by_id(session, user_id)
+        if not db_user or db_user.is_banned:
+            return _json_error(403, "access_denied", "Access denied")
+        result = await subscription_service.switch_tariff_without_payment(
+            session,
+            user_id,
+            str(change_payload.tariff_key),
+            mode,
+        )
+        if not result:
+            await session.rollback()
+            return _json_error(400, "change_failed", "Tariff change failed")
+        await session.commit()
+        return web.json_response({"ok": True, **result})
+
+
+async def tariff_change_payment_route(request: web.Request) -> web.Response:
+    user_id = _require_user_id(request)
+    payload = await _read_json(request)
+    payment_payload, validation_error = _validate_model_payload(WebAppPaymentCreatePayload, payload)
+    if validation_error:
+        return validation_error
+    method = str(payment_payload.method or "").strip().lower()
+    tariff_key = str(payment_payload.tariff_key or "").strip()
+    settings: Settings = request.app["settings"]
+    config = settings.tariffs_config
+    if not config:
+        return _json_error(404, "tariffs_unavailable", "Tariffs are not configured")
+    if not tariff_key:
+        return _json_error(400, "invalid_plan", "Tariff is not selected")
+
+    async_session_factory: sessionmaker = request.app["async_session_factory"]
+    subscription_service: SubscriptionService = request.app["subscription_service"]
+    async with async_session_factory() as session:
+        db_user = await user_dal.get_user_by_id(session, user_id)
+        if not db_user or db_user.is_banned:
+            return _json_error(403, "access_denied", "Access denied")
+        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        if not sub:
+            return _json_error(400, "subscription_required", "Active tariff subscription is required")
+        target = config.require(tariff_key)
+        options = subscription_service.calculate_tariff_switch_options(sub, target)
+        price = float(options.get("paid_diff_rub") or 0)
+        if price <= 0:
+            return _json_error(400, "payment_not_required", "Payment is not required for this tariff change")
+        return await _create_subscription_payment(
+            request=request,
+            session=session,
+            user_id=user_id,
+            method=method,
+            months=1,
+            price=price,
+            stars_price=None,
+            lang=db_user.language_code or settings.DEFAULT_LANGUAGE,
+            sale_mode=f"tariff_upgrade@{target.key}",
         )
 
 
@@ -2531,6 +2716,124 @@ def _serialize_plans(
             plan["stars_price"] = int(stars_price)
         plans.append(plan)
     return plans
+
+
+def _traffic_percent(used: Optional[int], limit: Optional[int]) -> int:
+    used_val = int(used or 0)
+    limit_val = int(limit or 0)
+    if limit_val <= 0:
+        return 0
+    return max(0, min(100, round((used_val / limit_val) * 100)))
+
+
+def _serialize_topup_packages(
+    settings: Settings,
+    tariff: Any,
+    packages: Optional[Any],
+    lang: str,
+) -> List[Dict[str, Any]]:
+    rub_packages = {float(package.gb): float(package.price) for package in (packages.rub if packages else [])}
+    stars_packages = {float(package.gb): int(float(package.price)) for package in (packages.stars if packages else [])}
+    plans: List[Dict[str, Any]] = []
+    for traffic_gb in sorted(set(rub_packages) | set(stars_packages)):
+        price = rub_packages.get(traffic_gb)
+        stars_price = stars_packages.get(traffic_gb)
+        if price is None and (stars_price is None or int(stars_price) <= 0):
+            continue
+        traffic_value = float(traffic_gb)
+        plan: Dict[str, Any] = {
+            "id": f"{tariff.key}:topup:{_format_number_for_payload(traffic_value)}",
+            "tariff_key": tariff.key,
+            "tariff_name": tariff.name(lang),
+            "billing_model": tariff.billing_model,
+            "sale_mode": "topup",
+            "months": int(traffic_value) if traffic_value.is_integer() else traffic_value,
+            "traffic_gb": traffic_value,
+            "price": float(price or 0),
+            "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
+            "title": _format_traffic_title(traffic_value, lang),
+            "subtitle": tariff.name(lang),
+        }
+        if stars_price is not None and int(stars_price) > 0:
+            plan["stars_price"] = int(stars_price)
+        plans.append(plan)
+    return plans
+
+
+def _serialize_tariff_change_target(
+    settings: Settings,
+    config: Any,
+    tariff: Any,
+    options: Dict[str, Any],
+    lang: str,
+) -> Dict[str, Any]:
+    actions: List[Dict[str, Any]] = []
+    mode = str(options.get("mode") or "")
+    if mode == "period_to_period":
+        actions.append(
+            {
+                "mode": "recalc_days",
+                "kind": "free",
+                "title": "recalc_days",
+                "days_after": int(options.get("recalc_days") or 0),
+                "remaining_days": int(options.get("remaining_days") or 0),
+            }
+        )
+        paid_diff = float(options.get("paid_diff_rub") or 0)
+        if paid_diff > 0:
+            actions.append(
+                {
+                    "mode": "paid_diff",
+                    "kind": "payment",
+                    "title": "paid_diff",
+                    "price": paid_diff,
+                    "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
+                }
+            )
+    elif mode == "period_to_traffic":
+        actions.append(
+            {
+                "mode": "convert_days_to_gb",
+                "kind": "free",
+                "title": "convert_days_to_gb",
+                "converted_gb": float(options.get("converted_gb") or 0),
+                "remaining_days": int(options.get("remaining_days") or 0),
+            }
+        )
+        actions.extend(
+            {
+                "mode": "buy_package",
+                "kind": "payment",
+                "title": f"+{package.gb:g} GB",
+                "traffic_gb": float(package.gb),
+                "price": float(package.price),
+                "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
+            }
+            for package in (tariff.traffic_packages.rub if tariff.traffic_packages else [])
+        )
+    else:
+        for months in tariff.enabled_periods:
+            price = tariff.period_price(int(months), "rub")
+            if price:
+                actions.append(
+                    {
+                        "mode": "buy_period",
+                        "kind": "payment",
+                        "months": int(months),
+                        "title": _format_months_title(int(months), lang),
+                        "price": float(price),
+                        "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
+                    }
+                )
+    return {
+        "tariff_key": tariff.key,
+        "title": tariff.name(lang),
+        "description": tariff.description(lang),
+        "billing_model": tariff.billing_model,
+        "monthly_gb": tariff.monthly_gb,
+        "options": options,
+        "actions": actions,
+    }
 
 
 def _serialize_payment_methods(

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from aiogram import Bot
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -124,7 +125,9 @@ class TariffTrafficWorker:
         if limit_val <= 0:
             return
         ratio = used_val / limit_val
-        for level, threshold in ((80, 0.8), (95, 0.95), (100, 1.0)):
+        levels = list(getattr(self.settings, "tariff_traffic_warning_levels", [85, 90, 95]))
+        for level in levels:
+            threshold = level / 100
             if ratio < threshold:
                 continue
             warning = await tariff_dal.get_warning(
@@ -150,11 +153,21 @@ class TariffTrafficWorker:
                         text = f"Трафик тарифа {tariff.name(self.settings.DEFAULT_LANGUAGE)} почти закончился. Осталось около {left_pct}%."
                     else:
                         text = "Трафик закончился. Доступ временно ограничен до сброса или докупки пакета."
-                    await self.bot.send_message(sub.user_id, text)
+                    markup = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text="Докупить трафик",
+                                    callback_data="tariff_topup:list",
+                                )
+                            ]
+                        ]
+                    )
+                    await self.bot.send_message(sub.user_id, text, reply_markup=markup)
                 except Exception:
                     logging.exception("Failed to send traffic warning to user %s", sub.user_id)
-            if level == 100:
-                await self._throttle(session, sub, tariff)
+        if ratio >= 1.0:
+            await self._throttle(session, sub, tariff)
 
     async def _throttle(self, session: AsyncSession, sub: Subscription, tariff) -> None:
         if sub.is_throttled:

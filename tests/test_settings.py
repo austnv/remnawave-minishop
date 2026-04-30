@@ -91,3 +91,14 @@ class SettingsTests(unittest.TestCase):
         )
 
         self.assertEqual(settings.TRIAL_TRAFFIC_STRATEGY, "WEEK")
+
+    def test_tariff_warning_levels_are_parsed(self):
+        settings = Settings(
+            _env_file=None,
+            BOT_TOKEN="token",
+            POSTGRES_USER="app_user",
+            POSTGRES_PASSWORD="app_password",
+            TARIFF_TRAFFIC_WARNING_LEVELS="90,85,bad,95,90,100,0",
+        )
+
+        self.assertEqual(settings.tariff_traffic_warning_levels, [85, 90, 95])

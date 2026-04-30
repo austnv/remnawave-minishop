@@ -271,11 +271,11 @@ async def tariff_change_select_callback(callback: types.CallbackQuery, i18n_data
     options = subscription_service.calculate_tariff_switch_options(db_sub, target)
     rows = []
     if options["mode"] == "period_to_period":
-        rows.append([InlineKeyboardButton(text=f"Без доплаты, дней станет {options['recalc_days']}", callback_data=f"tariff_change:apply:{target.key}:recalc_days")])
+        rows.append([InlineKeyboardButton(text=f"Без доплаты, дней станет {options['recalc_days']}", callback_data=f"tariff_change:confirm_apply:{target.key}:recalc_days")])
         if options.get("paid_diff_rub", 0) > 0:
-            rows.append([InlineKeyboardButton(text=f"Доплатить {options['paid_diff_rub']} RUB", callback_data=f"tariff_change:pay:{target.key}:{options['paid_diff_rub']}")])
+            rows.append([InlineKeyboardButton(text=f"Доплатить {options['paid_diff_rub']} RUB", callback_data=f"tariff_change:confirm_pay:{target.key}:{options['paid_diff_rub']}")])
     elif options["mode"] == "period_to_traffic":
-        rows.append([InlineKeyboardButton(text=f"Перейти без доплаты, получить {options['converted_gb']} GB", callback_data=f"tariff_change:apply:{target.key}:convert_days_to_gb")])
+        rows.append([InlineKeyboardButton(text=f"Перейти без доплаты, получить {options['converted_gb']} GB", callback_data=f"tariff_change:confirm_apply:{target.key}:convert_days_to_gb")])
         for package in target.traffic_packages.rub:
             rows.append([InlineKeyboardButton(text=f"+ {package.gb:g} GB за {package.price:g} RUB", callback_data=f"tariff:package:{target.key}:{package.gb:g}")])
     else:
@@ -285,6 +285,59 @@ async def tariff_change_select_callback(callback: types.CallbackQuery, i18n_data
                 rows.append([InlineKeyboardButton(text=f"{months} мес. за {price:g} RUB", callback_data=f"tariff:period:{target.key}:{months}")])
     rows.append([InlineKeyboardButton(text=i18n.gettext(current_lang, "back_to_main_menu_button"), callback_data="tariff_change:list")])
     await callback.message.edit_text(f"{target.name(current_lang)}\n{target.description(current_lang)}".strip(), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("tariff_change:confirm_apply:"))
+async def tariff_change_confirm_apply_callback(callback: types.CallbackQuery, i18n_data: dict, settings: Settings, subscription_service: SubscriptionService, session: AsyncSession):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: JsonI18n = i18n_data.get("i18n_instance")
+    config = settings.tariffs_config
+    if not config or not callback.message:
+        await callback.answer("Error", show_alert=True)
+        return
+    _, _, tariff_key, mode = callback.data.split(":", 3)
+    target = config.require(tariff_key)
+    db_sub = await subscription_dal.get_active_subscription_by_user_id(session, callback.from_user.id)
+    if not db_sub:
+        await callback.answer("Error", show_alert=True)
+        return
+    options = subscription_service.calculate_tariff_switch_options(db_sub, target)
+    if mode == "recalc_days":
+        action_text = f"после перехода останется {options.get('recalc_days', 0)} дн."
+    elif mode == "convert_days_to_gb":
+        action_text = f"будет начислено {options.get('converted_gb', 0)} GB трафика"
+    else:
+        action_text = "тариф будет изменен без доплаты"
+    rows = [
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"tariff_change:apply:{target.key}:{mode}")],
+        [InlineKeyboardButton(text=i18n.gettext(current_lang, "back_to_main_menu_button"), callback_data=f"tariff_change:select:{target.key}")],
+    ]
+    await callback.message.edit_text(
+        f"Подтвердите смену тарифа\n\nНовый тариф: {target.name(current_lang)}\nИзменение: {action_text}",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("tariff_change:confirm_pay:"))
+async def tariff_change_confirm_pay_callback(callback: types.CallbackQuery, i18n_data: dict, settings: Settings):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: JsonI18n = i18n_data.get("i18n_instance")
+    config = settings.tariffs_config
+    if not config or not callback.message:
+        await callback.answer("Error", show_alert=True)
+        return
+    _, _, tariff_key, amount_raw = callback.data.split(":", 3)
+    target = config.require(tariff_key)
+    rows = [
+        [InlineKeyboardButton(text="✅ Подтвердить и оплатить", callback_data=f"tariff_change:pay:{target.key}:{amount_raw}")],
+        [InlineKeyboardButton(text=i18n.gettext(current_lang, "back_to_main_menu_button"), callback_data=f"tariff_change:select:{target.key}")],
+    ]
+    await callback.message.edit_text(
+        f"Подтвердите смену тарифа\n\nНовый тариф: {target.name(current_lang)}\nБудет создана оплата на {amount_raw} RUB.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
     await callback.answer()
 
 

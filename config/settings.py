@@ -262,6 +262,10 @@ class Settings(BaseSettings):
         description="Comma-separated list of traffic packages priced in Stars, e.g. '5:500,20:1500'",
     )
     TARIFFS_CONFIG_PATH: str = Field(default="config/tariffs.json")
+    TARIFF_TRAFFIC_WARNING_LEVELS: str = Field(
+        default="85,90,95",
+        description="Comma-separated traffic usage warning levels for tariff traffic limits, e.g. '85,90,95'",
+    )
 
     SUBSCRIPTION_NOTIFICATIONS_ENABLED: bool = Field(default=True)
     SUBSCRIPTION_NOTIFY_ON_EXPIRE: bool = Field(default=True)
@@ -740,6 +744,23 @@ class Settings(BaseSettings):
         if self.tariffs_config is not None:
             return False
         return bool(self.traffic_packages or self.stars_traffic_packages)
+
+    @computed_field
+    @property
+    def tariff_traffic_warning_levels(self) -> List[int]:
+        levels: List[int] = []
+        for part in (self.TARIFF_TRAFFIC_WARNING_LEVELS or "").split(","):
+            chunk = part.strip()
+            if not chunk:
+                continue
+            try:
+                level = int(float(chunk))
+            except ValueError:
+                logging.warning("Invalid TARIFF_TRAFFIC_WARNING_LEVELS entry skipped: %s", chunk)
+                continue
+            if 0 < level < 100 and level not in levels:
+                levels.append(level)
+        return sorted(levels) or [85, 90, 95]
 
     @computed_field
     @property
