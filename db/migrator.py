@@ -303,7 +303,32 @@ def _migration_0010_add_email_magic_token_hash(connection: Connection) -> None:
     )
 
 
-def _migration_0011_add_tariffs_schema(connection: Connection) -> None:
+def _migration_0011_add_user_telegram_avatars(connection: Connection) -> None:
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS user_telegram_avatars (
+                user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
+                file_unique_id VARCHAR,
+                content_type VARCHAR(64) NOT NULL DEFAULT 'image/jpeg',
+                image_bytes BYTEA NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_user_telegram_avatars_file_unique_id
+            ON user_telegram_avatars (file_unique_id)
+            """
+        )
+    )
+
+
+def _migration_0012_add_tariffs_schema(connection: Connection) -> None:
     inspector = inspect(connection)
 
     sub_columns: Set[str] = {col["name"] for col in inspector.get_columns("subscriptions")}
@@ -497,9 +522,14 @@ MIGRATIONS: List[Migration] = [
         upgrade=_migration_0010_add_email_magic_token_hash,
     ),
     Migration(
-        id="0011_add_tariffs_schema",
+        id="0011_add_user_telegram_avatars",
+        description="Cache compact Telegram profile avatars for WebApp profiles",
+        upgrade=_migration_0011_add_user_telegram_avatars,
+    ),
+    Migration(
+        id="0012_add_tariffs_schema",
         description="Add tariff catalog columns and traffic accounting tables",
-        upgrade=_migration_0011_add_tariffs_schema,
+        upgrade=_migration_0012_add_tariffs_schema,
     ),
 ]
 
