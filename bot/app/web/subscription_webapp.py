@@ -23,6 +23,10 @@ from pydantic import BaseModel, ConfigDict, EmailStr, ValidationError, constr, f
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
+from bot.app.web.admin_api import (
+    admin_auth_middleware,
+    setup_admin_routes,
+)
 from bot.app.web.webapp_auth import (
     create_signed_telegram_oauth_state,
     create_telegram_oauth_nonce,
@@ -148,7 +152,13 @@ def create_subscription_webapp_application(
     settings: Settings,
     async_session_factory: sessionmaker,
 ) -> web.Application:
-    app = web.Application(middlewares=[_security_headers_middleware, _csrf_protection_middleware])
+    app = web.Application(
+        middlewares=[
+            _security_headers_middleware,
+            _csrf_protection_middleware,
+            admin_auth_middleware,
+        ]
+    )
     app["bot"] = bot
     app["dp"] = dp
     app["settings"] = settings
@@ -179,6 +189,7 @@ def create_subscription_webapp_application(
         "severpay_service",
         "promo_code_service",
         "referral_service",
+        "panel_service",
     ):
         if hasattr(dp, "workflow_data") and key in dp.workflow_data:  # type: ignore[attr-defined]
             app[key] = dp.workflow_data[key]  # type: ignore[index]
@@ -196,6 +207,8 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/invite", index_route)
     app.router.add_get("/devices", index_route)
     app.router.add_get("/settings", index_route)
+    app.router.add_get("/admin", index_route)
+    app.router.add_get("/admin/{section:[a-z][a-z0-9_-]*}", index_route)
     app.router.add_get("/auth/telegram/start", telegram_oauth_start_route)
     app.router.add_get("/auth/telegram/callback", telegram_oauth_callback_route)
     app.router.add_get("/health", health_route)
@@ -226,6 +239,7 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_post("/api/tariffs/change-payment", tariff_change_payment_route)
     app.router.add_post("/api/payments", create_payment_route)
     app.router.add_get("/api/payments/{payment_id}", payment_status_route)
+    setup_admin_routes(app)
 
 
 async def health_route(request: web.Request) -> web.Response:
@@ -2942,6 +2956,8 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             await session.rollback()
 
     lang = _normalize_language(db_user.language_code or settings.DEFAULT_LANGUAGE)
+    admin_ids = {int(x) for x in (settings.ADMIN_IDS or [])}
+    is_admin = bool(db_user.telegram_id and int(db_user.telegram_id) in admin_ids)
     return {
         "user": {
             "id": user_id,
@@ -2953,6 +2969,7 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             "telegram_photo_url": _telegram_avatar_url(avatar),
             "first_name": db_user.first_name,
             "language_code": lang,
+            "is_admin": is_admin,
         },
         "subscription": _serialize_subscription(active, local_sub, lang),
         "referral": {

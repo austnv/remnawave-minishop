@@ -70,6 +70,14 @@ async def init_db(settings: Settings, session_factory: sessionmaker):
         "PostgreSQL database initialized/checked successfully using SQLAlchemy."
     )
 
+    try:
+        from bot.services.settings_override_service import load_overrides_from_db
+        await load_overrides_from_db(settings, session_factory)
+    except Exception as e_overrides:
+        logging.warning(
+            f"Failed to load setting overrides on startup: {e_overrides}"
+        )
+
     async with session_factory() as session:
         from .dal.panel_sync_dal import get_panel_sync_status, update_panel_sync_status
         from sqlalchemy import text

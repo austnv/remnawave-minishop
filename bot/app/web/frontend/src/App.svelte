@@ -36,6 +36,7 @@
   import Dialog from "./lib/components/ui/dialog.svelte";
   import Input from "./lib/components/ui/input.svelte";
   import PreviewBoard from "./PreviewBoard.svelte";
+  import AdminPanel from "./admin/AdminPanel.svelte";
 
   const MANUAL_LOGOUT_FLAG_KEY = "rw_webapp_manual_logout";
   const LANGUAGE_LABELS = {
@@ -62,7 +63,19 @@
     invite: "/invite",
     devices: "/devices",
     settings: "/settings",
+    admin: "/admin",
   };
+  const ADMIN_SECTIONS = new Set([
+    "stats",
+    "users",
+    "payments",
+    "promos",
+    "ads",
+    "broadcast",
+    "logs",
+    "tariffs",
+    "settings",
+  ]);
   const TELEGRAM_WEBAPP_SCRIPT_URL = "https://telegram.org/js/telegram-web-app.js";
   const TELEGRAM_OAUTH_AVAILABILITY_URL = "https://oauth.telegram.org/";
   const TELEGRAM_SDK_BOOT_TIMEOUT_MS = 900;
@@ -100,6 +113,7 @@
         telegram_photo_url: "",
         first_name: "Preview",
         language_code: "ru",
+        is_admin: true,
       },
       subscription: {
         active: true,
@@ -487,6 +501,11 @@
     hasActiveTariffSubscription && Number(subscription?.traffic_limit_bytes || 0) > 0 && trafficPercent(subscription) >= 85,
   );
   $: user = data?.user || {};
+  $: isAdmin = Boolean(user?.is_admin);
+  $: if (screen === "admin" && !isAdmin) {
+    screen = "settings";
+    activeTab = "settings";
+  }
   $: referral = data?.referral || DEV_MOCK.data.referral;
   $: currentLang = normalizeLangCode(user?.language_code || CFG.language || "ru");
   $: languageOptions = WEBAPP_LANGUAGE_ORDER.map((code) => ({
@@ -570,6 +589,10 @@
     const onPopState = () => {
       const section = sectionFromPath(window.location.pathname);
       if (mode === "app") {
+        if (section === "admin" && isAdmin) {
+          screen = "admin";
+          return;
+        }
         const nextSection = section === "devices" && !devicesEnabled ? "home" : section;
         activeTab = nextSection;
         screen = nextSection;
@@ -709,7 +732,10 @@
 
   function normalizeSection(value) {
     const section = String(value || "").trim().toLowerCase();
-    return section === "invite" || section === "devices" || section === "settings" ? section : "home";
+    if (section === "invite" || section === "devices" || section === "settings" || section === "admin") {
+      return section;
+    }
+    return "home";
   }
 
   function sectionFromPath(pathname) {
@@ -718,14 +744,26 @@
       .toLowerCase()
       .replace(/\/+$/, "");
     if (!normalizedPath || normalizedPath === "/") return "home";
+    if (normalizedPath === "/admin" || normalizedPath.startsWith("/admin/")) return "admin";
     const section = normalizedPath.startsWith("/") ? normalizedPath.slice(1) : normalizedPath;
     return normalizeSection(section);
   }
 
-  function syncSectionPath(section, replace = false) {
+  function adminSectionFromPath(pathname) {
+    const normalized = String(pathname || "").toLowerCase().replace(/\/+$/, "");
+    const m = normalized.match(/^\/admin\/([a-z0-9_-]+)$/);
+    if (m && ADMIN_SECTIONS.has(m[1])) return m[1];
+    return "stats";
+  }
+
+  function syncSectionPath(section, replace = false, adminSection = null) {
     if (window.location.protocol === "file:") return;
     const normalized = normalizeSection(section);
-    const targetPath = APP_SECTION_PATHS[normalized] || APP_SECTION_PATHS.home;
+    let targetPath = APP_SECTION_PATHS[normalized] || APP_SECTION_PATHS.home;
+    if (normalized === "admin") {
+      const adm = adminSection || adminSectionFromPath(window.location.pathname) || "stats";
+      targetPath = `/admin/${adm}`;
+    }
     if (window.location.pathname === targetPath) return;
     const nextUrl = `${targetPath}${window.location.search}${window.location.hash}`;
     window.history[replace ? "replaceState" : "pushState"](null, "", nextUrl);
@@ -949,11 +987,16 @@
     paymentStep = "tariff";
     selectedMethod = payload.payment_methods?.[0]?.id || "";
     let section = MOCK && query.get("screen") ? normalizeSection(query.get("screen")) : sectionFromPath(window.location.pathname);
+    if (section === "admin" && !payload.user?.is_admin) section = "settings";
     if (section === "devices" && !payload.settings?.my_devices_enabled) section = "home";
-    activeTab = section;
+    activeTab = section === "admin" ? "settings" : section;
     screen = section;
     mode = "app";
-    syncSectionPath(section, true);
+    syncSectionPath(
+      section,
+      true,
+      section === "admin" ? adminSectionFromPath(window.location.pathname) : null,
+    );
     if (section === "devices" && payload.settings?.my_devices_enabled) {
       await loadDevices();
     }
@@ -1002,6 +1045,105 @@
 
   async function mockApi(path, options = {}) {
     await new Promise((resolve) => window.setTimeout(resolve, 120));
+    const cleanPath = String(path || "").split("?")[0];
+    const adminUsers = [
+      {
+        user_id: 100200300,
+        telegram_id: 100200300,
+        username: "anna_ops",
+        first_name: "Анна",
+        last_name: "Смирнова",
+        email: "anna@example.com",
+        telegram_photo_url: "",
+        registration_date: "2026-04-24T10:20:00Z",
+        is_banned: false,
+      },
+      {
+        user_id: 100200301,
+        telegram_id: 87543123,
+        username: "client_pro",
+        first_name: "Максим",
+        last_name: "Котов",
+        email: "",
+        telegram_photo_url: "",
+        registration_date: "2026-04-26T08:15:00Z",
+        is_banned: false,
+      },
+      {
+        user_id: 100200302,
+        telegram_id: 88440011,
+        username: "",
+        first_name: "Daria",
+        last_name: "",
+        email: "daria@example.com",
+        telegram_photo_url: "",
+        registration_date: "2026-04-29T16:45:00Z",
+        is_banned: true,
+      },
+    ];
+    if (path === "/admin/stats") {
+      return {
+        ok: true,
+        users: { total_users: 248, active_subscriptions: 172, banned_users: 3 },
+        financial: { total_revenue: 186240, successful_payments_count: 934 },
+        panel_sync: { status: "success", last_sync_time: new Date().toISOString(), users_processed: 172, subscriptions_synced: 168 },
+        recent_payments: [
+          { payment_id: 1, user_id: 100200300, user_label: "anna_ops", amount: 790, currency: "RUB", provider: "yookassa", status: "succeeded", created_at: new Date().toISOString() },
+        ],
+      };
+    }
+    if (cleanPath === "/admin/users") return { ok: true, users: adminUsers, total: adminUsers.length, page: 0, page_size: 25 };
+    if (cleanPath.startsWith("/admin/users/")) {
+      const id = Number(cleanPath.split("/")[3]);
+      const user = adminUsers.find((item) => item.user_id === id) || adminUsers[0];
+      return {
+        ok: true,
+        user,
+        active_subscription: {
+          subscription_id: 10,
+          end_date: "2026-06-08T12:00:00Z",
+          tariff_key: "standard",
+          auto_renew_enabled: true,
+          provider: "yookassa",
+        },
+        subscriptions: [
+          { subscription_id: 10, end_date: "2026-06-08T12:00:00Z", tariff_key: "standard", is_active: true, status_from_panel: "ACTIVE" },
+          { subscription_id: 9, end_date: "2026-05-08T12:00:00Z", tariff_key: "standard", is_active: false, status_from_panel: "EXPIRED" },
+        ],
+        total_paid: 2380,
+        recent_payments: [
+          { payment_id: 12, amount: 790, currency: "RUB", provider: "yookassa", status: "succeeded", created_at: "2026-05-01T14:15:00Z" },
+          { payment_id: 11, amount: 790, currency: "RUB", provider: "stars", status: "succeeded", created_at: "2026-04-01T14:15:00Z" },
+        ],
+        log_count: 18,
+      };
+    }
+    if (path === "/admin/tariffs") {
+      return {
+        ok: true,
+        path: "config/tariffs.json",
+        catalog: {
+          default_tariff: "standard",
+          topup_packages_default: { rub: [{ gb: 10, price: 99 }], stars: [] },
+          tariffs: [
+            {
+              key: "standard",
+              names: { ru: "Стандарт", en: "Standard" },
+              descriptions: { ru: "Базовый набор серверов" },
+              squad_uuids: ["db786ee8-816b-4760-80aa-1fc7a3669ff2"],
+              billing_model: "period",
+              monthly_gb: 500,
+              prices_rub: { "1": 150, "3": 400 },
+              prices_stars: { "1": 0, "3": 0 },
+              enabled_periods: [1, 3],
+              enabled: true,
+            },
+          ],
+        },
+      };
+    }
+    if (path === "/admin/settings") return { ok: true, sections: [] };
+    if (cleanPath.startsWith("/admin/")) return { ok: true, payments: [], promos: [], logs: [], campaigns: [], total: 0 };
     if (path === "/me") return structuredCloneSafe(DEV_MOCK.data);
     if (path === "/auth/email/request") return { ok: true };
     if (path === "/auth/email/verify" || path === "/auth/email/magic") {
@@ -2042,6 +2184,27 @@
     syncSectionPath("settings");
   }
 
+  function openAdminPanel() {
+    if (!isAdmin) return;
+    paymentModalOpen = false;
+    screen = "admin";
+    syncSectionPath("admin", false, adminSectionFromPath(window.location.pathname));
+  }
+
+  function closeAdminPanel() {
+    screen = "settings";
+    activeTab = "settings";
+    syncSectionPath("settings");
+  }
+
+  function handleAdminSectionChange(adminSection) {
+    if (screen !== "admin") return;
+    if (window.location.protocol === "file:") return;
+    const targetPath = `/admin/${adminSection}`;
+    if (window.location.pathname === targetPath) return;
+    window.history.pushState(null, "", `${targetPath}${window.location.search}${window.location.hash}`);
+  }
+
   function openPaymentModal() {
     if (tariffMode) {
       if (singleTariffMode && tariffCatalog[0]?.key) {
@@ -2702,8 +2865,16 @@
           </div>
         {/if}
       </div>
+    {:else if screen === "admin" && isAdmin}
+      <AdminPanel
+        api={api}
+        onClose={closeAdminPanel}
+        onToast={(text) => showToast(text)}
+        initialSection={adminSectionFromPath(window.location.pathname)}
+        onSectionChange={handleAdminSectionChange}
+      />
     {:else}
-      <div class="phone-screen">
+      <div class="phone-screen" class:home-screen={screen === "home"}>
         {#if screen === "invite" || screen === "devices" || screen === "settings"}
           <header class="app-header accent-title">
             <div class="brand-row">
@@ -2977,6 +3148,20 @@
                 <small>{profileTelegramId}</small>
               </div>
             </Card>
+            {#if isAdmin}
+              <div class="settings-admin-block">
+                <div class="settings-divider" aria-hidden="true"></div>
+                <button class="settings-row settings-row-admin" type="button" on:click={openAdminPanel}>
+                  <Shield size={21} />
+                  <span>
+                    <strong>Админ-панель</strong>
+                    <small>Управление приложением</small>
+                  </span>
+                  <ArrowRight size={17} />
+                </button>
+                <div class="settings-divider" aria-hidden="true"></div>
+              </div>
+            {/if}
             <div class="settings-links-block">
               <div class="settings-divider" aria-hidden="true"></div>
               {#if user?.telegram_linked}
@@ -3068,27 +3253,27 @@
                 </Select.Root>
               </div>
               {#if supportUrl}
-                <button class="settings-row" type="button" on:click={() => openExternalLink(supportUrl)}>
+                <button class="settings-row settings-row-support" type="button" on:click={() => openExternalLink(supportUrl)}>
                   <Send size={21} />
                   <span><strong>{t("menu_support_button")}</strong></span>
                   <ArrowRight size={17} />
                 </button>
               {/if}
               {#if userAgreementUrl}
-                <button class="settings-row" type="button" on:click={() => openExternalLink(userAgreementUrl)}>
+                <button class="settings-row settings-row-policy" type="button" on:click={() => openExternalLink(userAgreementUrl)}>
                   <FileText size={21} />
                   <span><strong>{t("wa_settings_user_agreement")}</strong></span>
                   <ArrowRight size={17} />
                 </button>
               {/if}
               {#if privacyPolicyUrl}
-                <button class="settings-row" type="button" on:click={() => openExternalLink(privacyPolicyUrl)}>
+                <button class="settings-row settings-row-policy" type="button" on:click={() => openExternalLink(privacyPolicyUrl)}>
                   <Shield size={21} />
                   <span><strong>{t("wa_settings_privacy_policy")}</strong></span>
                   <ArrowRight size={17} />
                 </button>
               {/if}
-              <button class="settings-row" type="button" on:click={logout}>
+              <button class="settings-row settings-row-logout" type="button" on:click={logout}>
                 <UserRound size={21} />
                 <span><strong>{t("wa_logout")}</strong><small>{t("wa_end_session")}</small></span>
                 <ArrowRight size={17} />
@@ -3099,6 +3284,10 @@
 
         {#if screen === "home" || screen === "invite" || screen === "devices" || screen === "settings"}
           <nav class:bottom-nav-devices={devicesEnabled} class="bottom-nav" aria-label={t("wa_navigation")}>
+            <div class="rail-brand" aria-hidden="true">
+              <BrandMark logoUrl={CFG.logoUrl} emoji={brandEmoji} />
+              <strong>{brandTitle}</strong>
+            </div>
             <button class:active={activeTab === "home"} type="button" on:click={goHome}>
               <Home size={21} />
               <span>{t("wa_nav_home")}</span>
@@ -3120,6 +3309,12 @@
               <SettingsIcon size={21} />
               <span>{t("wa_nav_settings")}</span>
             </button>
+            {#if isAdmin}
+              <button class="rail-admin-entry" type="button" on:click={openAdminPanel}>
+                <Shield size={21} />
+                <span>Админ-панель</span>
+              </button>
+            {/if}
           </nav>
         {/if}
       </div>
