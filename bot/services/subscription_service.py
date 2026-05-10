@@ -1663,6 +1663,7 @@ class SubscriptionService:
                     self.settings.user_traffic_limit_bytes if apply_main_traffic_limit else None
                 ),
                 include_uuid=False,
+                include_default_squads=False,
             )
 
             panel_update_success = (
@@ -2021,6 +2022,7 @@ class SubscriptionService:
         include_uuid: bool = True,
         traffic_limit_strategy: Optional[str] = None,
         hwid_device_limit: Optional[int] = None,
+        include_default_squads: bool = True,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {}
         if include_uuid and panel_user_uuid:
@@ -2039,8 +2041,9 @@ class SubscriptionService:
                     payload["hwidDeviceLimit"] = hwid_limit_int
             except (TypeError, ValueError):
                 pass
-        if self.settings.parsed_user_squad_uuids:
-            payload["activeInternalSquads"] = self.settings.parsed_user_squad_uuids
-        if self.settings.parsed_user_external_squad_uuid:
-            payload["externalSquadUuid"] = self.settings.parsed_user_external_squad_uuid
+        if include_default_squads:
+            if self.settings.parsed_user_squad_uuids:
+                payload["activeInternalSquads"] = self.settings.parsed_user_squad_uuids
+            if self.settings.parsed_user_external_squad_uuid:
+                payload["externalSquadUuid"] = self.settings.parsed_user_external_squad_uuid
         return payload
