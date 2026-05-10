@@ -33,8 +33,10 @@ from bot.services.settings_override_service import (
     current_value,
     update_overrides,
 )
+from bot.services.referral_service import ReferralService
 from bot.utils import MessageContent, send_message_via_queue
 from bot.utils.message_queue import get_queue_manager
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from config.settings import Settings
 from config.tariffs_config import TariffsConfig
 from db.dal import (
@@ -523,6 +525,7 @@ async def admin_user_detail_route(request: web.Request) -> web.Response:
     _require_admin_user_id(request)
     target_id = int(request.match_info["user_id"])
     async_session_factory: sessionmaker = request.app["async_session_factory"]
+    settings: Settings = request.app["settings"]
 
     async with async_session_factory() as session:
         user = await user_dal.get_user_by_id(session, target_id)
@@ -548,6 +551,50 @@ async def admin_user_detail_route(request: web.Request) -> web.Response:
         log_count = await message_log_dal.count_user_message_logs(session, target_id)
         avatar_keys = await _bulk_user_avatar_keys(session, [target_id])
 
+        # Referral links — both the bot deep-link and the webapp deep-link.
+        referral_code: Optional[str] = None
+        try:
+            referral_code = await user_dal.ensure_referral_code(session, user)
+            await session.commit()
+        except Exception as exc_ref:  # pragma: no cover — defensive
+            logger.warning("Failed to ensure referral code for user %s: %s", target_id, exc_ref)
+            await session.rollback()
+
+    referral_service: Optional[ReferralService] = request.app.get("referral_service")
+    bot_username = request.app.get("bot_username") or ""
+    referral_bot_link: Optional[str] = None
+    if referral_service and bot_username and referral_code:
+        try:
+            async with async_session_factory() as session:
+                referral_bot_link = await referral_service.generate_referral_link(
+                    session, bot_username, target_id
+                )
+        except Exception as exc_link:  # pragma: no cover
+            logger.warning("Failed to build bot referral link for %s: %s", target_id, exc_link)
+    referral_webapp_link = _build_admin_webapp_referral_link(
+        getattr(settings, "SUBSCRIPTION_MINI_APP_URL", None),
+        referral_code,
+    )
+
+    # Subscription page URL — the raw panel `subscriptionUrl` that the user
+    # imports into their VPN client. May be missing if the user has never
+    # been provisioned on the panel.
+    subscription_url: Optional[str] = None
+    panel_uuid = getattr(user, "panel_user_uuid", None)
+    if panel_uuid:
+        subscription_service = request.app.get("subscription_service")
+        panel_service = getattr(subscription_service, "panel_service", None)
+        if panel_service is not None:
+            try:
+                panel_data = await panel_service.get_user_by_uuid(panel_uuid)
+                if panel_data:
+                    subscription_url = panel_data.get("subscriptionUrl") or None
+            except Exception as exc_panel:  # pragma: no cover
+                logger.warning(
+                    "Failed to fetch subscriptionUrl for user %s (uuid=%s): %s",
+                    target_id, panel_uuid, exc_panel,
+                )
+
     serialized_user = _serialize_user(user)
     serialized_user["avatar_url"] = (
         f"/api/admin/users/{target_id}/avatar?v={avatar_keys[target_id]}"
@@ -563,8 +610,31 @@ async def admin_user_detail_route(request: web.Request) -> web.Response:
             "total_paid": float(total_paid),
             "recent_payments": [_serialize_payment(p) for p in recent_payments],
             "log_count": int(log_count or 0),
+            "subscription_url": subscription_url,
+            "referral": {
+                "code": referral_code,
+                "bot_link": referral_bot_link,
+                "webapp_link": referral_webapp_link,
+            },
         }
     )
+
+
+def _build_admin_webapp_referral_link(
+    base_url: Optional[str], referral_code: Optional[str]
+) -> Optional[str]:
+    """Mirror of ``subscription_webapp._build_webapp_referral_link``.
+
+    Kept local to avoid a cross-module import cycle (subscription_webapp
+    imports admin_api).
+    """
+    if not base_url or not referral_code:
+        return None
+    parts = urlsplit(base_url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["ref"] = f"u{referral_code}"
+    new_query = "&".join(f"{k}={v}" for k, v in query.items())
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
 
 
 async def admin_user_ban_route(request: web.Request) -> web.Response:
@@ -1273,13 +1343,13 @@ def setup_admin_routes(app: web.Application) -> None:
     router.add_get("/api/admin/stats", admin_stats_route)
 
     router.add_get("/api/admin/users", admin_users_list_route)
-    router.add_get("/api/admin/users/{user_id:\\d+}", admin_user_detail_route)
-    router.add_get("/api/admin/users/{user_id:\\d+}/avatar", admin_user_avatar_route)
-    router.add_post("/api/admin/users/{user_id:\\d+}/ban", admin_user_ban_route)
-    router.add_post("/api/admin/users/{user_id:\\d+}/message", admin_user_message_route)
-    router.add_post("/api/admin/users/{user_id:\\d+}/reset-trial", admin_user_reset_trial_route)
-    router.add_post("/api/admin/users/{user_id:\\d+}/extend", admin_user_extend_route)
-    router.add_delete("/api/admin/users/{user_id:\\d+}", admin_user_delete_route)
+    router.add_get("/api/admin/users/{user_id:-?\\d+}", admin_user_detail_route)
+    router.add_get("/api/admin/users/{user_id:-?\\d+}/avatar", admin_user_avatar_route)
+    router.add_post("/api/admin/users/{user_id:-?\\d+}/ban", admin_user_ban_route)
+    router.add_post("/api/admin/users/{user_id:-?\\d+}/message", admin_user_message_route)
+    router.add_post("/api/admin/users/{user_id:-?\\d+}/reset-trial", admin_user_reset_trial_route)
+    router.add_post("/api/admin/users/{user_id:-?\\d+}/extend", admin_user_extend_route)
+    router.add_delete("/api/admin/users/{user_id:-?\\d+}", admin_user_delete_route)
 
     router.add_get("/api/admin/payments", admin_payments_list_route)
     router.add_get("/api/admin/payments/export.csv", admin_payments_export_route)

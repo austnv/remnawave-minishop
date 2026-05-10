@@ -98,6 +98,8 @@
       telegramLoginBotId: 1234567890,
       telegramOAuthClientId: 1234567890,
       telegramOAuthRequestAccess: ["write"],
+      appVersion: "dev+local",
+      appRepositoryUrl: "https://github.com/3252a8/remnawave-minishop",
     },
     data: {
       ok: true,
@@ -759,18 +761,25 @@
 
   function adminSectionFromPath(pathname) {
     const normalized = String(pathname || "").toLowerCase().replace(/\/+$/, "");
-    const m = normalized.match(/^\/admin\/([a-z0-9_-]+)$/);
+    const m = normalized.match(/^\/admin\/([a-z0-9_-]+)(?:\/[^/]+)?$/);
     if (m && ADMIN_SECTIONS.has(m[1])) return m[1];
     return "stats";
   }
 
-  function syncSectionPath(section, replace = false, adminSection = null) {
+  function adminUserIdFromPath(pathname) {
+    const normalized = String(pathname || "").toLowerCase().replace(/\/+$/, "");
+    const m = normalized.match(/^\/admin\/users\/(-?\d+)$/);
+    return m ? Number(m[1]) : null;
+  }
+
+  function syncSectionPath(section, replace = false, adminSection = null, adminUserId = null) {
     if (window.location.protocol === "file:") return;
     const normalized = normalizeSection(section);
     let targetPath = APP_SECTION_PATHS[normalized] || APP_SECTION_PATHS.home;
     if (normalized === "admin") {
       const adm = adminSection || adminSectionFromPath(window.location.pathname) || "stats";
-      targetPath = `/admin/${adm}`;
+      const uid = adminUserId ?? (adm === "users" ? adminUserIdFromPath(window.location.pathname) : null);
+      targetPath = adm === "users" && uid ? `/admin/users/${uid}` : `/admin/${adm}`;
     }
     if (window.location.pathname === targetPath) return;
     const nextUrl = `${targetPath}${window.location.search}${window.location.hash}`;
@@ -1117,6 +1126,12 @@
           { payment_id: 11, amount: 790, currency: "RUB", provider: "stars", status: "succeeded", created_at: "2026-04-01T14:15:00Z" },
         ],
         log_count: 18,
+        subscription_url: "https://panel.example.com/sub/aBcDeFgHiJkLmNoP",
+        referral: {
+          code: "ABCD1234",
+          bot_link: "https://t.me/preview_bot?start=ref_uABCD1234",
+          webapp_link: "https://app.example.com/?ref=uABCD1234",
+        },
       };
     }
     if (path === "/admin/tariffs") {
@@ -2180,10 +2195,12 @@
     syncSectionPath("settings");
   }
 
-  function handleAdminSectionChange(adminSection) {
+  function handleAdminSectionChange(adminSection, adminUserId = null) {
     if (screen !== "admin") return;
     if (window.location.protocol === "file:") return;
-    const targetPath = `/admin/${adminSection}`;
+    const targetPath = adminSection === "users" && adminUserId
+      ? `/admin/users/${adminUserId}`
+      : `/admin/${adminSection}`;
     if (window.location.pathname === targetPath) return;
     window.history.pushState(null, "", `${targetPath}${window.location.search}${window.location.hash}`);
   }
@@ -2937,9 +2954,15 @@
         onClose={closeAdminPanel}
         onToast={(text) => showToast(text)}
         initialSection={adminSectionFromPath(window.location.pathname)}
+        initialUserId={adminUserIdFromPath(window.location.pathname)}
         onSectionChange={handleAdminSectionChange}
         onSettingsSaved={handleSettingsSaved}
         onTariffsSaved={handleTariffsSaved}
+        brandTitle={brandTitle}
+        logoUrl={CFG.logoUrl}
+        logoEmoji={brandEmoji}
+        appVersion={CFG.appVersion}
+        appRepositoryUrl={CFG.appRepositoryUrl}
       />
     {:else}
       <div class="phone-screen" class:home-screen={screen === "home"}>

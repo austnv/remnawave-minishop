@@ -7,12 +7,15 @@
     ChevronLeft,
     ChevronRight,
     Coins,
+    Copy,
+    ExternalLink,
     CreditCard,
     Database,
     Download,
     Eye,
     EyeOff,
     FileText,
+    Link2,
     LayoutDashboard,
     Megaphone,
     Menu,
@@ -35,15 +38,22 @@
   import { onMount } from "svelte";
   import { Accordion, Label, Select, Separator, Switch, Tabs } from "bits-ui";
 
+  import BrandMark from "../BrandMark.svelte";
   import Dialog from "../lib/components/ui/dialog.svelte";
 
   export let api;
   export let onClose = () => {};
   export let onToast = () => {};
   export let initialSection = "stats";
+  export let initialUserId = null;
   export let onSectionChange = () => {};
   export let onSettingsSaved = () => {};
   export let onTariffsSaved = () => {};
+  export let brandTitle = "/minishop";
+  export let logoUrl = "";
+  export let logoEmoji = "рџ«Ґ";
+  export let appVersion = "dev+local";
+  export let appRepositoryUrl = "https://github.com/3252a8/remnawave-minishop";
 
   const NAV_GROUPS = [
     {
@@ -202,22 +212,41 @@
     }
     active = next;
     sidebarOpen = false;
+    if (openedUser) {
+      openedUser = null;
+      openedUserDetail = null;
+      userDeleteOpen = false;
+      userBanConfirmOpen = false;
+    }
     onSectionChange(next);
     loadActive();
   }
 
   function _readSectionFromPath() {
     if (typeof window === "undefined") return "stats";
-    const m = window.location.pathname.match(/^\/admin\/([a-z0-9_-]+)$/i);
+    const m = window.location.pathname.match(/^\/admin\/([a-z0-9_-]+)(?:\/[^/]+)?$/i);
     return _normalizeSection(m ? m[1].toLowerCase() : "stats");
+  }
+
+  function _readUserIdFromPath() {
+    if (typeof window === "undefined") return null;
+    const m = window.location.pathname.match(/^\/admin\/users\/(-?\d+)$/);
+    return m ? Number(m[1]) : null;
   }
 
   function _onPopState() {
     const next = _readSectionFromPath();
-    if (active === next) return;
-    active = next;
-    sidebarOpen = false;
-    loadActive();
+    if (active !== next) {
+      active = next;
+      sidebarOpen = false;
+      loadActive();
+    }
+    const uid = _readUserIdFromPath();
+    if (uid) {
+      if (!openedUser || openedUser.user_id !== uid) openUser(uid, { skipPush: true });
+    } else if (openedUser) {
+      closeUser({ skipPush: true });
+    }
   }
 
   async function loadActive() {
@@ -282,31 +311,65 @@
     }
   }
 
-  async function openUser(user) {
-    openedUser = user;
+  async function openUser(userOrId, opts = {}) {
+    const userId = typeof userOrId === "object" && userOrId !== null ? userOrId.user_id : Number(userOrId);
+    if (!userId) return;
+    openedUser = typeof userOrId === "object" && userOrId !== null ? userOrId : { user_id: userId };
     openedUserDetail = null;
     userMessageDraft = "";
     userExtendDays = 30;
     userDetailLoading = true;
-    userDetailTab = "profile";
+    userDetailTab = "subscription";
+    if (!opts.skipPush) _pushUserPath(userId);
     try {
-      const res = await api(`/admin/users/${user.user_id}`);
+      const res = await api(`/admin/users/${userId}`);
       if (res?.ok) {
         openedUserDetail = res;
+        if (res.user) openedUser = { ...res.user, ...openedUser, ...res.user };
       } else {
         flash(res?.error || "load_failed");
         openedUser = null;
+        if (!opts.skipPush) _pushUserPath(null);
       }
     } finally {
       userDetailLoading = false;
     }
   }
 
-  function closeUser() {
+  function closeUser(opts = {}) {
+    const wasOpen = Boolean(openedUser);
     openedUser = null;
     openedUserDetail = null;
     userDeleteOpen = false;
     userBanConfirmOpen = false;
+    if (wasOpen && !opts.skipPush) _pushUserPath(null);
+  }
+
+  function _pushUserPath(userId) {
+    if (typeof window === "undefined") return;
+    if (window.location.protocol === "file:") return;
+    if (active !== "users") return;
+    const target = userId ? `/admin/users/${userId}` : `/admin/users`;
+    if (window.location.pathname === target) return;
+    window.history.pushState(null, "", `${target}${window.location.search}${window.location.hash}`);
+  }
+
+  function copyToClipboard(text, successMessage = "Ссылка скопирована") {
+    if (!text) return;
+    if (typeof navigator !== "undefined" && navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => flash(successMessage),
+        () => flash(text),
+      );
+    } else {
+      flash(text);
+    }
+  }
+
+  function copyUserDeepLink() {
+    if (!openedUser || typeof window === "undefined") return;
+    const url = `${window.location.origin}/admin/users/${openedUser.user_id}`;
+    copyToClipboard(url);
   }
 
   function requestBanToggle() {
@@ -369,7 +432,7 @@
       });
       if (res?.ok) {
         flash(`Подписка продлена на ${days} дн.`);
-        await openUser(openedUser);
+        await openUser(openedUser, { skipPush: true });
       } else flash(res?.error || "Ошибка");
     } finally {
       userActionBusy = false;
@@ -1212,6 +1275,9 @@
       window.addEventListener("popstate", _onPopState);
     }
     loadActive();
+    if (active === "users" && initialUserId) {
+      openUser(initialUserId, { skipPush: true });
+    }
     return () => {
       if (_compactMql) {
         if (_compactMql.removeEventListener) _compactMql.removeEventListener("change", _onCompactChange);
@@ -1322,10 +1388,10 @@
 
   <aside class="admin-sidebar" aria-label="Навигация админки">
     <div class="admin-sidebar-brand">
-      <span class="admin-brand-mark"><Shield size={18} /></span>
+      <BrandMark class="admin-brand-mark" logoUrl={logoUrl} emoji={logoEmoji} />
       <div>
-        <strong>Админ-панель</strong>
-        <small>Web App</small>
+        <strong class="admin-brand-title">{brandTitle}</strong>
+        <small>Админ-панель</small>
       </div>
       <button type="button" class="admin-btn admin-btn-icon admin-btn-ghost" on:click={onClose} aria-label="Выйти">
         <ArrowLeft size={16} />
@@ -1351,8 +1417,16 @@
     {/each}
 
     <div class="admin-sidebar-footer">
-      <span>Минприложение</span>
-      <span>v1 · {new Date().getFullYear()}</span>
+      <a
+        class="admin-version-link"
+        href={appRepositoryUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="GitHub"
+      >
+        <span>remnawave-minishop</span>
+        <span>{appVersion || "dev+local"}</span>
+      </a>
     </div>
   </aside>
 
@@ -1996,14 +2070,14 @@
     <Tabs.Content value="general" class="admin-tabs-content">
       <div class="admin-form-row admin-form-row-2">
         <Label.Root class="admin-field-label">
-          <span>Ключ</span>
-          <small>Стабильный ID для платежей и подписок</small>
+          <span>Ключ тарифа</span>
+          <small>Латиницей, без пробелов. Используется в платежах и подписках, менять после публикации не рекомендуется</small>
           <input class="input" type="text" placeholder="standard" bind:value={tariffDraft.key} />
         </Label.Root>
 
         <div class="admin-field-label">
           <span>Модель тарификации</span>
-          <small>Период — фикс. длительность; Трафик — оплата за GB</small>
+          <small><b>Период</b> — пользователь покупает фиксированный срок (1/3/12 мес. и т.д.). <b>Трафик</b> — пользователь покупает пакеты гигабайт по фиксированной цене за GB</small>
           <Select.Root type="single" bind:value={tariffDraft.billing_model}>
             <Select.Trigger class="admin-select-trigger" aria-label="Модель">
               <span>{tariffDraft.billing_model === "traffic" ? "Трафик" : "Период"}</span>
@@ -2034,8 +2108,8 @@
           <Switch.Thumb class="admin-switch-thumb" />
         </Switch.Root>
         <Label.Root class="admin-action-label">
-          <strong>{tariffDraft.enabled ? "Тариф включён" : "Тариф выключен"}</strong>
-          <small>Скрытые тарифы не отображаются на витрине</small>
+          <strong>{tariffDraft.enabled ? "Тариф виден на витрине" : "Тариф скрыт от пользователей"}</strong>
+          <small>Выключенный тариф не показывается в боте/мини-аппе, но активные подписки на нём продолжают работать</small>
         </Label.Root>
       </div>
 
@@ -2062,8 +2136,8 @@
       </div>
 
       <div class="admin-field-label">
-        <span>Основные Internal Squads</span>
-        <small>{panelSquadsLoading ? "Загружаю список из панели…" : "Выберите сквады из Remnawave"}</small>
+        <span>Базовые Internal Squads</span>
+        <small>{panelSquadsLoading ? "Загружаю список из панели…" : "Сквады Remnawave, к которым подключается пользователь по этому тарифу. Выберите один или несколько"}</small>
         <Select.Root
           type="single"
           bind:value={selectedBaseSquad}
@@ -2098,20 +2172,20 @@
 
       <div class="admin-form-row admin-form-row-2">
         <Label.Root class="admin-field-label">
-          <span>Базовый лимит устройств</span>
-          <small>Пусто — значение из env, 0 — безлимит</small>
+          <span>Лимит устройств (HWID)</span>
+          <small>Сколько устройств может одновременно использовать подписку. Пусто — взять значение из .env, <code>0</code> — без ограничений</small>
           <input class="input" type="number" min="0" placeholder="5" bind:value={tariffDraft.hwid_device_limit} />
         </Label.Root>
         {#if tariffDraft.billing_model === "period"}
           <Label.Root class="admin-field-label">
-            <span>Месячный лимит, GB</span>
-            <small>0 — безлимит</small>
-            <input class="input" type="number" min="0" step="0.1" bind:value={tariffDraft.monthly_gb} />
+            <span>Месячный лимит трафика, GB</span>
+            <small>Сколько GB включено в тариф на каждый месяц. <code>0</code> — безлимитный трафик. Сверху можно докупать пакеты на вкладке «Докупки»</small>
+            <input class="input" type="number" min="0" step="0.1" placeholder="100" bind:value={tariffDraft.monthly_gb} />
           </Label.Root>
         {:else}
           <Label.Root class="admin-field-label">
-            <span>Курс конвертации, RUB/GB</span>
-            <small>Нужен для перехода period → traffic</small>
+            <span>Курс конвертации, ₽ за 1 GB</span>
+            <small>По этому курсу остаток подписки пересчитывается в гигабайты при переходе пользователя с тарифа «Период» на «Трафик»</small>
             <input class="input" type="number" min="0" step="0.01" placeholder="20" bind:value={tariffDraft.conversion_rate_rub_per_gb} />
           </Label.Root>
         {/if}
@@ -2121,12 +2195,15 @@
     <Tabs.Content value="premium" class="admin-tabs-content">
       <section class="admin-editor-section">
         <header class="admin-editor-section-head">
-          <strong>Premium-сквад и отдельный лимит</strong>
+          <div class="admin-editor-section-title">
+            <strong>Premium-доступ и отдельный счётчик трафика</strong>
+            <small>Premium-сквады дают пользователю доступ к более быстрым/премиальным нодам; их трафик считается отдельно от основного, чтобы можно было ограничить или продавать дополнительно</small>
+          </div>
         </header>
         <div class="admin-form-row admin-form-row-2">
           <div class="admin-field-label">
             <span>Premium Internal Squads</span>
-            <small>Ноды для учета трафика будут взяты из accessible nodes этих сквадов</small>
+            <small>Сквады из Remnawave, доступные только владельцам этого тарифа. Трафик считается по их accessible nodes</small>
             <Select.Root
               type="single"
               bind:value={selectedPremiumSquad}
@@ -2159,8 +2236,8 @@
             </div>
           </div>
           <Label.Root class="admin-field-label">
-            <span>Premium лимит, GB/мес.</span>
-            <small>0 или пусто — нет отдельного premium-лимита</small>
+            <span>Месячный лимит premium-трафика, GB</span>
+            <small>Сколько GB через premium-сквады включено в тариф каждый месяц. <code>0</code> или пусто — отдельного premium-лимита нет (premium-нодами можно пользоваться без ограничения)</small>
             <input class="input" type="number" min="0" step="0.1" placeholder="50" bind:value={tariffDraft.premium_monthly_gb} />
           </Label.Root>
         </div>
@@ -2168,29 +2245,46 @@
 
       <section class="admin-editor-section">
         <header class="admin-editor-section-head">
-          <strong>Докупка premium-трафика</strong>
+          <div class="admin-editor-section-title">
+            <strong>Докупка premium-трафика</strong>
+            <small>Пакеты для расширения месячного premium-лимита, когда пользователь его исчерпал</small>
+          </div>
           <div class="admin-editor-section-actions">
-            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("premiumTopupRubRows", { gb: 10, price: "" })}><Plus size={12} /> RUB</button>
-            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("premiumTopupStarsRows", { gb: 10, price: "" })}><Plus size={12} /> Stars</button>
+            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("premiumTopupRubRows", { gb: 10, price: "" })}><Plus size={12} /> Пакет ₽</button>
+            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("premiumTopupStarsRows", { gb: 10, price: "" })}><Plus size={12} /> Пакет ⭐</button>
           </div>
         </header>
         <div class="admin-package-columns">
           <div class="admin-row-editor">
-            <span class="admin-row-editor-caption">RUB</span>
+            <span class="admin-row-editor-caption">Оплата рублями</span>
+            {#if tariffDraft.premiumTopupRubRows.length}
+              <div class="admin-row-editor-line admin-row-editor-header">
+                <span>Объём, GB</span>
+                <span>Цена, ₽</span>
+                <span></span>
+              </div>
+            {/if}
             {#each tariffDraft.premiumTopupRubRows as row, index}
               <div class="admin-row-editor-line">
-                <input class="input" type="number" min="0.1" step="0.1" placeholder="GB" bind:value={row.gb} aria-label="Premium GB" />
-                <input class="input" type="number" min="0" step="0.01" placeholder="Цена" bind:value={row.price} aria-label="Цена RUB" />
+                <input class="input" type="number" min="0.1" step="0.1" placeholder="10" bind:value={row.gb} aria-label="Объём premium-пакета в GB" />
+                <input class="input" type="number" min="0" step="0.01" placeholder="199" bind:value={row.price} aria-label="Цена premium-пакета в рублях" />
                 <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("premiumTopupRubRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
               </div>
             {/each}
           </div>
           <div class="admin-row-editor">
-            <span class="admin-row-editor-caption">Stars</span>
+            <span class="admin-row-editor-caption">Оплата Telegram Stars</span>
+            {#if tariffDraft.premiumTopupStarsRows.length}
+              <div class="admin-row-editor-line admin-row-editor-header">
+                <span>Объём, GB</span>
+                <span>Цена, ⭐</span>
+                <span></span>
+              </div>
+            {/if}
             {#each tariffDraft.premiumTopupStarsRows as row, index}
               <div class="admin-row-editor-line">
-                <input class="input" type="number" min="0.1" step="0.1" placeholder="GB" bind:value={row.gb} aria-label="Premium GB" />
-                <input class="input" type="number" min="0" step="1" placeholder="Stars" bind:value={row.price} aria-label="Цена Stars" />
+                <input class="input" type="number" min="0.1" step="0.1" placeholder="10" bind:value={row.gb} aria-label="Объём premium-пакета в GB" />
+                <input class="input" type="number" min="0" step="1" placeholder="100" bind:value={row.price} aria-label="Цена premium-пакета в Telegram Stars" />
                 <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("premiumTopupStarsRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
               </div>
             {/each}
@@ -2203,53 +2297,80 @@
       {#if tariffDraft.billing_model === "period"}
         <section class="admin-editor-section">
           <header class="admin-editor-section-head">
-            <strong>Периоды и цены</strong>
+            <div class="admin-editor-section-title">
+              <strong>Периоды подписки и цены</strong>
+              <small>Каждая строка — отдельный вариант на витрине: за сколько месяцев пользователь платит и сколько это стоит</small>
+            </div>
             <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("periodRows", { months: 1, rub: "", stars: "" })}>
               <Plus size={13} /> Период
             </button>
           </header>
           {#if !tariffDraft.periodRows.length}
-            <p class="admin-muted">Добавьте хотя бы один период.</p>
-          {/if}
-          <div class="admin-row-editor">
-            {#each tariffDraft.periodRows as row, index}
-              <div class="admin-row-editor-line admin-row-editor-4">
-                <input class="input" type="number" min="1" placeholder="Мес." bind:value={row.months} aria-label="Период (месяцы)" />
-                <input class="input" type="number" min="0" step="0.01" placeholder="RUB" bind:value={row.rub} aria-label="Цена RUB" />
-                <input class="input" type="number" min="0" step="1" placeholder="Stars" bind:value={row.stars} aria-label="Цена Stars" />
-                <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("periodRows", index)} aria-label="Удалить">
-                  <Trash2 size={13} />
-                </button>
+            <p class="admin-muted">Добавьте хотя бы один период — без него тариф не появится на витрине.</p>
+          {:else}
+            <div class="admin-row-editor">
+              <div class="admin-row-editor-line admin-row-editor-4 admin-row-editor-header">
+                <span>Срок, мес.</span>
+                <span>Цена, ₽</span>
+                <span>Цена, ⭐ Stars</span>
+                <span></span>
               </div>
-            {/each}
-          </div>
+              {#each tariffDraft.periodRows as row, index}
+                <div class="admin-row-editor-line admin-row-editor-4">
+                  <input class="input" type="number" min="1" placeholder="1" bind:value={row.months} aria-label="Срок (месяцы)" />
+                  <input class="input" type="number" min="0" step="0.01" placeholder="299" bind:value={row.rub} aria-label="Цена в рублях" />
+                  <input class="input" type="number" min="0" step="1" placeholder="150" bind:value={row.stars} aria-label="Цена в Telegram Stars" />
+                  <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("periodRows", index)} aria-label="Удалить">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </section>
       {:else}
         <section class="admin-editor-section">
           <header class="admin-editor-section-head">
-            <strong>Пакеты трафика</strong>
+            <div class="admin-editor-section-title">
+              <strong>Пакеты трафика</strong>
+              <small>Базовая витрина для трафиковой модели. Каждая строка — пакет «N гигабайт за N единиц валюты»</small>
+            </div>
             <div class="admin-editor-section-actions">
-              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("trafficRubRows", { gb: 10, price: "" })}><Plus size={12} /> RUB</button>
-              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("trafficStarsRows", { gb: 10, price: "" })}><Plus size={12} /> Stars</button>
+              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("trafficRubRows", { gb: 10, price: "" })}><Plus size={12} /> Пакет ₽</button>
+              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("trafficStarsRows", { gb: 10, price: "" })}><Plus size={12} /> Пакет ⭐</button>
             </div>
           </header>
           <div class="admin-package-columns">
             <div class="admin-row-editor">
-              <span class="admin-row-editor-caption">RUB</span>
+              <span class="admin-row-editor-caption">Оплата рублями</span>
+              {#if tariffDraft.trafficRubRows.length}
+                <div class="admin-row-editor-line admin-row-editor-header">
+                  <span>Объём, GB</span>
+                  <span>Цена, ₽</span>
+                  <span></span>
+                </div>
+              {/if}
               {#each tariffDraft.trafficRubRows as row, index}
                 <div class="admin-row-editor-line">
-                  <input class="input" type="number" min="0.1" step="0.1" placeholder="GB" bind:value={row.gb} aria-label="Объём GB" />
-                  <input class="input" type="number" min="0" step="0.01" placeholder="Цена" bind:value={row.price} aria-label="Цена RUB" />
+                  <input class="input" type="number" min="0.1" step="0.1" placeholder="50" bind:value={row.gb} aria-label="Объём пакета в GB" />
+                  <input class="input" type="number" min="0" step="0.01" placeholder="299" bind:value={row.price} aria-label="Цена пакета в рублях" />
                   <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("trafficRubRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
                 </div>
               {/each}
             </div>
             <div class="admin-row-editor">
-              <span class="admin-row-editor-caption">Stars</span>
+              <span class="admin-row-editor-caption">Оплата Telegram Stars</span>
+              {#if tariffDraft.trafficStarsRows.length}
+                <div class="admin-row-editor-line admin-row-editor-header">
+                  <span>Объём, GB</span>
+                  <span>Цена, ⭐</span>
+                  <span></span>
+                </div>
+              {/if}
               {#each tariffDraft.trafficStarsRows as row, index}
                 <div class="admin-row-editor-line">
-                  <input class="input" type="number" min="0.1" step="0.1" placeholder="GB" bind:value={row.gb} aria-label="Объём GB" />
-                  <input class="input" type="number" min="0" step="1" placeholder="Stars" bind:value={row.price} aria-label="Цена Stars" />
+                  <input class="input" type="number" min="0.1" step="0.1" placeholder="50" bind:value={row.gb} aria-label="Объём пакета в GB" />
+                  <input class="input" type="number" min="0" step="1" placeholder="150" bind:value={row.price} aria-label="Цена пакета в Telegram Stars" />
                   <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("trafficStarsRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
                 </div>
               {/each}
@@ -2263,29 +2384,46 @@
       {#if tariffDraft.billing_model === "period"}
         <section class="admin-editor-section">
           <header class="admin-editor-section-head">
-            <strong>Докупка трафика для тарифа</strong>
+            <div class="admin-editor-section-title">
+              <strong>Докупка трафика поверх месячного лимита</strong>
+              <small>Когда у пользователя кончился месячный лимит, ему предложат купить дополнительный пакет, не меняя срок подписки</small>
+            </div>
             <div class="admin-editor-section-actions">
-              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("topupRubRows", { gb: 10, price: "" })}><Plus size={12} /> RUB</button>
-              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("topupStarsRows", { gb: 10, price: "" })}><Plus size={12} /> Stars</button>
+              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("topupRubRows", { gb: 10, price: "" })}><Plus size={12} /> Пакет ₽</button>
+              <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("topupStarsRows", { gb: 10, price: "" })}><Plus size={12} /> Пакет ⭐</button>
             </div>
           </header>
           <div class="admin-package-columns">
             <div class="admin-row-editor">
-              <span class="admin-row-editor-caption">RUB</span>
+              <span class="admin-row-editor-caption">Оплата рублями</span>
+              {#if tariffDraft.topupRubRows.length}
+                <div class="admin-row-editor-line admin-row-editor-header">
+                  <span>Объём, GB</span>
+                  <span>Цена, ₽</span>
+                  <span></span>
+                </div>
+              {/if}
               {#each tariffDraft.topupRubRows as row, index}
                 <div class="admin-row-editor-line">
-                  <input class="input" type="number" min="0.1" step="0.1" placeholder="GB" bind:value={row.gb} aria-label="Объём GB" />
-                  <input class="input" type="number" min="0" step="0.01" placeholder="Цена" bind:value={row.price} aria-label="Цена RUB" />
+                  <input class="input" type="number" min="0.1" step="0.1" placeholder="20" bind:value={row.gb} aria-label="Объём пакета в GB" />
+                  <input class="input" type="number" min="0" step="0.01" placeholder="149" bind:value={row.price} aria-label="Цена пакета в рублях" />
                   <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("topupRubRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
                 </div>
               {/each}
             </div>
             <div class="admin-row-editor">
-              <span class="admin-row-editor-caption">Stars</span>
+              <span class="admin-row-editor-caption">Оплата Telegram Stars</span>
+              {#if tariffDraft.topupStarsRows.length}
+                <div class="admin-row-editor-line admin-row-editor-header">
+                  <span>Объём, GB</span>
+                  <span>Цена, ⭐</span>
+                  <span></span>
+                </div>
+              {/if}
               {#each tariffDraft.topupStarsRows as row, index}
                 <div class="admin-row-editor-line">
-                  <input class="input" type="number" min="0.1" step="0.1" placeholder="GB" bind:value={row.gb} aria-label="Объём GB" />
-                  <input class="input" type="number" min="0" step="1" placeholder="Stars" bind:value={row.price} aria-label="Цена Stars" />
+                  <input class="input" type="number" min="0.1" step="0.1" placeholder="20" bind:value={row.gb} aria-label="Объём пакета в GB" />
+                  <input class="input" type="number" min="0" step="1" placeholder="75" bind:value={row.price} aria-label="Цена пакета в Telegram Stars" />
                   <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("topupStarsRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
                 </div>
               {/each}
@@ -2293,36 +2431,53 @@
           </div>
         </section>
       {:else}
-        <p class="admin-muted">Для трафиковой модели докупки не нужны — настройте пакеты трафика на вкладке «Цены».</p>
+        <p class="admin-muted">Для трафиковой модели отдельные «докупки» не нужны — пакеты, которые вы настроили на вкладке «Цены», и являются докупками: пользователь покупает их повторно по мере исчерпания.</p>
       {/if}
     </Tabs.Content>
 
     <Tabs.Content value="hwid" class="admin-tabs-content">
       <section class="admin-editor-section">
         <header class="admin-editor-section-head">
-          <strong>Пакеты HWID-устройств</strong>
+          <div class="admin-editor-section-title">
+            <strong>Пакеты дополнительных устройств (HWID)</strong>
+            <small>Расширяет лимит, указанный во вкладке «Основное». Каждая строка — пакет «+N устройств за N единиц валюты»</small>
+          </div>
           <div class="admin-editor-section-actions">
-            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("hwidRubRows", { count: 1, price: "" })}><Plus size={12} /> RUB</button>
-            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("hwidStarsRows", { count: 1, price: "" })}><Plus size={12} /> Stars</button>
+            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("hwidRubRows", { count: 1, price: "" })}><Plus size={12} /> Пакет ₽</button>
+            <button type="button" class="admin-btn admin-btn-sm" on:click={() => addDraftRow("hwidStarsRows", { count: 1, price: "" })}><Plus size={12} /> Пакет ⭐</button>
           </div>
         </header>
         <div class="admin-package-columns">
           <div class="admin-row-editor">
-            <span class="admin-row-editor-caption">RUB</span>
+            <span class="admin-row-editor-caption">Оплата рублями</span>
+            {#if tariffDraft.hwidRubRows.length}
+              <div class="admin-row-editor-line admin-row-editor-header">
+                <span>+ устройств</span>
+                <span>Цена, ₽</span>
+                <span></span>
+              </div>
+            {/if}
             {#each tariffDraft.hwidRubRows as row, index}
               <div class="admin-row-editor-line">
-                <input class="input" type="number" min="1" step="1" placeholder="Шт." bind:value={row.count} aria-label="Количество устройств" />
-                <input class="input" type="number" min="0" step="0.01" placeholder="Цена" bind:value={row.price} aria-label="Цена RUB" />
+                <input class="input" type="number" min="1" step="1" placeholder="1" bind:value={row.count} aria-label="Сколько устройств добавляет пакет" />
+                <input class="input" type="number" min="0" step="0.01" placeholder="99" bind:value={row.price} aria-label="Цена пакета в рублях" />
                 <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("hwidRubRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
               </div>
             {/each}
           </div>
           <div class="admin-row-editor">
-            <span class="admin-row-editor-caption">Stars</span>
+            <span class="admin-row-editor-caption">Оплата Telegram Stars</span>
+            {#if tariffDraft.hwidStarsRows.length}
+              <div class="admin-row-editor-line admin-row-editor-header">
+                <span>+ устройств</span>
+                <span>Цена, ⭐</span>
+                <span></span>
+              </div>
+            {/if}
             {#each tariffDraft.hwidStarsRows as row, index}
               <div class="admin-row-editor-line">
-                <input class="input" type="number" min="1" step="1" placeholder="Шт." bind:value={row.count} aria-label="Количество устройств" />
-                <input class="input" type="number" min="0" step="1" placeholder="Stars" bind:value={row.price} aria-label="Цена Stars" />
+                <input class="input" type="number" min="1" step="1" placeholder="1" bind:value={row.count} aria-label="Сколько устройств добавляет пакет" />
+                <input class="input" type="number" min="0" step="1" placeholder="50" bind:value={row.price} aria-label="Цена пакета в Telegram Stars" />
                 <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" on:click={() => removeDraftRow("hwidStarsRows", index)} aria-label="Удалить"><Trash2 size={13} /></button>
               </div>
             {/each}
@@ -2368,54 +2523,114 @@
     {#if userDetailLoading || !openedUserDetail}
       <p class="admin-muted">Загрузка…</p>
     {:else}
-      <div class="admin-user-summary">
-        <span class="admin-avatar admin-avatar-lg">
-          {#if resolvedAvatarUrl(openedUser)}
-            <img src={resolvedAvatarUrl(openedUser)} alt="" loading="lazy" referrerpolicy="no-referrer" />
-          {:else}
-            <span>{userInitials(openedUser)}</span>
-          {/if}
-        </span>
-        <div class="admin-user-summary-meta">
-          <strong>{userDisplayName(openedUser)}</strong>
-          <small>{userSecondaryName(openedUser)}</small>
-          <div class="admin-user-summary-tags">
-            {#if openedUser.is_banned}
-              <span class="admin-badge admin-badge-danger">Бан</span>
-            {:else}
-              <span class="admin-badge admin-badge-success">Активен</span>
-            {/if}
-            {#if openedUserDetail.active_subscription}
-              <span class="admin-badge admin-badge-success">Подписка</span>
-            {:else}
-              <span class="admin-badge admin-badge-muted">Без подписки</span>
-            {/if}
-            <span class="admin-badge admin-badge-muted">Заплачено: {fmtMoney(openedUserDetail.total_paid)}</span>
+      <div class="admin-user-dialog-body">
+        <aside class="admin-user-aside">
+          <div class="admin-user-summary">
+            <span class="admin-avatar admin-avatar-lg">
+              {#if resolvedAvatarUrl(openedUser)}
+                <img src={resolvedAvatarUrl(openedUser)} alt="" loading="lazy" referrerpolicy="no-referrer" />
+              {:else}
+                <span>{userInitials(openedUser)}</span>
+              {/if}
+            </span>
+            <div class="admin-user-summary-meta">
+              <strong>{userDisplayName(openedUser)}</strong>
+              <small>{userSecondaryName(openedUser)}</small>
+              <div class="admin-user-summary-tags">
+                {#if openedUser.is_banned}
+                  <span class="admin-badge admin-badge-danger">Бан</span>
+                {:else}
+                  <span class="admin-badge admin-badge-success">Активен</span>
+                {/if}
+                {#if openedUserDetail.active_subscription}
+                  <span class="admin-badge admin-badge-success">Подписка</span>
+                {:else}
+                  <span class="admin-badge admin-badge-muted">Без подписки</span>
+                {/if}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <Tabs.Root bind:value={userDetailTab} class="admin-tabs-root">
-        <Tabs.List class="admin-tabs-list">
-          <Tabs.Trigger value="profile" class="admin-tabs-trigger">Профиль</Tabs.Trigger>
-          <Tabs.Trigger value="subscription" class="admin-tabs-trigger">Подписка</Tabs.Trigger>
-          <Tabs.Trigger value="activity" class="admin-tabs-trigger">Активность</Tabs.Trigger>
-          <Tabs.Trigger value="actions" class="admin-tabs-trigger">Действия</Tabs.Trigger>
-        </Tabs.List>
+          <div class="admin-user-stats">
+            <div class="admin-user-stat">
+              <span>Заплачено</span>
+              <strong>{fmtMoney(openedUserDetail.total_paid)}</strong>
+            </div>
+            <div class="admin-user-stat">
+              <span>Логов</span>
+              <strong>{openedUserDetail.log_count}</strong>
+            </div>
+          </div>
 
-        <Tabs.Content value="profile" class="admin-tabs-content">
+          <div class="admin-subsection-title">Профиль</div>
           <ul class="admin-meta-list">
             <li><span>ID</span><strong>{openedUser.user_id}</strong></li>
             <li><span>Telegram ID</span><strong>{openedUser.telegram_id || "—"}</strong></li>
             <li><span>Username</span><strong>{openedUser.username ? "@" + openedUser.username : "—"}</strong></li>
-            <li><span>Email</span><strong>{openedUser.email || "—"}</strong></li>
+            <li><span>Email</span><strong class="admin-meta-truncate">{openedUser.email || "—"}</strong></li>
             <li><span>Регистрация</span><strong>{fmtDate(openedUser.registration_date)}</strong></li>
-            <li><span>Реф. код</span><strong>{openedUserDetail.user?.referral_code || "—"}</strong></li>
-            <li><span>Логов</span><strong>{openedUserDetail.log_count}</strong></li>
+            <li><span>Реф. код</span><strong>{openedUserDetail.referral?.code || openedUserDetail.user?.referral_code || "—"}</strong></li>
           </ul>
-        </Tabs.Content>
 
-        <Tabs.Content value="subscription" class="admin-tabs-content">
+          {#if openedUserDetail.subscription_url || openedUserDetail.referral?.bot_link || openedUserDetail.referral?.webapp_link}
+            <div class="admin-subsection-title">Ссылки</div>
+            <div class="admin-link-list">
+              {#if openedUserDetail.subscription_url}
+                <div class="admin-link-row">
+                  <div class="admin-link-row-meta">
+                    <span class="admin-link-row-label">Подписка</span>
+                    <a class="admin-link-row-url" href={openedUserDetail.subscription_url} target="_blank" rel="noopener">
+                      {openedUserDetail.subscription_url}
+                    </a>
+                  </div>
+                  <button type="button" class="admin-btn admin-btn-icon" title="Скопировать" on:click={() => copyToClipboard(openedUserDetail.subscription_url, "Ссылка на подписку скопирована")}>
+                    <Copy size={14} />
+                  </button>
+                </div>
+              {/if}
+              {#if openedUserDetail.referral?.bot_link}
+                <div class="admin-link-row">
+                  <div class="admin-link-row-meta">
+                    <span class="admin-link-row-label">Реф. ссылка (бот)</span>
+                    <a class="admin-link-row-url" href={openedUserDetail.referral.bot_link} target="_blank" rel="noopener">
+                      {openedUserDetail.referral.bot_link}
+                    </a>
+                  </div>
+                  <button type="button" class="admin-btn admin-btn-icon" title="Скопировать" on:click={() => copyToClipboard(openedUserDetail.referral.bot_link, "Реф. ссылка скопирована")}>
+                    <Copy size={14} />
+                  </button>
+                </div>
+              {/if}
+              {#if openedUserDetail.referral?.webapp_link}
+                <div class="admin-link-row">
+                  <div class="admin-link-row-meta">
+                    <span class="admin-link-row-label">Реф. ссылка (веб)</span>
+                    <a class="admin-link-row-url" href={openedUserDetail.referral.webapp_link} target="_blank" rel="noopener">
+                      {openedUserDetail.referral.webapp_link}
+                    </a>
+                  </div>
+                  <button type="button" class="admin-btn admin-btn-icon" title="Скопировать" on:click={() => copyToClipboard(openedUserDetail.referral.webapp_link, "Реф. ссылка скопирована")}>
+                    <Copy size={14} />
+                  </button>
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <button type="button" class="admin-btn admin-user-link-btn" on:click={copyUserDeepLink}>
+            <Link2 size={14} /> Скопировать ссылку на карточку
+          </button>
+        </aside>
+
+        <main class="admin-user-main">
+          <Tabs.Root bind:value={userDetailTab} class="admin-tabs-root">
+            <Tabs.List class="admin-tabs-list">
+              <Tabs.Trigger value="subscription" class="admin-tabs-trigger">Подписка</Tabs.Trigger>
+              <Tabs.Trigger value="activity" class="admin-tabs-trigger">Активность</Tabs.Trigger>
+              <Tabs.Trigger value="actions" class="admin-tabs-trigger">Действия</Tabs.Trigger>
+            </Tabs.List>
+
+            <Tabs.Content value="subscription" class="admin-tabs-content">
           {#if openedUserDetail.active_subscription}
             <ul class="admin-meta-list">
               <li><span>Активна до</span><strong>{fmtDate(openedUserDetail.active_subscription.end_date)}</strong></li>
@@ -2516,7 +2731,9 @@
             </div>
           </section>
         </Tabs.Content>
-      </Tabs.Root>
+          </Tabs.Root>
+        </main>
+      </div>
     {/if}
   {/if}
 </Dialog>

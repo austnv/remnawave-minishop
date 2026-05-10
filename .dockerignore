@@ -1,5 +1,4 @@
 # Git
-.git
 .gitignore
 .github
 .gitattributes
@@ -11,7 +10,6 @@ README.md
 scratch_*.py
 *.local.*
 node_modules/
-.git/
 
 
 # CI

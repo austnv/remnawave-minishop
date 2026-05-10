@@ -6,9 +6,11 @@ import io
 import ipaddress
 import json
 import logging
+import os
 import re
 import secrets
 import socket
+import subprocess
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -64,6 +66,7 @@ WEBAPP_LOGO_PROXY_PATH = "/webapp-logo"
 WEBAPP_CONFIG_PLACEHOLDER = "<!-- WEBAPP_CONFIG_SCRIPT -->"
 WEBAPP_I18N_PLACEHOLDER = "<!-- WEBAPP_I18N_SCRIPT -->"
 WEBAPP_JS_PLACEHOLDER = "<!-- WEBAPP_JS_SCRIPT -->"
+APP_REPOSITORY_URL = "https://github.com/3252a8/remnawave-minishop"
 DEV_MOCK_START_MARKER = "<!-- WEBAPP_DEV_MOCK_START -->"
 DEV_MOCK_END_MARKER = "<!-- WEBAPP_DEV_MOCK_END -->"
 WEBAPP_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -77,6 +80,7 @@ WEBAPP_CSRF_COOKIE_NAME = "rw_webapp_csrf"
 WEBAPP_TELEGRAM_OAUTH_STATE_COOKIE_NAME = "rw_tg_oauth_state"
 WEBAPP_CSRF_HEADER_NAME = "X-CSRF-Token"
 WEBAPP_STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_APP_VERSION_CACHE: Optional[str] = None
 WEBAPP_CSRF_EXEMPT_PATHS = {
     "/api/auth/telegram/nonce",
     "/api/auth/token",
@@ -210,6 +214,7 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/settings", index_route)
     app.router.add_get("/admin", index_route)
     app.router.add_get("/admin/{section:[a-z][a-z0-9_-]*}", index_route)
+    app.router.add_get("/admin/users/{user_id:-?[0-9]+}", index_route)
     app.router.add_get("/auth/telegram/start", telegram_oauth_start_route)
     app.router.add_get("/auth/telegram/callback", telegram_oauth_callback_route)
     app.router.add_get("/health", health_route)
@@ -645,6 +650,63 @@ def _get_cached_webapp_settings(request: web.Request) -> Dict[str, Any]:
     return cache["data"]
 
 
+def _run_git_command(*args: str) -> str:
+    repo_root = Path(__file__).resolve().parents[3]
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout.strip()
+
+
+def _resolve_app_version() -> str:
+    global _APP_VERSION_CACHE
+    if _APP_VERSION_CACHE:
+        return _APP_VERSION_CACHE
+
+    env_version = os.getenv("REMNAWAVE_MINISHOP_VERSION", "").strip()
+    if env_version:
+        _APP_VERSION_CACHE = env_version
+        return env_version
+
+    build_version_path = Path(__file__).resolve().parents[3] / ".build-version"
+    try:
+        build_version = build_version_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        build_version = ""
+    if build_version:
+        _APP_VERSION_CACHE = build_version
+        return build_version
+
+    tag = _run_git_command("describe", "--tags", "--abbrev=0")
+    sha = _run_git_command("rev-parse", "--short", "HEAD")
+    dirty = bool(_run_git_command("status", "--porcelain"))
+
+    if tag and sha:
+        commits_since_tag = _run_git_command("rev-list", f"{tag}..HEAD", "--count")
+        if commits_since_tag and commits_since_tag != "0":
+            version = f"{tag}+{commits_since_tag}.g{sha}"
+        else:
+            version = tag
+    elif sha:
+        version = f"dev+g{sha}"
+    else:
+        version = "dev+unknown"
+
+    if dirty:
+        version = f"{version}-dirty"
+
+    _APP_VERSION_CACHE = version
+    return version
+
+
 async def _enforce_webapp_rate_limit(
     request: web.Request,
     *,
@@ -727,6 +789,8 @@ async def index_route(request: web.Request) -> web.Response:
         "currency": cached["currency"],
         "language": cached["language"],
         "emailAuthEnabled": cached["email_auth_enabled"],
+        "appVersion": _resolve_app_version(),
+        "appRepositoryUrl": APP_REPOSITORY_URL,
     }
     html = _strip_marked_block(html, DEV_MOCK_START_MARKER, DEV_MOCK_END_MARKER)
     i18n_instance: Optional[object] = request.app.get("i18n")

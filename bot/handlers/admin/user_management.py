@@ -34,6 +34,17 @@ USERNAME_REGEX = re.compile(r"^[a-zA-Z0-9_]{5,32}$")
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+async def _resolve_bot_username(bot: Optional[Bot]) -> Optional[str]:
+    """Best-effort resolution of the running bot's @username (cached by aiogram)."""
+    if bot is None:
+        return None
+    try:
+        me = await bot.me()
+        return getattr(me, "username", None)
+    except Exception:
+        return None
+
+
 def _format_traffic_period(strategy: Optional[str], get_text: Callable[..., str]) -> Optional[str]:
     if not strategy:
         return None
@@ -181,12 +192,16 @@ def get_user_card_keyboard(user_id: int, i18n_instance, lang: str,
         callback_data=f"user_action:refresh:{user_id}"
     )
 
-    # Row 4: Quick links
-    builder.button(
-        text=_(key="user_card_open_profile_button"),
-        url=f"tg://user?id={user_id}"
-    )
-    if referrer_id:
+    # Row 4: Quick links — only for users with a real Telegram profile
+    # (synthetic email-only users have a negative user_id with no tg profile).
+    has_self_link = user_id > 0
+    has_referrer_link = bool(referrer_id) and referrer_id > 0
+    if has_self_link:
+        builder.button(
+            text=_(key="user_card_open_profile_button"),
+            url=f"tg://user?id={user_id}"
+        )
+    if has_referrer_link:
         builder.button(
             text=_(key="user_card_open_referrer_profile_button"),
             url=f"tg://user?id={referrer_id}"
@@ -197,7 +212,7 @@ def get_user_card_keyboard(user_id: int, i18n_instance, lang: str,
         text=_(key="admin_user_delete_button"),
         callback_data=f"user_action:delete_user:{user_id}"
     )
-    
+
     # Row 6: Navigation
     builder.button(
         text=_(key="admin_user_search_new_button"),
@@ -207,9 +222,12 @@ def get_user_card_keyboard(user_id: int, i18n_instance, lang: str,
         text=_(key="back_to_admin_panel_button"),
         callback_data="admin_action:main"
     )
-    
-    quick_links_width = 2 if referrer_id else 1
-    builder.adjust(2, 2, 2, quick_links_width, 1, 2)
+
+    quick_links_count = (1 if has_self_link else 0) + (1 if has_referrer_link else 0)
+    if quick_links_count == 0:
+        builder.adjust(2, 2, 2, 1, 2)
+    else:
+        builder.adjust(2, 2, 2, quick_links_count, 1, 2)
     return builder
 
 
@@ -241,10 +259,13 @@ async def _send_with_profile_link_fallback(
         await sender(**send_kwargs)
 
 
-async def format_user_card(user: User, session: AsyncSession, 
+async def format_user_card(user: User, session: AsyncSession,
                           subscription_service: SubscriptionService,
                           i18n_instance, lang: str,
-                          referral_service: Optional[ReferralService] = None) -> str:
+                          referral_service: Optional[ReferralService] = None,
+                          *,
+                          settings: Optional[Settings] = None,
+                          bot_username: Optional[str] = None) -> str:
     """Format user information as a detailed card"""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     
@@ -366,7 +387,55 @@ async def format_user_card(user: User, session: AsyncSession,
         
     except Exception as e:
         logging.error(f"Error getting user statistics for {user.user_id}: {e}")
-    
+
+    # Links section: subscription page + both referral links.
+    link_lines: list[str] = []
+
+    # Subscription URL — the user's panel-issued config link.
+    if user.panel_user_uuid:
+        try:
+            panel_data = await subscription_service.panel_service.get_user_by_uuid(user.panel_user_uuid)
+            sub_url = panel_data.get("subscriptionUrl") if panel_data else None
+            if sub_url:
+                link_lines.append(f"{_('admin_user_subscription_url_label')} {sub_url}")
+        except Exception as exc_sub:
+            logging.warning("Failed to fetch subscriptionUrl for user %s: %s", user.user_id, exc_sub)
+
+    # Referral links — bot deep-link + webapp deep-link.
+    if referral_service is not None and bot_username:
+        try:
+            bot_ref_link = await referral_service.generate_referral_link(session, bot_username, user.user_id)
+            if bot_ref_link:
+                link_lines.append(f"{_('admin_user_ref_bot_link_label')} {bot_ref_link}")
+        except Exception as exc_bot_ref:
+            logging.warning("Failed to build bot referral link for %s: %s", user.user_id, exc_bot_ref)
+
+    if settings is not None:
+        webapp_base = getattr(settings, "SUBSCRIPTION_MINI_APP_URL", None)
+        if webapp_base:
+            try:
+                code = await user_dal.ensure_referral_code(session, user)
+                if code:
+                    from urllib.parse import parse_qsl, urlsplit, urlunsplit
+                    parts = urlsplit(webapp_base)
+                    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+                    query["ref"] = f"u{code}"
+                    webapp_ref_link = urlunsplit((
+                        parts.scheme,
+                        parts.netloc,
+                        parts.path,
+                        "&".join(f"{k}={v}" for k, v in query.items()),
+                        parts.fragment,
+                    ))
+                    link_lines.append(f"{_('admin_user_ref_webapp_link_label')} {webapp_ref_link}")
+            except Exception as exc_web_ref:
+                logging.warning("Failed to build webapp referral link for %s: %s", user.user_id, exc_web_ref)
+
+    if link_lines:
+        card_parts.append("")
+        card_parts.append(_('admin_user_links_section_title'))
+        card_parts.extend(link_lines)
+
     return "\n".join(card_parts)
 
 
@@ -400,7 +469,11 @@ async def process_user_search_handler(message: types.Message, state: FSMContext,
     # Format and send user card
     try:
         referral_service = ReferralService(settings, subscription_service, message.bot, i18n)
-        user_card_text = await format_user_card(user_model, session, subscription_service, i18n, current_lang, referral_service)
+        bot_username = await _resolve_bot_username(message.bot)
+        user_card_text = await format_user_card(
+            user_model, session, subscription_service, i18n, current_lang, referral_service,
+            settings=settings, bot_username=bot_username,
+        )
         keyboard = get_user_card_keyboard(
             user_model.user_id,
             i18n,
@@ -662,7 +735,11 @@ async def handle_refresh_user_card(callback: types.CallbackQuery, user: User,
         from config.settings import Settings as _Settings
         _settings = _Settings()
         referral_service = ReferralService(_settings, subscription_service, callback.message.bot, i18n_instance)
-        user_card_text = await format_user_card(fresh_user, session, subscription_service, i18n_instance, lang, referral_service)
+        bot_username = await _resolve_bot_username(callback.message.bot)
+        user_card_text = await format_user_card(
+            fresh_user, session, subscription_service, i18n_instance, lang, referral_service,
+            settings=_settings, bot_username=bot_username,
+        )
         keyboard = get_user_card_keyboard(
             fresh_user.user_id,
             i18n_instance,
@@ -936,7 +1013,11 @@ async def process_subscription_days_handler(message: types.Message, state: FSMCo
             user = await user_dal.get_user_by_id(session, target_user_id)
             if user:
                 referral_service = ReferralService(settings, subscription_service, message.bot, i18n)
-                user_card_text = await format_user_card(user, session, subscription_service, i18n, current_lang, referral_service)
+                bot_username = await _resolve_bot_username(message.bot)
+                user_card_text = await format_user_card(
+                    user, session, subscription_service, i18n, current_lang, referral_service,
+                    settings=settings, bot_username=bot_username,
+                )
                 keyboard = get_user_card_keyboard(
                     user.user_id,
                     i18n,
@@ -1045,7 +1126,11 @@ async def process_direct_message_handler(message: types.Message, state: FSMConte
         async with PanelApiService(settings) as panel_service:
             subscription_service = SubscriptionService(settings, panel_service)
             referral_service = ReferralService(settings, subscription_service, bot, i18n)
-            user_card_text = await format_user_card(target_user, session, subscription_service, i18n, current_lang, referral_service)
+            bot_username = await _resolve_bot_username(bot)
+            user_card_text = await format_user_card(
+                target_user, session, subscription_service, i18n, current_lang, referral_service,
+                settings=settings, bot_username=bot_username,
+            )
             keyboard = get_user_card_keyboard(
                 target_user.user_id,
                 i18n,
@@ -1334,7 +1419,11 @@ async def user_card_from_list_handler(callback: types.CallbackQuery,
     try:
         from bot.services.referral_service import ReferralService
         referral_service = ReferralService(settings, subscription_service, bot, i18n)
-        user_card_text = await format_user_card(user, session, subscription_service, i18n, current_lang, referral_service)
+        bot_username = await _resolve_bot_username(bot)
+        user_card_text = await format_user_card(
+            user, session, subscription_service, i18n, current_lang, referral_service,
+            settings=settings, bot_username=bot_username,
+        )
         markup = keyboard.as_markup()
         
         await _send_with_profile_link_fallback(
