@@ -6,6 +6,16 @@
   import Card from "../lib/components/ui/card.svelte";
   import Dialog from "../lib/components/ui/dialog.svelte";
   import Input from "../lib/components/ui/input.svelte";
+  import {
+    planKey as planKeyFn,
+    planDisplayTitle as planDisplayTitleFn,
+    planSubtitle as planSubtitleFn,
+    planUnitHint as planUnitHintFn,
+    tariffLimitLabel as tariffLimitLabelFn,
+    priceLabel as priceLabelFn,
+  } from "../lib/webapp/tariffs.js";
+  import { Bitcoin, CreditCard } from "lucide-svelte";
+
 
   export let createPayment = () => {};
   export let deviceConfirmOpen = false;
@@ -21,6 +31,7 @@
   export let linkEmailResendCooldown = 0;
   export let linkEmailStatus = "";
   export let linkEmailValue = "";
+  export let hasMultipleTariffs = false;
   export let methods = [];
   export let payBusy = false;
   export let paymentModalOpen = false;
@@ -35,21 +46,58 @@
   export let subscription = {};
   export let tariffCatalog = [];
   export let tariffMode = false;
+  export let trafficMode = false;
+  
+  function methodMeta(method) {
+    const id = String(method?.id || "").toLowerCase();
+    if (id.includes("platega_sbp")) return { title: t("wa_method_platega_sbp_card"), icon: CreditCard };
+    if (id.includes("platega_crypto")) return { title: t("wa_method_platega_crypto"), icon: Bitcoin };
+    if (id.includes("yookassa") || id.includes("card")) return { title: t("pay_with_yookassa_button"), icon: null };
+    if (id.includes("severpay")) return { title: t("pay_with_severpay_button"), icon: null };
+    if (id.includes("freekassa")) return { title: t("pay_with_sbp_button"), icon: null };
+    if (id.includes("cryptopay") || id.includes("crypto")) return { title: t("pay_with_cryptopay_button"), icon: null };
+    if (id.includes("stars")) return { title: t("pay_with_stars_button"), icon: null };
+    if (id.includes("sbp")) return { title: t("pay_with_sbp_button"), icon: null };
+    return { title: t("wa_method_other_title"), icon: null };
+  }
+
+  function priceLabel(plan) { return priceLabelFn(plan, selectedMethod); }
+  function planKey(plan) { return planKeyFn(plan); }
+  function planDisplayTitle(plan) { return planDisplayTitleFn(plan, { trafficMode, t }); }
+  function planSubtitle(plan) { return planSubtitleFn(plan, { t, termUnitLabel }); }
+  function planUnitHint(plan) { return planUnitHintFn(plan, { trafficMode, selectedMethod, t }); }
+  function tariffLimitLabel(tariff) { return tariffLimitLabelFn(tariff, { t }); }
+
+  function paymentTitle() {
+    if (singleTariffMode) {
+      return selectedTariff?.billing_model === "traffic" ? t("wa_traffic_packages_title") : t("wa_subscription_title");
+    }
+    if (tariffMode) return t("wa_tariffs_title");
+    return trafficMode ? t("wa_traffic_packages_title") : t("wa_subscription_title");
+  }
+
+  function paymentDescription() {
+    if (tariffMode) {
+      if (singleTariffMode) {
+        return selectedTariff?.billing_model === "traffic" ? t("wa_traffic_packages_choose") : t("wa_subscription_choose_period");
+      }
+      return paymentStep === "checkout" && selectedTariff
+        ? t("wa_tariff_choose_period_payment", { tariff: selectedTariff.title })
+        : t("wa_tariffs_choose");
+    }
+    return trafficMode ? t("wa_traffic_packages_choose") : t("wa_subscription_choose_period");
+  }
+
 
   export let closeDeviceDisconnectDialog = () => {};
   export let closeLinkEmailDialog = () => {};
   export let closePaymentModal = () => {};
+  export let backToTariffList = () => {};
   export let continueWithSelectedTariff = () => {};
-  export let methodMeta = () => ({});
-  export let paymentDescription = () => "";
-  export let paymentTitle = () => "";
-  export let planKey = () => "";
-  export let planSubtitle = () => "";
-  export let planUnitHint = () => "";
-  export let priceLabel = () => "";
   export let requestLinkEmailCode = () => {};
   export let selectTariff = () => {};
   export let t = (key) => key;
+  export let termUnitLabel = () => "";
   export let verifyLinkEmailCode = () => {};
 </script>
 
@@ -70,7 +118,7 @@
               class:active={selectedTariffKey === tariff.key}
               class="option-row tariff-row"
               type="button"
-              on:click={() => selectTariff(tariff)}
+              onclick={() => selectTariff(tariff)}
             >
               <span class="option-row-main">
                 <strong>{tariff.title}</strong>
@@ -97,7 +145,7 @@
     {:else}
       {#if tariffMode}
         {#if !singleTariffMode && !(subscription?.active && subscription?.tariff_key && tariffCatalog.some((t) => t.key === subscription.tariff_key))}
-          <button class="back-inline" type="button" on:click={backToTariffList}>
+          <button class="back-inline" type="button" onclick={backToTariffList}>
             <ArrowLeft size={16} />
             {t("wa_back_to_tariffs")}
           </button>
@@ -113,7 +161,7 @@
               class:active={planKey(selectedPlan) === planKey(plan)}
               class="period-card"
               type="button"
-              on:click={() => (selectedPlan = plan)}
+              onclick={() => (selectedPlan = plan)}
             >
               <strong>{planSubtitle(plan) || planDisplayTitle(plan)}</strong>
               <span>{priceLabel(plan)}</span>
@@ -135,7 +183,7 @@
                 class:active={selectedMethod === method.id}
                 class="method-card"
                 type="button"
-                on:click={() => (selectedMethod = method.id)}
+                onclick={() => (selectedMethod = method.id)}
               >
                 <span class="method-card-main">
                   {#if meta.icon}
@@ -164,7 +212,7 @@
             class:active={planKey(selectedPlan) === planKey(plan)}
             class="period-card"
             type="button"
-            on:click={() => (selectedPlan = plan)}
+            onclick={() => (selectedPlan = plan)}
           >
             <strong>{planDisplayTitle(plan)}</strong>
             {#if planSubtitle(plan)}
@@ -189,7 +237,7 @@
               class:active={selectedMethod === method.id}
               class="method-card"
               type="button"
-              on:click={() => (selectedMethod = method.id)}
+              onclick={() => (selectedMethod = method.id)}
             >
               <span class="method-card-main">
                 {#if meta.icon}
@@ -291,7 +339,7 @@
         <button
           class="link-button link-email-resend"
           type="button"
-          on:click={requestLinkEmailCode}
+          onclick={requestLinkEmailCode}
           disabled={linkEmailBusy || linkEmailResendCooldown > 0}
         >
           <RefreshCw size={15} />

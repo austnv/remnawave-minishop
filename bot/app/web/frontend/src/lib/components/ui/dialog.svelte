@@ -14,7 +14,7 @@
 
 {#if open}
   <div class="dialog" role="dialog" aria-modal="true" aria-label={title}>
-    <button class="dialog-backdrop" type="button" aria-label={closeLabel} on:click={onclose}></button>
+    <button class="dialog-backdrop" type="button" aria-label={closeLabel} onclick={onclose}></button>
     <section class={cn("dialog-card", className)}>
       <div class="dialog-head">
         <div>

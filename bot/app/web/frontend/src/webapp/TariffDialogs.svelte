@@ -2,12 +2,20 @@
   import { ArrowRight, CheckCircle2, LockKeyhole } from "lucide-svelte";
 
   import Button from "../lib/components/ui/button.svelte";
+  import {
+    planKey as planKeyFn,
+    planUnitHint as planUnitHintFn,
+    priceLabel as priceLabelFn,
+    actionKey as actionKeyFn,
+  } from "../lib/webapp/tariffs.js";
+  import { premiumTitle as premiumTitleFn, trafficPercent as trafficPercentFn } from "../lib/webapp/traffic.js";
+  import { formatCompactNumber } from "../lib/webapp/formatters.js";
+  import { Bitcoin, CreditCard } from "lucide-svelte";
+
   import Card from "../lib/components/ui/card.svelte";
   import Dialog from "../lib/components/ui/dialog.svelte";
 
-  export let actionKey = () => "";
   export let applyTariffChange = () => {};
-  export let changeActionTitle = () => "";
   export let changeConfirmOpen = false;
   export let changeModalOpen = false;
   export let changeOptions = null;
@@ -17,16 +25,11 @@
   export let closeTopupModal = () => {};
   export let createDeviceTopupPayment = () => {};
   export let createTopupPayment = () => {};
-  export let deviceTopupModalDescription = () => "";
   export let deviceTopupModalOpen = false;
   export let deviceTopupOptions = null;
   export let methods = [];
-  export let methodMeta = () => ({});
   export let openTariffChangeConfirm = () => {};
   export let payBusy = false;
-  export let planKey = () => "";
-  export let planUnitHint = () => "";
-  export let priceLabel = () => "";
   export let selectedChangeAction = null;
   export let selectedChangeTarget = null;
   export let selectedDeviceTopupPlan = null;
@@ -34,14 +37,110 @@
   export let selectedTopupPlan = null;
   export let singleTariffMode = false;
   export let tariffActionBusy = false;
-  export let tariffChangeModalDescription = () => "";
-  export let tariffChangeSummary = () => [];
-  export let topupCarryoverNotes = () => [];
-  export let topupModalDescription = () => "";
   export let topupModalOpen = false;
-  export let topupModalTitle = () => "";
   export let topupOptions = null;
+  export let topupKind = "regular";
+  export let subscription = {};
+  export let trafficMode = false;
+
+  function methodMeta(method) {
+    const id = String(method?.id || "").toLowerCase();
+    if (id.includes("platega_sbp")) return { title: t("wa_method_platega_sbp_card"), icon: CreditCard };
+    if (id.includes("platega_crypto")) return { title: t("wa_method_platega_crypto"), icon: Bitcoin };
+    if (id.includes("yookassa") || id.includes("card")) return { title: t("pay_with_yookassa_button"), icon: null };
+    if (id.includes("severpay")) return { title: t("pay_with_severpay_button"), icon: null };
+    if (id.includes("freekassa")) return { title: t("pay_with_sbp_button"), icon: null };
+    if (id.includes("cryptopay") || id.includes("crypto")) return { title: t("pay_with_cryptopay_button"), icon: null };
+    if (id.includes("stars")) return { title: t("pay_with_stars_button"), icon: null };
+    if (id.includes("sbp")) return { title: t("pay_with_sbp_button"), icon: null };
+    return { title: t("wa_method_other_title"), icon: null };
+  }
+
+  function priceLabel(plan) { return priceLabelFn(plan, selectedMethod); }
+  function planKey(plan) { return planKeyFn(plan); }
+  function planUnitHint(plan) { return planUnitHintFn(plan, { trafficMode, selectedMethod, t }); }
+  function actionKey(action) { return actionKeyFn(action); }
+
+  function changeActionTitle(action) {
+    const mode = String(action?.mode || "");
+    if (mode === "recalc_days") {
+      return t("wa_tariff_change_recalc_days", { days: Number(action?.days_after || 0) });
+    }
+    if (mode === "convert_days_to_gb") {
+      return t("wa_tariff_change_convert_gb", { gb: formatCompactNumber(action?.converted_gb || 0) });
+    }
+    if (mode === "paid_diff") {
+      return t("wa_tariff_change_pay_diff", { price: priceLabel(action) });
+    }
+    if (mode === "buy_package") {
+      return t("wa_tariff_change_buy_package", { gb: formatCompactNumber(action?.traffic_gb || 0), price: priceLabel(action) });
+    }
+    if (mode === "buy_period") {
+      return `${action?.title || ""} · ${priceLabel(action)}`;
+    }
+    return action?.title || mode;
+  }
+
+  function tariffChangeSummary() {
+    if (!selectedChangeTarget || !selectedChangeAction) return [];
+    const rows = [
+      t("wa_tariff_change_confirm_target", { tariff: selectedChangeTarget.title }),
+      t("wa_tariff_change_confirm_action", { action: changeActionTitle(selectedChangeAction) }),
+    ];
+    const mode = String(selectedChangeAction.mode || "");
+    if (mode === "recalc_days") {
+      rows.push(t("wa_tariff_change_confirm_recalc", { days: Number(selectedChangeAction.days_after || 0) }));
+    } else if (mode === "convert_days_to_gb") {
+      rows.push(t("wa_tariff_change_confirm_convert", { gb: formatCompactNumber(selectedChangeAction.converted_gb || 0) }));
+    } else if (selectedChangeAction.kind === "payment") {
+      rows.push(t("wa_tariff_change_confirm_payment", { price: priceLabel(selectedChangeAction) }));
+    }
+    return rows;
+  }
+
+  function topupCarryoverNotes() {
+    const plans = topupOptions?.plans || [];
+    if (!plans.length) return [];
+    return [
+      t(
+        "wa_topup_carryover",
+        {},
+        "Докупленный трафик не сгорает: сначала расходуется месячный лимит, затем докупленный остаток."
+      ),
+    ];
+  }
+
+  function deviceTopupModalDescription() {
+    if (!deviceTopupOptions) return "";
+    return deviceTopupOptions?.tariff_name ? t("wa_device_topup_for_tariff", { tariff: deviceTopupOptions.tariff_name }) : "";
+  }
+
+  function tariffChangeModalDescription() {
+    if (!changeOptions) return "";
+    return changeOptions?.current ? t("wa_current_tariff", { tariff: changeOptions.current.title }) : "";
+  }
+  
+  function isPremiumTopupContext() {
+    if (selectedTopupPlan?.sale_mode === "premium_topup") return true;
+    if (topupOptions?.topup_kind) return topupOptions.topup_kind === "premium";
+    return topupKind === "premium";
+  }
+
+  function topupModalDescription() {
+    if (!topupOptions) return "";
+    if (isPremiumTopupContext()) return topupOptions?.tariff_name ? t("wa_topup_for_tariff", { tariff: topupOptions.tariff_name }) : "";
+    if (singleTariffMode) return "";
+    return topupOptions?.tariff_name ? t("wa_topup_for_tariff", { tariff: topupOptions.tariff_name }) : "";
+  }
+
+  function topupModalTitle() {
+    if (isPremiumTopupContext()) return premiumTitleFn({ ...subscription, ...(topupOptions || {}) }, t);
+    return t("wa_topup_traffic");
+  }
+
+
   export let t = (key) => key;
+  export let termUnitLabel = () => "";
 </script>
 
 <Dialog
@@ -87,7 +186,7 @@
             class:active={selectedChangeTarget?.tariff_key === target.tariff_key}
             class="tariff-action-card"
             type="button"
-            on:click={() => {
+            onclick={() => {
               selectedChangeTarget = target;
               selectedChangeAction = target.actions?.[0] || null;
             }}
@@ -109,7 +208,7 @@
               class:active={actionKey(selectedChangeAction) === actionKey(action)}
               class="option-row change-action-row"
               type="button"
-              on:click={() => (selectedChangeAction = action)}
+              onclick={() => (selectedChangeAction = action)}
             >
               <span class="option-row-main">
                 <strong>{changeActionTitle(action)}</strong>
@@ -135,7 +234,7 @@
                 class:active={selectedMethod === method.id}
                 class="method-card"
                 type="button"
-                on:click={() => (selectedMethod = method.id)}
+                onclick={() => (selectedMethod = method.id)}
               >
                 <span class="method-card-main">
                   {#if meta.icon}
@@ -209,6 +308,10 @@
             </div>
           {/each}
         </div>
+        <div class="topup-carryover-note skeleton-carryover-note">
+          <span class="skeleton-line"></span>
+          <span class="skeleton-line skeleton-line-short"></span>
+        </div>
         <div class="method-grid">
           {#each [1, 2] as _}
             <div class="method-card skeleton-method">
@@ -226,7 +329,7 @@
             class:active={planKey(selectedTopupPlan) === planKey(plan)}
             class="option-row plan-row"
             type="button"
-            on:click={() => (selectedTopupPlan = plan)}
+            onclick={() => (selectedTopupPlan = plan)}
           >
             <span class="option-row-main">
               <strong>{plan.title}</strong>
@@ -258,7 +361,7 @@
             class:active={selectedMethod === method.id}
             class="method-card"
             type="button"
-            on:click={() => (selectedMethod = method.id)}
+            onclick={() => (selectedMethod = method.id)}
           >
             <span class="method-card-main">
               {#if meta.icon}
@@ -320,7 +423,7 @@
             class:active={planKey(selectedDeviceTopupPlan) === planKey(plan)}
             class="option-row plan-row"
             type="button"
-            on:click={() => (selectedDeviceTopupPlan = plan)}
+            onclick={() => (selectedDeviceTopupPlan = plan)}
           >
             <span class="option-row-main">
               <strong>{t("wa_hwid_devices_package", { count: Number(plan.device_count || plan.months || 0) })}</strong>
@@ -342,7 +445,7 @@
             class:active={selectedMethod === method.id}
             class="method-card"
             type="button"
-            on:click={() => (selectedMethod = method.id)}
+            onclick={() => (selectedMethod = method.id)}
           >
             <span class="method-card-main">
               {#if meta.icon}

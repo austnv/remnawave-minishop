@@ -28,11 +28,11 @@
 </script>
 
 {#if href}
-  <a class={cn(variants[variant], sizes[size], className)} {href} on:click={onclick} {...$$restProps}>
+  <a class={cn(variants[variant], sizes[size], className)} {href} onclick={onclick} {...$$restProps}>
     <slot />
   </a>
 {:else}
-  <button class={cn(variants[variant], sizes[size], className)} {type} {disabled} on:click={onclick} {...$$restProps}>
+  <button class={cn(variants[variant], sizes[size], className)} {type} {disabled} onclick={onclick} {...$$restProps}>
     <slot />
   </button>
 {/if}

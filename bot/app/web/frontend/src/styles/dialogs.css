@@ -1,99 +1,83 @@
-/* Modal/dialog primitives — bottom-sheet style cards used across the webapp. */
+
+
+.dialog-skeleton {
+  display: grid;
+  gap: 12px;
+}
 
 .dialog {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 220;
   display: grid;
-  place-items: center;
-  overflow: hidden;
+  align-items: center;
+  justify-items: center;
   padding:
-    16px
-    var(--screen-gutter)
-    calc(var(--bottom-nav-height) + var(--bottom-nav-offset) + 16px + env(safe-area-inset-bottom));
+    max(14px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .dialog-backdrop {
   position: absolute;
   inset: 0;
+  z-index: 0;
   border: 0;
-  background: rgba(2, 7, 11, 0.54);
+  background: rgba(0, 0, 0, 0.56);
   backdrop-filter: blur(10px);
-  animation: fade-in 0.18s ease-out both;
+  cursor: pointer;
+  animation: dialog-fade-in 0.18s ease-out both;
 }
 
 .dialog-card {
   position: relative;
   z-index: 1;
   display: grid;
-  width: min(100%, 420px);
-  gap: 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--panel);
-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
-  padding: 14px;
-  transform-origin: center;
-  animation: modal-enter 0.2s ease-out both;
+  gap: 16px;
+  width: min(100%, 520px);
+  max-height: min(86dvh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--panel) 94%, #07111a);
+  color: var(--text);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.46);
+  animation: dialog-slide-up 0.2s ease-out both;
 }
 
 .dialog-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: start;
-  gap: 10px;
 }
 
 .dialog-head h2 {
   margin: 0;
   color: var(--text);
-  font-size: 18px;
-  line-height: 1.16;
-  font-weight: 850;
+  font-size: 19px;
+  line-height: 1.18;
 }
 
 .dialog-head p {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dialog-card .bottom-action {
+  margin-top: 2px;
 }
 
 .payment-dialog-card {
   max-height: 100%;
   overflow-y: auto;
-}
-
-.link-email-dialog-card {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: min(100%, 560px);
-  max-height: 100%;
-  overflow: hidden;
-}
-
-.link-email-dialog-card .dialog-head {
-  position: relative;
-  z-index: 2;
-}
-
-.link-email-dialog-card .payment-dialog-body {
-  min-height: 0;
-}
-
-.link-email-code-layout {
-  display: grid;
-  min-height: 0;
-  height: 100%;
-  grid-template-rows: minmax(0, 1fr) auto;
-}
-
-.link-email-code-center {
-  align-self: center;
-}
-
-.link-email-resend {
-  align-self: end;
 }
 
 .payment-dialog-body {
@@ -117,22 +101,42 @@
     0 0 26px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.link-email-dialog-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: min(100%, 560px);
+  max-height: 100%;
+  overflow: hidden;
 }
 
-@keyframes modal-enter {
+.link-email-dialog-card .dialog-head {
+  position: relative;
+  z-index: 2;
+}
+
+.link-email-dialog-card .payment-dialog-body {
+  min-height: 0;
+}
+
+@keyframes dialog-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-slide-up {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.98);
+    transform: translateY(18px) scale(0.98);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@media (min-width: 720px) {
+  .dialog-card {
+    border-radius: var(--radius-lg);
+    padding: 20px;
   }
 }

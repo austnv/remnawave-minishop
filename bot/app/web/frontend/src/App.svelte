@@ -1,6 +1,10 @@
 <script>
   import { Bitcoin, CreditCard } from "lucide-svelte";
-  import { onMount } from "svelte";
+  import { onMount, setContext } from "svelte";
+  import { createAuthStore } from "./lib/webapp/stores/authStore.js";
+  import { createBillingStore } from "./lib/webapp/stores/billingStore.js";
+  import { createDevicesStore } from "./lib/webapp/stores/devicesStore.js";
+  import { createAccountStore } from "./lib/webapp/stores/accountStore.js";
   import { Tooltip } from "bits-ui";
 
   import BrandMark from "./BrandMark.svelte";
@@ -25,40 +29,27 @@
     TELEGRAM_WEBAPP_SCRIPT_URL,
     WEBAPP_LANGUAGE_ORDER,
   } from "./lib/webapp/constants.js";
+  
+
+
   import { applyFavicon, readJsonScript, structuredCloneSafe } from "./lib/webapp/browser.js";
   import { createApiClient } from "./lib/webapp/publicApi.js";
   import { createI18n } from "./lib/webapp/i18n.js";
   import {
-    formatMoney as fmtMoney,
-    formatTrafficGb as fmtTrafficGb,
-    formatTrafficBytes as fmtTrafficBytes,
-    formatCompactNumber as fmtCompactNumber,
-    normalizedEmail as fmtNormalizedEmail,
-    telegramName as fmtTelegramName,
+    formatCompactNumber,
+    formatTrafficGb,
+    normalizedEmail,
+    telegramName,
   } from "./lib/webapp/formatters.js";
   import {
-    buildTariffCatalog as buildTariffCatalogFn,
-    activeTariffName as activeTariffNameFn,
-    planKey as planKeyFn,
-    planDisplayTitle as planDisplayTitleFn,
-    planSubtitle as planSubtitleFn,
-    planUnitHint as planUnitHintFn,
-    tariffLimitLabel as tariffLimitLabelFn,
-    actionKey as actionKeyFn,
-    priceLabel as priceLabelFn,
+    activeTariffName,
+    buildTariffCatalog,
+    priceLabel,
   } from "./lib/webapp/tariffs.js";
   import {
-    trafficPercent as trafficPercentFn,
-    trafficLabel as trafficLabelFn,
-    trafficResetLabel as trafficResetLabelFn,
-    premiumTrafficPercent as premiumTrafficPercentFn,
-    premiumTrafficLabel as premiumTrafficLabelFn,
-    premiumTitle as premiumTitleFn,
-    premiumTrafficLeftLabel as premiumTrafficLeftLabelFn,
-    premiumTopupBalanceLabel as premiumTopupBalanceLabelFn,
-    premiumServerLabels as premiumServerLabelsFn,
-    isForeverSubscription as isForeverSubscriptionFn,
-    activeSubscriptionTermLabel as activeSubscriptionTermLabelFn,
+    premiumTitle,
+    premiumTrafficPercent,
+    trafficPercent,
   } from "./lib/webapp/traffic.js";
   import { buildGravatarUrl } from "./lib/webapp/gravatar.js";
   import { createBillingActions } from "./lib/webapp/billingActions.js";
@@ -116,74 +107,23 @@
   let data = isPreviewBoard ? structuredCloneSafe(DEV_MOCK.data) : null;
   let selectedPlan = null;
   let selectedMethod = "";
-  let paymentModalOpen = query.get("payment") === "1";
-  let paymentStep = "tariff";
-  let selectedTariffKey = "";
-  let topupModalOpen = query.get("topup") === "1";
-  let topupKind = "regular";
-  let deviceTopupModalOpen = query.get("device_topup") === "1";
-  let changeModalOpen = query.get("change") === "1";
-  let topupOptions = null;
-  let topupOptionsRequestId = 0;
-  let deviceTopupOptions = null;
-  let changeOptions = null;
-  let selectedTopupPlan = null;
-  let selectedDeviceTopupPlan = null;
-  let selectedChangeTarget = null;
-  let selectedChangeAction = null;
-  let changeConfirmOpen = false;
-  let tariffActionBusy = false;
-  let payBusy = false;
   let trialBusy = false;
-  let linkEmailOpen = false;
-  let linkEmailBusy = false;
-  let linkTelegramBusy = false;
-  let linkEmailValue = "";
-  let linkEmailPending = "";
-  let linkEmailCode = "";
-  let linkEmailStatus = "";
-  let linkEmailIsError = false;
-  let linkEmailFieldError = "";
   let promoCode = "";
   let promoBusy = false;
   let promoStatus = "";
   let promoIsError = false;
   let promoFieldError = "";
-  let devicesData = DEV_MOCK.data.devices;
-  let devicesLoaded = false;
-  let devicesBusy = false;
-  let devicesStatus = "";
-  let devicesIsError = false;
-  let deviceConfirmOpen = false;
-  let deviceToDisconnect = null;
-  let deviceDisconnectBusy = false;
   let toastText = "";
   let toastTimer = null;
-  let authStatus = "";
-  let authIsError = false;
-  let authBusy = false;
-  let telegramLoginBusy = false;
-  let telegramLoginWatchdogTimer = null;
-  let telegramLoginAttemptId = 0;
-  let loginEmailFieldError = "";
-  let loginEmailTooltipOpen = false;
-  let authResendCooldown = 0;
-  let authResendTimer = null;
-  let languageBusy = false;
   let languageMenuOpen = false;
   let languageClickGuard = false;
   let languageClickGuardArmed = false;
   let languageClickGuardTimer = null;
   let languageClickGuardArmTimer = null;
-  let email = "";
-  let pendingEmail = "";
-  let emailCode = "";
   let emailAvatarUrl = "";
   let avatarHashToken = "";
   let token = MOCK ? "local-preview" : readStoredToken();
   let csrfToken = MOCK ? "" : readCookie(CSRF_COOKIE_NAME) || "";
-  let linkEmailResendCooldown = 0;
-  let linkEmailResendTimer = null;
   let scrollLockApplied = false;
   let tg = null;
   const telegramSdk = createTelegramSdk({
@@ -197,6 +137,15 @@
   tg = telegramSdk.refresh();
   telegramSdkStatus = tg ? "ready" : "idle";
   telegramMiniAppInitData = telegramSdk.initData;
+  const i18n = createI18n({
+    messages: I18N,
+    defaultLang: "ru",
+    getLang: () => user?.language_code || CFG.language || "ru",
+  });
+  const normalizeLangCode = i18n.normalizeLangCode;
+  const t = i18n.t;
+  const termUnitLabel = i18n.termUnitLabel;
+  const languageName = i18n.languageName;
   const apiClient = createApiClient({
     apiBase: CFG.apiBase,
     csrfCookieName: CSRF_COOKIE_NAME,
@@ -212,6 +161,41 @@
     getMockContext: () => ({ currentLang, normalizeLangCode, clone: structuredCloneSafe }),
   });
   const billing = createBillingActions({ api: (path, options) => apiClient.api(path, options), t: (...args) => t(...args) });
+
+  const authStore = createAuthStore({ publicApi, setToken, loadData, telegramSdk, getTg: () => tg, t, currentLang: () => currentLang, clearManualLogoutFlag });
+  const billingStore = createBillingStore({ billing, loadData, t, showToast, openExternalLink, tg });
+  const devicesStore = createDevicesStore({ api, t, showToast });
+  const accountStore = createAccountStore({
+    api,
+    publicApi,
+    setToken,
+    loadData,
+    t,
+    showToast,
+    clearToken,
+    markManualLogout,
+    showLogin,
+    telegramSdk,
+    getTg: () => tg,
+    telegramOAuthClientId,
+    currentLang: () => currentLang,
+    normalizeLangCode,
+    updateLocalData: (updatedLanguage) => {
+      if (!data?.user) return;
+      data = { ...data, user: { ...data.user, language_code: updatedLanguage } };
+    },
+  });
+
+  setContext("authStore", authStore);
+  setContext("billingStore", billingStore);
+  setContext("devicesStore", devicesStore);
+  setContext("accountStore", accountStore);
+
+  $: ({ authStatus, authIsError, authBusy, telegramLoginBusy, loginEmailFieldError, loginEmailTooltipOpen, authResendCooldown, email, pendingEmail, emailCode } = $authStore);
+  $: ({ paymentModalOpen, paymentStep, selectedTariffKey, selectedPlan, selectedMethod, topupModalOpen, topupKind, deviceTopupModalOpen, changeModalOpen, topupOptions, deviceTopupOptions, changeOptions, selectedTopupPlan, selectedDeviceTopupPlan, selectedChangeTarget, selectedChangeAction, changeConfirmOpen, tariffActionBusy, payBusy } = $billingStore);
+  $: ({ devicesData, devicesLoaded, devicesBusy, devicesStatus, devicesIsError, deviceConfirmOpen, deviceToDisconnect, deviceDisconnectBusy } = $devicesStore);
+  $: ({ linkEmailOpen, linkEmailBusy, linkTelegramBusy, linkEmailValue, linkEmailPending, linkEmailCode, linkEmailStatus, linkEmailIsError, linkEmailFieldError, linkEmailResendCooldown, languageBusy } = $accountStore);
+
 
 
   $: brandTitle = CFG.title || "/minishop";
@@ -295,21 +279,32 @@
           : "";
   $: applyFavicon(CFG.logoUrl, brandEmoji);
   $: syncBodyScrollLock(paymentModalOpen || changeModalOpen || changeConfirmOpen || topupModalOpen || deviceTopupModalOpen || linkEmailOpen);
-  $: if (!tariffMode && !selectedPlan && plans.length) selectedPlan = plans[Math.min(1, plans.length - 1)];
+  $: if (!tariffMode && !$billingStore.selectedPlan && plans.length) {
+    billingStore.update((s) => ({ ...s, selectedPlan: plans[Math.min(1, plans.length - 1)] }));
+  }
   $: if (singleTariffMode && tariffCatalog[0]?.key && selectedTariffKey !== tariffCatalog[0].key) {
-    selectedTariffKey = tariffCatalog[0].key;
-    selectedPlan = plans.find((plan) => plan?.tariff_key === selectedTariffKey) || null;
-    if (paymentStep === "tariff") paymentStep = "checkout";
+    const tariffKey = tariffCatalog[0].key;
+    billingStore.update((s) => ({
+      ...s,
+      selectedTariffKey: tariffKey,
+      selectedPlan: plans.find((plan) => plan?.tariff_key === tariffKey) || null,
+      paymentStep: s.paymentStep === "tariff" ? "checkout" : s.paymentStep,
+    }));
   }
   $: if (tariffMode && selectedTariffKey && !tariffCatalog.some((tariff) => tariff.key === selectedTariffKey)) {
-    selectedTariffKey = "";
-    selectedPlan = null;
-    paymentStep = singleTariffMode ? "checkout" : "tariff";
+    billingStore.update((s) => ({
+      ...s,
+      selectedTariffKey: "",
+      selectedPlan: null,
+      paymentStep: singleTariffMode ? "checkout" : "tariff",
+    }));
   }
   $: if (tariffMode && selectedTariffKey && (!selectedPlan || selectedPlan.tariff_key !== selectedTariffKey)) {
-    selectedPlan = selectedTariffPlans[0] || null;
+    billingStore.update((s) => ({ ...s, selectedPlan: selectedTariffPlans[0] || null }));
   }
-  $: if (!selectedMethod && methods.length) selectedMethod = methods[0].id;
+  $: if (!$billingStore.selectedMethod && methods.length) {
+    billingStore.update((s) => ({ ...s, selectedMethod: methods[0].id }));
+  }
   $: {
     const emailKey = normalizedEmail(user?.email);
     if (!emailKey) {
@@ -338,7 +333,7 @@
         const nextSection = section === "devices" && !devicesEnabled ? "home" : section;
         activeTab = nextSection;
         screen = nextSection;
-        if (nextSection === "devices") loadDevices();
+        if (nextSection === "devices") devicesStore.loadDevices(devicesEnabled);
       }
     };
     window.addEventListener("popstate", onPopState);
@@ -378,6 +373,7 @@
       window.clearTimeout(languageClickGuardArmTimer);
       languageClickGuardArmTimer = null;
     }
+    languageClickGuard = false;
     languageClickGuardArmed = false;
   }
 
@@ -397,18 +393,6 @@
       languageClickGuardTimer = null;
     }, 260);
   }
-
-
-  const i18n = createI18n({
-    messages: I18N,
-    defaultLang: "ru",
-    getLang: () => user?.language_code || CFG.language || "ru",
-  });
-  const normalizeLangCode = i18n.normalizeLangCode;
-  const t = i18n.t;
-  const termUnitLabel = i18n.termUnitLabel;
-  const languageName = i18n.languageName;
-
 
   function resolveTelegramWebApp() {
     return telegramSdk.tg;
@@ -518,10 +502,13 @@
     const payload = await api("/me");
     if (!payload.ok) throw new Error(payload.error || "load_failed");
     data = payload;
-    selectedPlan = null;
-    selectedTariffKey = "";
-    paymentStep = "tariff";
-    selectedMethod = payload.payment_methods?.[0]?.id || "";
+    billingStore.update((s) => ({
+      ...s,
+      selectedPlan: null,
+      selectedTariffKey: "",
+      paymentStep: "tariff",
+      selectedMethod: payload.payment_methods?.[0]?.id || "",
+    }));
     let section = MOCK && query.get("screen") ? normalizeSection(query.get("screen")) : sectionFromPath(window.location.pathname);
     if (section === "admin" && !payload.user?.is_admin) section = "settings";
     if (section === "devices" && !payload.settings?.my_devices_enabled) section = "home";
@@ -534,11 +521,11 @@
       section === "admin" ? adminSectionFromPath(window.location.pathname) : null,
     );
     if (section === "devices" && payload.settings?.my_devices_enabled) {
-      await loadDevices();
+      await devicesStore.loadDevices(true);
     }
-    if (topupModalOpen) await loadTopupOptions();
-    if (deviceTopupModalOpen) await loadDeviceTopupOptions();
-    if (changeModalOpen) await loadTariffChangeOptions();
+    if (topupModalOpen) await billingStore.loadTopupOptions(topupKind);
+    if (deviceTopupModalOpen) await billingStore.loadDeviceTopupOptions();
+    if (changeModalOpen) await billingStore.loadTariffChangeOptions();
   }
 
   function showLogin() {
@@ -592,582 +579,65 @@
     return emailErrorHelper(error, fallback, t);
   }
 
-  async function finalizeMagicLogin(loginToken) {
-    if (authBusy) return false;
-    authBusy = true;
-    setAuthStatus(t("wa_auth_checking_login"));
-    try {
-      const payload = { token: loginToken };
-      const referralParam = readReferralParam();
-      if (referralParam) payload.referral_code = referralParam;
-      const response = await publicApi("/auth/email/magic", payload);
-      if (response.ok && response.token) {
-        setToken(response.token, response.csrf_token);
-        clearAuthQuery();
-        await loadData();
-        return true;
-      }
-      setAuthStatus(t("wa_auth_login_confirm_failed"), true);
-    } catch {
-      setAuthStatus(t("wa_auth_login_confirm_failed"), true);
-    } finally {
-      authBusy = false;
-    }
-    return false;
-  }
+  
 
-  async function finalizeTelegramAuth(authData, source = "auth_data", options = {}) {
-    if (authBusy) return false;
-    authBusy = true;
-    setAuthStatus(t("wa_auth_checking_telegram"));
-    try {
-      const payload =
-        source === "init_data"
-          ? { init_data: authData }
-          : source === "id_token"
-            ? { id_token: authData.id_token, nonce: authData.nonce }
-            : { auth_data: authData };
-      const referralParam = readReferralParam();
-      if (referralParam) payload.referral_code = referralParam;
-      const response = await publicApi("/auth/token", payload, { signal: options.signal });
-      if (response.ok && response.token) {
-        setToken(response.token, response.csrf_token);
-        clearAuthQuery();
-        setAuthStatus("");
-        await loadData();
-        return true;
-      }
-      setAuthStatus(response.error === "banned" ? t("wa_auth_access_denied") : t("wa_auth_telegram_not_confirmed"), true);
-    } catch (error) {
-      setAuthStatus(
-        error?.name === "AbortError" ? t("wa_auth_telegram_timeout") : t("wa_auth_telegram_unavailable"),
-        true,
-      );
-    } finally {
-      authBusy = false;
-    }
-    return false;
-  }
+  
 
-  async function requestEmailCode() {
-    if (screen === "code" && authResendCooldown > 0) return;
-    const normalized = email.trim().toLowerCase();
-    if (!normalized || !normalized.includes("@")) {
-      loginEmailFieldError = t("wa_auth_invalid_email");
-      loginEmailTooltipOpen = true;
-      return;
-    }
-    loginEmailFieldError = "";
-    loginEmailTooltipOpen = false;
-    authBusy = true;
-    setAuthStatus(t("wa_auth_sending_code"));
-    try {
-      const payload = { email: normalized, language: currentLang };
-      const referralParam = readReferralParam();
-      if (referralParam) payload.referral_code = referralParam;
-      const response = await publicApi("/auth/email/request", payload);
-      if (!response.ok) throw response;
-      pendingEmail = normalized;
-      emailCode = "";
-      screen = "code";
-      mode = "login";
-      setAuthStatus("");
-      startCooldownTimer("auth", 60);
-    } catch (error) {
-      setAuthStatus(emailError(error, t("wa_auth_send_code_failed")), true);
-    } finally {
-      authBusy = false;
-    }
-  }
+  
 
-  async function verifyEmailCode() {
-    const code = emailCode.replace(/\D/g, "").slice(0, 6);
-    if (code.length !== 6) {
-      setAuthStatus(t("wa_auth_enter_code_6digits"), true);
-      return;
-    }
-    authBusy = true;
-    setAuthStatus(t("wa_auth_checking_code"));
-    try {
-      const payload = { email: pendingEmail, code };
-      const referralParam = readReferralParam();
-      if (referralParam) payload.referral_code = referralParam;
-      const response = await publicApi("/auth/email/verify", payload);
-      if (!response.ok || !response.token) throw response;
-      setToken(response.token, response.csrf_token);
-      await loadData();
-      setAuthStatus("");
-    } catch (error) {
-      setAuthStatus(emailError(error, t("wa_auth_invalid_code")), true);
-    } finally {
-      authBusy = false;
-    }
-  }
+  
 
-  function setAuthStatus(message, isError = false) {
-    authStatus = message;
-    authIsError = isError;
-  }
+  
 
-  function clearCooldownTimer(kind) {
-    if (kind === "auth") {
-      if (authResendTimer) {
-        window.clearInterval(authResendTimer);
-        authResendTimer = null;
-      }
-      return;
-    }
-    if (linkEmailResendTimer) {
-      window.clearInterval(linkEmailResendTimer);
-      linkEmailResendTimer = null;
-    }
-  }
+  
 
   function submitEmailOnEnter(event) {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    requestEmailCode();
+    authStore.requestEmailCode((s) => (screen = s));
   }
 
-  function startCooldownTimer(kind, seconds = 60) {
-    if (kind === "auth") {
-      clearCooldownTimer("auth");
-      authResendCooldown = Math.max(0, Number(seconds || 60));
-      authResendTimer = window.setInterval(() => {
-        if (authResendCooldown <= 1) {
-          authResendCooldown = 0;
-          clearCooldownTimer("auth");
-          return;
-        }
-        authResendCooldown -= 1;
-      }, 1000);
-      return;
-    }
-    clearCooldownTimer("link_email");
-    linkEmailResendCooldown = Math.max(0, Number(seconds || 60));
-    linkEmailResendTimer = window.setInterval(() => {
-      if (linkEmailResendCooldown <= 1) {
-        linkEmailResendCooldown = 0;
-        clearCooldownTimer("link_email");
-        return;
-      }
-      linkEmailResendCooldown -= 1;
-    }, 1000);
-  }
+  
 
-  function startTelegramLoginWatchdog() {
-    stopTelegramLoginWatchdog();
-    telegramLoginAttemptId += 1;
-    const attemptId = telegramLoginAttemptId;
-    telegramLoginWatchdogTimer = window.setTimeout(() => {
-      if (attemptId !== telegramLoginAttemptId) return;
-      telegramLoginWatchdogTimer = null;
-      telegramSdkStatus = "unavailable";
-      telegramLoginBusy = false;
-      authBusy = false;
-      setAuthStatus(t("wa_auth_telegram_timeout"), true);
-    }, TELEGRAM_MINI_APP_AUTH_TIMEOUT_MS);
-    return attemptId;
-  }
+  
 
-  function stopTelegramLoginWatchdog(attemptId = null) {
-    if (attemptId !== null && attemptId !== telegramLoginAttemptId) return;
-    if (telegramLoginWatchdogTimer) {
-      window.clearTimeout(telegramLoginWatchdogTimer);
-      telegramLoginWatchdogTimer = null;
-    }
-  }
+  
 
-  function isActiveTelegramLoginAttempt(attemptId) {
-    return attemptId === telegramLoginAttemptId && telegramLoginBusy;
-  }
+  
 
-  async function openTelegramLogin() {
-    if (authBusy || telegramLoginBusy || telegramLoginUnavailable) return;
-    setAuthStatus("");
+  
 
-    const isTelegramMiniAppAttempt = hasTelegramLaunchParams();
-    if (!isTelegramMiniAppAttempt && telegramOAuthClientId) {
-      telegramLoginBusy = true;
-      window.location.assign(buildTelegramOAuthStartUrl("login"));
-      window.setTimeout(() => {
-        telegramLoginBusy = false;
-      }, 1500);
-      return;
-    }
+  
 
-    telegramLoginBusy = true;
-    const attemptId = startTelegramLoginWatchdog();
-    const loginTimeout = createTelegramMiniAppAuthTimeout();
-    try {
-      await Promise.race([
-        (async () => {
-          await ensureTelegramSdkForAction();
-          if (!isActiveTelegramLoginAttempt(attemptId)) return;
-          const initData = telegramMiniAppInitData || tg?.initData || readTelegramMiniAppInitDataFromLocation();
-          if (initData) {
-            await finalizeTelegramAuth(initData, "init_data", { signal: loginTimeout.signal });
-            return;
-          }
+  
 
-          if (!telegramOAuthClientId) {
-            setAuthStatus(
-              telegramSdkStatus === "unavailable"
-                ? t("wa_auth_telegram_unavailable")
-                : t("wa_auth_telegram_not_configured"),
-              true,
-            );
-            return;
-          }
+  
 
-          window.location.assign(buildTelegramOAuthStartUrl("login"));
-        })(),
-        loginTimeout.promise,
-      ]);
-    } catch (error) {
-      if (!isActiveTelegramLoginAttempt(attemptId)) return;
-      if (error?.name === "AbortError") {
-        telegramSdkStatus = "unavailable";
-        setAuthStatus(t("wa_auth_telegram_timeout"), true);
-      } else {
-        setAuthStatus(t("wa_auth_telegram_unavailable"), true);
-      }
-    } finally {
-      loginTimeout.clear();
-      if (loginTimeout.timedOut) {
-        telegramSdkStatus = "unavailable";
-        setAuthStatus(t("wa_auth_telegram_timeout"), true);
-        authBusy = false;
-      }
-      if (isActiveTelegramLoginAttempt(attemptId)) {
-        stopTelegramLoginWatchdog(attemptId);
-        telegramLoginBusy = false;
-      }
-    }
-  }
+  
 
-  function setLinkEmailStatus(message, isError = false) {
-    linkEmailStatus = message;
-    linkEmailIsError = isError;
-  }
+  
 
-  function openLinkEmailDialog() {
-    linkEmailOpen = true;
-    linkEmailBusy = false;
-    linkEmailCode = "";
-    linkEmailPending = "";
-    linkEmailStatus = "";
-    linkEmailIsError = false;
-    linkEmailFieldError = "";
-    linkEmailValue = user?.email || "";
-    linkEmailResendCooldown = 0;
-    clearCooldownTimer("link_email");
-  }
+  
 
-  function closeLinkEmailDialog() {
-    linkEmailOpen = false;
-    linkEmailBusy = false;
-    linkEmailCode = "";
-    linkEmailPending = "";
-    linkEmailStatus = "";
-    linkEmailIsError = false;
-    linkEmailFieldError = "";
-    linkEmailResendCooldown = 0;
-    clearCooldownTimer("link_email");
-  }
+  
 
-  async function requestLinkEmailCode() {
-    if (linkEmailPending && linkEmailResendCooldown > 0) return;
-    const normalized = String(linkEmailValue || "").trim().toLowerCase();
-    if (!normalized || !normalized.includes("@")) {
-      linkEmailFieldError = t("wa_auth_invalid_email");
-      return;
-    }
-    linkEmailFieldError = "";
-    linkEmailBusy = true;
-    setLinkEmailStatus(t("wa_auth_sending_code"));
-    try {
-      const response = await api("/account/email/request", {
-        method: "POST",
-        body: JSON.stringify({ email: normalized }),
-      });
-      if (!response?.ok) throw response;
-      linkEmailPending = normalized;
-      linkEmailCode = "";
-      setLinkEmailStatus("");
-      startCooldownTimer("link_email", 60);
-    } catch (error) {
-      setLinkEmailStatus(emailError(error, t("wa_auth_send_code_failed")), true);
-    } finally {
-      linkEmailBusy = false;
-    }
-  }
+  
 
-  async function verifyLinkEmailCode() {
-    const code = String(linkEmailCode || "").replace(/\D/g, "").slice(0, 6);
-    if (!linkEmailPending) {
-      setLinkEmailStatus(t("wa_auth_send_code_failed"), true);
-      return;
-    }
-    if (code.length !== 6) {
-      setLinkEmailStatus(t("wa_auth_enter_code_6digits"), true);
-      return;
-    }
-    linkEmailBusy = true;
-    setLinkEmailStatus(t("wa_auth_checking_code"));
-    try {
-      const response = await api("/account/email/verify", {
-        method: "POST",
-        body: JSON.stringify({ email: linkEmailPending, code }),
-      });
-      if (!response?.ok) throw response;
-      if (response?.token) setToken(response.token, response.csrf_token);
-      await loadData();
-      closeLinkEmailDialog();
-      showToast(t("wa_settings_linked"));
-    } catch (error) {
-      setLinkEmailStatus(emailError(error, t("wa_auth_invalid_code")), true);
-    } finally {
-      linkEmailBusy = false;
-    }
-  }
+  
 
-  async function linkTelegramAccountWithPayload(payload) {
-    linkTelegramBusy = true;
-    try {
-      const response = await api("/account/telegram/link", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      if (!response?.ok) throw response;
-      if (response?.token) setToken(response.token, response.csrf_token);
-      await loadData();
-      showToast(t("wa_settings_linked"));
-    } catch (error) {
-      showToast(error?.message || t("wa_auth_telegram_not_confirmed"));
-    } finally {
-      linkTelegramBusy = false;
-    }
-  }
+  
 
-  async function linkTelegramAccount() {
-    if (linkTelegramBusy) return;
-    if (shouldWaitForTelegramSdkBeforeOAuth()) await ensureTelegramSdkForAction();
-    const initData = telegramMiniAppInitData || tg?.initData || readTelegramMiniAppInitDataFromLocation();
-    if (initData) {
-      await linkTelegramAccountWithPayload({ init_data: initData });
-      return;
-    }
-    if (!telegramOAuthClientId) {
-      showToast(
-        telegramSdkStatus === "unavailable" ? t("wa_auth_telegram_unavailable") : t("wa_auth_telegram_not_configured"),
-      );
-      return;
-    }
-    linkTelegramBusy = true;
-    window.location.assign(buildTelegramOAuthStartUrl("link"));
-  }
+  
 
-  async function updateAccountLanguage(nextValue) {
-    const language = normalizeLangCode(nextValue);
-    if (!language || languageBusy || language === currentLang) return;
-    languageBusy = true;
-    try {
-      const response = await api("/account/language", {
-        method: "POST",
-        body: JSON.stringify({ language }),
-      });
-      if (!response?.ok) throw response;
-      if (data?.user) {
-        const updatedLanguage = normalizeLangCode(response.language || language);
-        data = {
-          ...data,
-          user: {
-            ...data.user,
-            language_code: updatedLanguage,
-          },
-        };
-      }
-      const previousScreen = screen;
-      const previousTab = activeTab;
-      const payload = await api("/me");
-      if (payload?.ok) {
-        data = payload;
-        selectedPlan = null;
-        selectedTariffKey = "";
-        paymentStep = "tariff";
-        selectedMethod = payload.payment_methods?.[0]?.id || "";
-        mode = "app";
-        screen = previousScreen;
-        activeTab = previousTab;
-      }
-    } catch {
-      showToast(t("wa_settings_language_update_failed"));
-    } finally {
-      languageBusy = false;
-    }
-  }
+  
 
-  async function createPayment() {
-    if (!selectedPlan || !selectedMethod || payBusy) return;
-    payBusy = true;
-    try {
-      const response = await billing.postPayment(billing.planPaymentBody(selectedPlan, selectedMethod));
-      if (!response.ok) throw response;
-      showToast(t("wa_payment_created"));
-      if (response.action === "open_invoice") {
-        if (!response.payment_url) throw response;
-        openTelegramInvoice(response.payment_url);
-      } else if (response.action === "invoice_sent") {
-        paymentModalOpen = false;
-        return;
-      } else {
-        if (!response.payment_url) throw response;
-        openExternalLink(response.payment_url);
-      }
-      paymentModalOpen = false;
-    } catch (error) {
-      showToast(error?.message || t("wa_payment_create_failed"));
-    } finally {
-      payBusy = false;
-    }
-  }
+  
 
-  async function loadTopupOptions(kind = topupKind) {
-    if (topupOptions?.topup_kind === kind) return;
-    const requestId = ++topupOptionsRequestId;
-    tariffActionBusy = true;
-    try {
-      topupOptions = null;
-      selectedTopupPlan = null;
-      const response = await billing.fetchTopupOptions(kind);
-      if (requestId !== topupOptionsRequestId || kind !== topupKind) return;
-      if (!response?.ok) throw response;
-      topupOptions = response;
-      selectedTopupPlan = response.plans?.[0] || null;
-    } catch (error) {
-      if (requestId !== topupOptionsRequestId || kind !== topupKind) return;
-      showToast(error?.message || t("wa_tariff_options_failed"));
-      topupModalOpen = false;
-    } finally {
-      if (requestId === topupOptionsRequestId) tariffActionBusy = false;
-    }
-  }
+  
 
-  async function loadTariffChangeOptions() {
-    if (changeOptions || tariffActionBusy) return;
-    tariffActionBusy = true;
-    try {
-      const response = await billing.fetchTariffChangeOptions();
-      if (!response?.ok) throw response;
-      changeOptions = response;
-      selectedChangeTarget = response.targets?.[0] || null;
-      selectedChangeAction = selectedChangeTarget?.actions?.[0] || null;
-    } catch (error) {
-      showToast(error?.message || t("wa_tariff_options_failed"));
-      changeModalOpen = false;
-    } finally {
-      tariffActionBusy = false;
-    }
-  }
+  
 
-  async function createTopupPayment() {
-    if (!selectedTopupPlan || !selectedMethod || payBusy) return;
-    payBusy = true;
-    try {
-      const response = await billing.postPayment(
-        billing.topupPaymentBody(selectedTopupPlan, selectedMethod, topupOptions?.tariff_key),
-      );
-      if (!response.ok || !response.payment_url) throw response;
-      showToast(t("wa_payment_created"));
-      openExternalLink(response.payment_url);
-      topupModalOpen = false;
-    } catch (error) {
-      showToast(error?.message || t("wa_payment_create_failed"));
-    } finally {
-      payBusy = false;
-    }
-  }
-
-  async function loadDeviceTopupOptions() {
-    if (deviceTopupOptions || tariffActionBusy) return;
-    tariffActionBusy = true;
-    try {
-      const response = await billing.fetchDeviceTopupOptions();
-      if (!response?.ok) throw response;
-      deviceTopupOptions = response;
-      selectedDeviceTopupPlan = response.plans?.[0] || null;
-    } catch (error) {
-      showToast(error?.message || t("wa_device_topup_options_failed"));
-      deviceTopupModalOpen = false;
-    } finally {
-      tariffActionBusy = false;
-    }
-  }
-
-  async function createDeviceTopupPayment() {
-    if (!selectedDeviceTopupPlan || !selectedMethod || payBusy) return;
-    payBusy = true;
-    try {
-      const response = await billing.postPayment(
-        billing.deviceTopupPaymentBody(selectedDeviceTopupPlan, selectedMethod, deviceTopupOptions?.tariff_key),
-      );
-      if (!response.ok || !response.payment_url) throw response;
-      showToast(t("wa_payment_created"));
-      openExternalLink(response.payment_url);
-      deviceTopupModalOpen = false;
-    } catch (error) {
-      showToast(error?.message || t("wa_payment_create_failed"));
-    } finally {
-      payBusy = false;
-    }
-  }
-
-  async function applyTariffChange() {
-    if (!selectedChangeTarget || !selectedChangeAction || tariffActionBusy) return;
-    if (selectedChangeAction.kind === "payment") {
-      await createTariffChangePayment();
-      return;
-    }
-    tariffActionBusy = true;
-    try {
-      const response = await billing.postTariffChange({
-        tariff_key: selectedChangeTarget.tariff_key,
-        mode: selectedChangeAction.mode,
-      });
-      if (!response?.ok) throw response;
-      showToast(t("wa_tariff_change_applied"));
-      changeConfirmOpen = false;
-      changeModalOpen = false;
-      changeOptions = null;
-      await loadData();
-    } catch (error) {
-      showToast(error?.message || t("wa_tariff_change_failed"));
-    } finally {
-      tariffActionBusy = false;
-    }
-  }
-
-  async function createTariffChangePayment() {
-    if (!selectedChangeTarget || !selectedChangeAction || !selectedMethod || payBusy) return;
-    payBusy = true;
-    try {
-      const body = billing.changePaymentBody(selectedChangeAction, selectedChangeTarget, selectedMethod);
-      const response =
-        selectedChangeAction.mode === "buy_package" || selectedChangeAction.mode === "buy_period"
-          ? await billing.postPayment(body)
-          : await billing.postTariffChangePayment(body);
-      if (!response.ok || !response.payment_url) throw response;
-      showToast(t("wa_payment_created"));
-      openExternalLink(response.payment_url);
-      changeConfirmOpen = false;
-      changeModalOpen = false;
-    } catch (error) {
-      showToast(error?.message || t("wa_payment_create_failed"));
-    } finally {
-      payBusy = false;
-    }
-  }
+  
 
   function openExternalLink(url) {
     if (!url) return;
@@ -1269,66 +739,15 @@
     }
   }
 
-  async function loadDevices(force = false) {
-    if (!devicesEnabled || devicesBusy || (devicesLoaded && !force)) return;
-    devicesBusy = true;
-    devicesStatus = "";
-    devicesIsError = false;
-    try {
-      const response = await api("/devices");
-      if (!response?.ok) throw response;
-      devicesData = response;
-      devicesLoaded = true;
-    } catch (error) {
-      devicesStatus = error?.message || t("wa_devices_load_failed");
-      devicesIsError = true;
-      devicesLoaded = true;
-    } finally {
-      devicesBusy = false;
-    }
-  }
+  
 
-  function openDeviceDisconnectDialog(device) {
-    deviceToDisconnect = device;
-    deviceConfirmOpen = true;
-  }
+  
 
-  function closeDeviceDisconnectDialog() {
-    if (deviceDisconnectBusy) return;
-    deviceConfirmOpen = false;
-    deviceToDisconnect = null;
-  }
+  
 
-  async function disconnectDevice() {
-    const token = String(deviceToDisconnect?.token || "").trim();
-    if (!token || deviceDisconnectBusy) return;
-    deviceDisconnectBusy = true;
-    try {
-      const response = await api("/devices/disconnect", {
-        method: "POST",
-        body: JSON.stringify({ token }),
-      });
-      if (!response?.ok) throw response;
-      showToast(t("wa_device_disconnected"));
-      deviceConfirmOpen = false;
-      deviceToDisconnect = null;
-      devicesLoaded = false;
-      await loadDevices(true);
-    } catch (error) {
-      showToast(error?.message || t("wa_device_disconnect_failed"));
-    } finally {
-      deviceDisconnectBusy = false;
-    }
-  }
+  
 
-  async function logout() {
-    markManualLogout();
-    clearToken();
-    try {
-      await publicApi("/auth/logout", { keepalive: true });
-    } catch {}
-    showLogin();
-  }
+  
 
   function showToast(message) {
     toastText = message;
@@ -1339,14 +758,14 @@
   }
 
   function goHome() {
-    paymentModalOpen = false;
+    billingStore.closePaymentModal();
     activeTab = "home";
     screen = "home";
     syncSectionPath("home");
   }
 
   function goInvite() {
-    paymentModalOpen = false;
+    billingStore.closePaymentModal();
     activeTab = "invite";
     screen = "invite";
     syncSectionPath("invite");
@@ -1354,25 +773,55 @@
 
   function goDevices() {
     if (!devicesEnabled) return;
-    paymentModalOpen = false;
+    billingStore.closePaymentModal();
     activeTab = "devices";
     screen = "devices";
     syncSectionPath("devices");
-    loadDevices();
+    devicesStore.loadDevices(devicesEnabled);
+  }
+
+  function defaultPaymentMethod() {
+    return methods[0]?.id || "";
+  }
+
+  function openPaymentModal() {
+    billingStore.openPaymentModal(tariffMode, singleTariffMode, tariffCatalog, subscription, plans, defaultPaymentMethod());
+  }
+
+  function openTopupModal(kind) {
+    billingStore.openTopupModal(kind, defaultPaymentMethod());
+  }
+
+  function openRegularTopupModal() {
+    openTopupModal("regular");
+  }
+
+  function openPremiumTopupModal() {
+    openTopupModal("premium");
+  }
+
+  function openTariffChangeModal() {
+    billingStore.openTariffChangeModal(defaultPaymentMethod());
   }
 
   function openDeviceTopupModal() {
-    selectedMethod = methods[0]?.id || "";
-    deviceTopupModalOpen = true;
-    loadDeviceTopupOptions();
+    billingStore.openDeviceTopupModal(defaultPaymentMethod());
   }
 
   function closeDeviceTopupModal() {
-    deviceTopupModalOpen = false;
+    billingStore.closeDeviceTopupModal();
+  }
+
+  function loadDevices(force = false) {
+    return devicesStore.loadDevices(devicesEnabled, force);
+  }
+
+  function disconnectDevice() {
+    return devicesStore.disconnectDevice(devicesEnabled);
   }
 
   function goSettings() {
-    paymentModalOpen = false;
+    billingStore.closePaymentModal();
     activeTab = "settings";
     screen = "settings";
     syncSectionPath("settings");
@@ -1380,7 +829,9 @@
 
   function openAdminPanel() {
     if (!isAdmin) return;
-    paymentModalOpen = false;
+    clearLanguageClickGuard();
+    billingStore.closePaymentModal();
+    activeTab = "settings";
     screen = "admin";
     syncSectionPath("admin", false, adminSectionFromPath(window.location.pathname));
   }
@@ -1402,9 +853,7 @@
   }
 
   async function handleTariffsSaved() {
-    topupOptions = null;
-    deviceTopupOptions = null;
-    changeOptions = null;
+    billingStore.update((s) => ({ ...s, topupOptions: null, deviceTopupOptions: null, changeOptions: null }));
     try {
       await loadData();
     } catch {
@@ -1413,9 +862,7 @@
   }
 
   async function handleSettingsSaved() {
-    topupOptions = null;
-    deviceTopupOptions = null;
-    changeOptions = null;
+    billingStore.update((s) => ({ ...s, topupOptions: null, deviceTopupOptions: null, changeOptions: null }));
     try {
       await loadData();
     } catch {
@@ -1423,146 +870,21 @@
     }
   }
 
-  function openPaymentModal() {
-    if (tariffMode) {
-      if (singleTariffMode && tariffCatalog[0]?.key) {
-        selectedTariffKey = tariffCatalog[0].key;
-        selectedPlan = plans.find((plan) => plan?.tariff_key === selectedTariffKey) || null;
-        paymentStep = "checkout";
-      } else if (subscription?.active && subscription?.tariff_key && tariffCatalog.some((t) => t.key === subscription.tariff_key)) {
-        selectedTariffKey = subscription.tariff_key;
-        selectedPlan = plans.find((plan) => plan?.tariff_key === selectedTariffKey) || null;
-        paymentStep = "checkout";
-      } else {
-        paymentStep = "tariff";
-        selectedTariffKey = "";
-        selectedPlan = null;
-      }
-    } else {
-      paymentStep = "checkout";
-    }
-    paymentModalOpen = true;
-  }
+  
 
-  function closePaymentModal() {
-    paymentModalOpen = false;
-  }
+  
 
-  function openTopupModal(kind = "regular") {
-    if (kind === "premium" ? !canOpenPremiumTopupModal : !canOpenRegularTopupModal) return;
-    if (topupKind !== kind) {
-      topupOptions = null;
-      selectedTopupPlan = null;
-    }
-    topupKind = kind;
-    topupModalOpen = true;
-    loadTopupOptions(kind);
-  }
+  
 
-  function closeTopupModal() {
-    if (payBusy || tariffActionBusy) return;
-    topupModalOpen = false;
-  }
+  
 
-  function openTariffChangeModal() {
-    changeModalOpen = true;
-    loadTariffChangeOptions();
-  }
+  
 
-  function closeTariffChangeModal() {
-    if (payBusy || tariffActionBusy) return;
-    changeModalOpen = false;
-    changeConfirmOpen = false;
-  }
+  
 
-  function openTariffChangeConfirm() {
-    if (!selectedChangeTarget || !selectedChangeAction || tariffActionBusy || payBusy) return;
-    changeConfirmOpen = true;
-  }
+  
 
-  function closeTariffChangeConfirm() {
-    if (payBusy || tariffActionBusy) return;
-    changeConfirmOpen = false;
-  }
-
-  function formatMoney(value, currency = CFG.currency || "RUB") {
-    return fmtMoney(value, currency);
-  }
-  function priceLabel(plan, methodId = selectedMethod) {
-    return priceLabelFn(plan, methodId);
-  }
-  function formatTrafficGb(value) {
-    return fmtTrafficGb(value);
-  }
-  function formatTrafficBytes(value) {
-    return fmtTrafficBytes(value);
-  }
-  function formatCompactNumber(value) {
-    return fmtCompactNumber(value);
-  }
-  function normalizedEmail(value) {
-    return fmtNormalizedEmail(value);
-  }
-  function telegramName(profile) {
-    return fmtTelegramName(profile, t("wa_telegram_not_linked"));
-  }
-  function planKey(plan) {
-    return planKeyFn(plan);
-  }
-  function buildTariffCatalog(planList) {
-    return buildTariffCatalogFn(planList);
-  }
-  function activeTariffName(sub, planList) {
-    return activeTariffNameFn(sub, planList);
-  }
-  function planDisplayTitle(plan) {
-    return planDisplayTitleFn(plan, { trafficMode, t });
-  }
-  function planSubtitle(plan) {
-    return planSubtitleFn(plan, { lang: currentLang });
-  }
-  function planUnitHint(plan) {
-    return planUnitHintFn(plan, { trafficMode, selectedMethod, t });
-  }
-  function tariffLimitLabel(tariff) {
-    return tariffLimitLabelFn(tariff, { t });
-  }
-  function actionKey(action) {
-    return actionKeyFn(action);
-  }
-  function trafficPercent(sub) {
-    return trafficPercentFn(sub);
-  }
-  function trafficLabel(sub) {
-    return trafficLabelFn(sub, t);
-  }
-  function trafficResetLabel(sub) {
-    return trafficResetLabelFn(sub, t);
-  }
-  function premiumTrafficPercent(sub) {
-    return premiumTrafficPercentFn(sub);
-  }
-  function premiumTrafficLabel(sub) {
-    return premiumTrafficLabelFn(sub, t);
-  }
-  function premiumTitle(sub = subscription) {
-    return premiumTitleFn(sub, t);
-  }
-  function premiumTrafficLeftLabel(sub) {
-    return premiumTrafficLeftLabelFn(sub);
-  }
-  function premiumTopupBalanceLabel(sub) {
-    return premiumTopupBalanceLabelFn(sub);
-  }
-  function premiumServerLabels(sub) {
-    return premiumServerLabelsFn(sub);
-  }
-  function isForeverSubscription(sub) {
-    return isForeverSubscriptionFn(sub);
-  }
-  function activeSubscriptionTermLabel(sub) {
-    return activeSubscriptionTermLabelFn(sub, { t, termUnitLabel });
-  }
+  
 
   function methodMeta(method) {
     const id = String(method?.id || "").toLowerCase();
@@ -1597,25 +919,15 @@
   }
 
   function selectTariff(tariff) {
-    const key = String(tariff?.key || "").trim();
-    if (!key) return;
-    selectedTariffKey = key;
-    selectedPlan = plans.find((plan) => plan?.tariff_key === key) || null;
+    billingStore.selectTariff(tariff, plans);
   }
 
   function continueWithSelectedTariff() {
-    if (!selectedTariffKey) return;
-    if (!selectedPlan) {
-      selectedPlan = selectedTariffPlans[0] || null;
-    }
-    paymentStep = "checkout";
+    billingStore.continueWithSelectedTariff(selectedTariffPlans);
   }
 
   function backToTariffList() {
-    if (subscription?.active && subscription?.tariff_key && tariffCatalog.some((t) => t.key === subscription.tariff_key)) {
-      return;
-    }
-    paymentStep = "tariff";
+    billingStore.backToTariffList(subscription, tariffCatalog);
   }
 
   function paymentTitle() {
@@ -1775,8 +1087,8 @@
           {CFG}
           {brandTitle}
           {brandEmoji}
-          bind:email
-          bind:emailCode
+          bind:email={$authStore.email}
+          bind:emailCode={$authStore.emailCode}
           {pendingEmail}
           {authStatus}
           {authIsError}
@@ -1792,9 +1104,9 @@
           {privacyPolicyUrl}
           {userAgreementUrl}
           {t}
-          {requestEmailCode}
-          {verifyEmailCode}
-          {openTelegramLogin}
+          requestEmailCode={() => authStore.requestEmailCode((s) => (screen = s))}
+          verifyEmailCode={authStore.verifyEmailCode}
+          openTelegramLogin={() => authStore.openTelegramLogin(telegramOAuthClientId, () => telegramMiniAppInitData)}
           {openExternalLink}
           {submitEmailOnEnter}
           onBackToLogin={() => (screen = "login")}
@@ -1821,7 +1133,7 @@
         currentLang={currentLang}
         languageOptions={languageOptions}
         languageBusy={languageBusy}
-        onLanguageChange={updateAccountLanguage}
+        onLanguageChange={accountStore.updateAccountLanguage}
         t={t}
       />
     {:else}
@@ -1855,24 +1167,17 @@
             {hasActiveTariffSubscription}
             {hasMultipleTariffs}
             {subscription}
+            {termUnitLabel}
             {trafficMode}
             {trialBusy}
-            {activeSubscriptionTermLabel}
             {activateTrial}
             {openConnectLink}
             {openPaymentModal}
+            {openRegularTopupModal}
+            {openPremiumTopupModal}
             {openTariffChangeModal}
-            {openTopupModal}
-            {premiumServerLabels}
-            {premiumTitle}
-            {premiumTrafficLabel}
-            {premiumTrafficPercent}
             {primaryPayActionLabel}
             {t}
-            {trafficLabel}
-            {trafficPercent}
-            {trafficResetLabel}
-            {trialTrafficLabel}
           />
         {:else if screen === "invite"}
           <InviteScreen
@@ -1898,11 +1203,8 @@
             {devicesLoaded}
             {devicesStatus}
             {subscription}
-            {devicesCountLabel}
-            {devicesLimitLabel}
-            {devicesPercent}
             {loadDevices}
-            {openDeviceDisconnectDialog}
+            openDeviceDisconnectDialog={devicesStore.openDeviceDisconnectDialog}
             {openDeviceTopupModal}
             {t}
           />
@@ -1928,28 +1230,28 @@
             {user}
             {userAgreementUrl}
             {userLanguage}
-            {linkTelegramAccount}
-            {logout}
+            linkTelegramAccount={accountStore.linkTelegramAccount}
+            logout={accountStore.logout}
             {openAdminPanel}
             {openExternalLink}
-            {openLinkEmailDialog}
+            openLinkEmailDialog={accountStore.openLinkEmailDialog}
             {setLanguageMenuOpen}
             {t}
-            {updateAccountLanguage}
+            updateAccountLanguage={accountStore.updateAccountLanguage}
           />
         {/if}
       </WebAppShell>
 
       <PaymentDialogs
-        bind:linkEmailCode
-        bind:linkEmailFieldError
-        bind:linkEmailValue
-        bind:paymentModalOpen
-        bind:paymentStep
-        bind:selectedMethod
-        bind:selectedPlan
-        bind:selectedTariffKey
-        {createPayment}
+        bind:linkEmailCode={$accountStore.linkEmailCode}
+        bind:linkEmailFieldError={$accountStore.linkEmailFieldError}
+        bind:linkEmailValue={$accountStore.linkEmailValue}
+        bind:paymentModalOpen={$billingStore.paymentModalOpen}
+        bind:paymentStep={$billingStore.paymentStep}
+        bind:selectedMethod={$billingStore.selectedMethod}
+        bind:selectedPlan={$billingStore.selectedPlan}
+        bind:selectedTariffKey={$billingStore.selectedTariffKey}
+        createPayment={billingStore.createPayment}
         {deviceConfirmOpen}
         {deviceDisconnectBusy}
         {deviceToDisconnect}
@@ -1960,6 +1262,7 @@
         {linkEmailPending}
         {linkEmailResendCooldown}
         {linkEmailStatus}
+        {hasMultipleTariffs}
         {methods}
         {payBusy}
         {plans}
@@ -1969,61 +1272,48 @@
         {subscription}
         {tariffCatalog}
         {tariffMode}
-        {closeDeviceDisconnectDialog}
-        {closeLinkEmailDialog}
-        {closePaymentModal}
+        closeDeviceDisconnectDialog={devicesStore.closeDeviceDisconnectDialog}
+        closeLinkEmailDialog={accountStore.closeLinkEmailDialog}
+        closePaymentModal={billingStore.closePaymentModal}
+        {backToTariffList}
         {continueWithSelectedTariff}
-        {methodMeta}
-        {paymentDescription}
-        {paymentTitle}
-        {planKey}
-        {planSubtitle}
-        {planUnitHint}
-        {priceLabel}
-        {requestLinkEmailCode}
+        requestLinkEmailCode={accountStore.requestLinkEmailCode}
         {selectTariff}
         {t}
-        {verifyLinkEmailCode}
+        {termUnitLabel}
+        verifyLinkEmailCode={accountStore.verifyLinkEmailCode}
       />
 
       <TariffDialogs
-        bind:changeConfirmOpen
-        bind:changeModalOpen
-        bind:deviceTopupModalOpen
-        bind:selectedChangeAction
-        bind:selectedChangeTarget
-        bind:selectedDeviceTopupPlan
-        bind:selectedMethod
-        bind:selectedTopupPlan
-        bind:topupModalOpen
-        {actionKey}
-        {applyTariffChange}
-        {changeActionTitle}
+        bind:changeConfirmOpen={$billingStore.changeConfirmOpen}
+        bind:changeModalOpen={$billingStore.changeModalOpen}
+        bind:deviceTopupModalOpen={$billingStore.deviceTopupModalOpen}
+        bind:selectedChangeAction={$billingStore.selectedChangeAction}
+        bind:selectedChangeTarget={$billingStore.selectedChangeTarget}
+        bind:selectedDeviceTopupPlan={$billingStore.selectedDeviceTopupPlan}
+        bind:selectedMethod={$billingStore.selectedMethod}
+        bind:selectedTopupPlan={$billingStore.selectedTopupPlan}
+        bind:topupModalOpen={$billingStore.topupModalOpen}
+        applyTariffChange={billingStore.applyTariffChange}
         {changeOptions}
         {closeDeviceTopupModal}
-        {closeTariffChangeConfirm}
-        {closeTariffChangeModal}
-        {closeTopupModal}
-        {createDeviceTopupPayment}
-        {createTopupPayment}
-        {deviceTopupModalDescription}
+        closeTariffChangeConfirm={billingStore.closeTariffChangeConfirm}
+        closeTariffChangeModal={billingStore.closeTariffChangeModal}
+        closeTopupModal={billingStore.closeTopupModal}
+        createDeviceTopupPayment={billingStore.createDeviceTopupPayment}
+        createTopupPayment={billingStore.createTopupPayment}
         {deviceTopupOptions}
         {methods}
-        {methodMeta}
-        {openTariffChangeConfirm}
+        openTariffChangeConfirm={billingStore.openTariffChangeConfirm}
         {payBusy}
-        {planKey}
-        {planUnitHint}
-        {priceLabel}
         {singleTariffMode}
+        {subscription}
         {tariffActionBusy}
-        {tariffChangeModalDescription}
-        {tariffChangeSummary}
-        {topupCarryoverNotes}
-        {topupModalDescription}
-        {topupModalTitle}
+        {topupKind}
         {topupOptions}
+        {trafficMode}
         {t}
+        {termUnitLabel}
       />
     {/if}
 

@@ -1,16 +1,26 @@
 <script>
   import { ChevronLeft, ChevronRight } from "lucide-svelte";
+  import { getContext, onMount } from "svelte";
 
   export let at = (key) => key;
   export let fmtDate = (value) => value;
   export let fmtMoney = (value) => value;
-  export let loadPayments = () => {};
   export let paymentStatusVariant = () => "muted";
-  export let payments = [];
-  export let paymentsHasMore = false;
-  export let paymentsLoading = false;
-  export let paymentsPage = 0;
-  export let paymentsTotal = 0;
+
+  const paymentsStore = getContext("paymentsStore");
+
+  $: ({
+    payments,
+    paymentsTotal,
+    paymentsPage,
+    paymentsLoading,
+  } = $paymentsStore);
+
+  $: paymentsHasMore = payments.length > 0 && paymentsTotal > (paymentsPage + 1) * 25; // 25 is PAYMENTS_PAGE_SIZE
+
+  onMount(() => {
+    paymentsStore.loadPayments();
+  });
 </script>
 
 <div class="admin-table-wrap">
@@ -18,7 +28,7 @@
     <table class="admin-table admin-table-skeleton" aria-hidden="true">
       <thead>
         <tr>
-          <th>ID</th><th>{at("user", {}, "Пользователь")}</th><th>{at("amount", {}, "Сумма")}</th><th>{at("provider", {}, "Провайдер")}</th><th>{at("description", {}, "Описание")}</th><th>{at("status", {}, "Статус")}</th><th>{at("date", {}, "Дата")}</th>
+          <th>{at("id", {}, "ID")}</th><th>{at("user", {}, "Пользователь")}</th><th>{at("amount", {}, "Сумма")}</th><th>{at("provider", {}, "Провайдер")}</th><th>{at("description", {}, "Описание")}</th><th>{at("status", {}, "Статус")}</th><th>{at("date", {}, "Дата")}</th>
         </tr>
       </thead>
       <tbody>
@@ -41,7 +51,7 @@
     <table class="admin-table">
       <thead>
         <tr>
-          <th>ID</th>
+          <th>{at("id", {}, "ID")}</th>
           <th>{at("user", {}, "Пользователь")}</th>
           <th>{at("amount", {}, "Сумма")}</th>
           <th>{at("provider", {}, "Провайдер")}</th>
@@ -72,10 +82,10 @@
 <div class="admin-pagination">
   <span class="admin-pagination-meta">{at("page_short", {}, "Стр.")} {paymentsPage + 1} · {at("total", {}, "Всего")} {paymentsTotal}</span>
   <div class="admin-pagination-buttons">
-    <button type="button" class="admin-btn admin-btn-sm" disabled={paymentsPage === 0} on:click={() => { paymentsPage = Math.max(0, paymentsPage - 1); loadPayments(); }}>
+    <button type="button" class="admin-btn admin-btn-sm" disabled={paymentsPage === 0} on:click={() => { paymentsStore.setPage(Math.max(0, paymentsPage - 1)); }}>
       <ChevronLeft size={14} /> {at("back", {}, "Назад")}
     </button>
-    <button type="button" class="admin-btn admin-btn-sm" disabled={!paymentsHasMore} on:click={() => { paymentsPage += 1; loadPayments(); }}>
+    <button type="button" class="admin-btn admin-btn-sm" disabled={!paymentsHasMore} on:click={() => { paymentsStore.setPage(paymentsPage + 1); }}>
       {at("next", {}, "Далее")} <ChevronRight size={14} />
     </button>
   </div>

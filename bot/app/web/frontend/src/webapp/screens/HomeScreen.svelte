@@ -4,6 +4,18 @@
   import BrandMark from "../../BrandMark.svelte";
   import Button from "../../lib/components/ui/button.svelte";
   import Card from "../../lib/components/ui/card.svelte";
+  import { formatTrafficGb } from "../../lib/webapp/formatters.js";
+  import {
+    trafficPercent as trafficPercentFn,
+    trafficLabel as trafficLabelFn,
+    trafficResetLabel as trafficResetLabelFn,
+    premiumTrafficPercent as premiumTrafficPercentFn,
+    premiumTrafficLabel as premiumTrafficLabelFn,
+    premiumTitle as premiumTitleFn,
+    premiumServerLabels as premiumServerLabelsFn,
+    activeSubscriptionTermLabel as activeSubscriptionTermLabelFn,
+  } from "../../lib/webapp/traffic.js";
+
 
   export let CFG = {};
   export let appSettings = {};
@@ -19,23 +31,30 @@
   export let subscription = {};
   export let trafficMode = false;
   export let trialBusy = false;
+  export let termUnitLabel = () => ""; // We need this passed from App or context. Actually, App.svelte doesn't pass it yet. We'll pass it.
 
-  export let activeSubscriptionTermLabel = () => "";
+  function trafficPercent(sub) { return trafficPercentFn(sub); }
+  function trafficLabel(sub) { return trafficLabelFn(sub, t); }
+  function trafficResetLabel(sub) { return trafficResetLabelFn(sub, t); }
+  function premiumTrafficPercent(sub) { return premiumTrafficPercentFn(sub); }
+  function premiumTrafficLabel(sub) { return premiumTrafficLabelFn(sub, t); }
+  function premiumTitle(sub = subscription) { return premiumTitleFn(sub, t); }
+  function premiumServerLabels(sub) { return premiumServerLabelsFn(sub); }
+  function activeSubscriptionTermLabel(sub) { return activeSubscriptionTermLabelFn(sub, { t, termUnitLabel }); }
+  function trialTrafficLabel() {
+    const limit = Number(appSettings?.trial_traffic_limit_gb || 0);
+    return limit > 0 ? formatTrafficGb(limit) : t("wa_unlimited_traffic");
+  }
+
+
   export let activateTrial = () => {};
   export let openConnectLink = () => {};
   export let openPaymentModal = () => {};
+  export let openRegularTopupModal = () => {};
+  export let openPremiumTopupModal = () => {};
   export let openTariffChangeModal = () => {};
-  export let openTopupModal = () => {};
-  export let premiumServerLabels = () => [];
-  export let premiumTitle = () => "";
-  export let premiumTrafficLabel = () => "";
-  export let premiumTrafficPercent = () => 0;
   export let primaryPayActionLabel = () => "";
   export let t = (key) => key;
-  export let trafficLabel = () => "";
-  export let trafficPercent = () => 0;
-  export let trafficResetLabel = () => "";
-  export let trialTrafficLabel = () => "";
 </script>
 
 <main class="home-layout">
@@ -68,7 +87,7 @@
     {#if subscription.active}
       <Card class={canOpenRegularTopupModal ? "traffic-card-clickable" : ""}>
         {#if canOpenRegularTopupModal}
-          <button class="card-click-target" type="button" on:click={() => openTopupModal("regular")} aria-label={t("wa_topup_traffic")}></button>
+          <button class="card-click-target" type="button" onclick={openRegularTopupModal} aria-label={t("wa_topup_traffic")}></button>
         {/if}
         <div class="traffic-top">
           <span>{t("wa_home_traffic_used")}</span>
@@ -85,7 +104,7 @@
       {#if Number(subscription?.premium_limit_bytes || 0) > 0}
         <Card class={`${canOpenPremiumTopupModal ? "traffic-card-clickable " : ""}premium-traffic-card${subscription?.premium_is_limited ? " premium-traffic-card-limited" : ""}`}>
           {#if canOpenPremiumTopupModal}
-            <button class="card-click-target" type="button" on:click={() => openTopupModal("premium")} aria-label={premiumTitle(subscription)}></button>
+            <button class="card-click-target" type="button" onclick={openPremiumTopupModal} aria-label={premiumTitle(subscription)}></button>
           {/if}
           <div class="traffic-top">
             <span>{premiumTitle(subscription)}</span>
@@ -157,7 +176,7 @@
         </Button>
       {/if}
       {#if canShowTopupButton}
-        <Button class="wide" variant="secondary" onclick={() => openTopupModal(canOpenRegularTopupModal ? "regular" : "premium")}>
+        <Button class="wide" variant="secondary" onclick={canOpenRegularTopupModal ? openRegularTopupModal : openPremiumTopupModal}>
           <Database size={18} />
           {t("wa_topup_traffic")}
         </Button>

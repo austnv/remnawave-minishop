@@ -54,11 +54,11 @@
   {#if isAdmin}
     <div class="settings-admin-block">
       <div class="settings-divider" aria-hidden="true"></div>
-      <button class="settings-row settings-row-admin" type="button" on:click={openAdminPanel}>
+      <button class="settings-row settings-row-admin" type="button" onclick={openAdminPanel}>
         <Shield size={21} />
         <span>
-          <strong>Админ-панель</strong>
-          <small>Управление приложением</small>
+          <strong>{t("wa_settings_admin_panel", {}, "Админ-панель")}</strong>
+          <small>{t("wa_settings_admin_panel_hint", {}, "Управление приложением")}</small>
         </span>
         <ArrowRight size={17} />
       </button>
@@ -95,7 +95,7 @@
         </span>
       </div>
     {:else}
-      <button class="settings-row attention-wrap" type="button" on:click={openLinkEmailDialog} disabled={linkEmailBusy}>
+      <button class="settings-row attention-wrap" type="button" onclick={openLinkEmailDialog} disabled={linkEmailBusy}>
         <span class="attention-dot" aria-hidden="true"></span>
         <Mail size={21} />
         <span>
@@ -113,8 +113,8 @@
       class:language-select-guard--armed={languageClickGuardArmed}
       type="button"
       aria-label={t("wa_close")}
-      on:pointerdown|preventDefault|stopPropagation={() => languageClickGuardArmed && setLanguageMenuOpen(false)}
-      on:click|preventDefault|stopPropagation={() => languageClickGuardArmed && setLanguageMenuOpen(false)}
+      onpointerdown={(e) => { e.preventDefault(); e.stopPropagation(); if (languageClickGuardArmed) setLanguageMenuOpen(false); }}
+      onclick={(e) => { e.preventDefault(); e.stopPropagation(); if (languageClickGuardArmed) setLanguageMenuOpen(false); }}
     ></button>
   {/if}
   <div class="settings-list" class:settings-list--language-open={languageMenuOpen}>
@@ -155,27 +155,27 @@
       </Select.Root>
     </div>
     {#if supportUrl}
-      <button class="settings-row settings-row-support" type="button" on:click={() => openExternalLink(supportUrl)}>
+      <button class="settings-row settings-row-support" type="button" onclick={() => openExternalLink(supportUrl)}>
         <Send size={21} />
         <span><strong>{t("menu_support_button")}</strong></span>
         <ArrowRight size={17} />
       </button>
     {/if}
     {#if userAgreementUrl}
-      <button class="settings-row settings-row-policy" type="button" on:click={() => openExternalLink(userAgreementUrl)}>
+      <button class="settings-row settings-row-policy" type="button" onclick={() => openExternalLink(userAgreementUrl)}>
         <FileText size={21} />
         <span><strong>{t("wa_settings_user_agreement")}</strong></span>
         <ArrowRight size={17} />
       </button>
     {/if}
     {#if privacyPolicyUrl}
-      <button class="settings-row settings-row-policy" type="button" on:click={() => openExternalLink(privacyPolicyUrl)}>
+      <button class="settings-row settings-row-policy" type="button" onclick={() => openExternalLink(privacyPolicyUrl)}>
         <Shield size={21} />
         <span><strong>{t("wa_settings_privacy_policy")}</strong></span>
         <ArrowRight size={17} />
       </button>
     {/if}
-    <button class="settings-row settings-row-logout" type="button" on:click={logout}>
+    <button class="settings-row settings-row-logout" type="button" onclick={logout}>
       <UserRound size={21} />
       <span><strong>{t("wa_logout")}</strong><small>{t("wa_end_session")}</small></span>
       <ArrowRight size={17} />

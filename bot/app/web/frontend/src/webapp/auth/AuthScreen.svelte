@@ -73,7 +73,7 @@
       <button
         class="link-button"
         type="button"
-        on:click={requestEmailCode}
+        onclick={requestEmailCode}
         disabled={authBusy || authResendCooldown > 0}
       >
         <RefreshCw size={15} />
@@ -159,7 +159,7 @@
                 href={privacyPolicyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                on:click|preventDefault={() => openExternalLink(privacyPolicyUrl)}
+                onclick={(e) => { e.preventDefault(); openExternalLink(privacyPolicyUrl); }}
               >
                 {t("wa_auth_legal_privacy")}
               </a>
@@ -172,7 +172,7 @@
                 href={userAgreementUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                on:click|preventDefault={() => openExternalLink(userAgreementUrl)}
+                onclick={(e) => { e.preventDefault(); openExternalLink(userAgreementUrl); }}
               >
                 {t("wa_auth_legal_agreement")}
               </a>

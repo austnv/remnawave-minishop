@@ -23,21 +23,21 @@
     <BrandMark logoUrl={logoUrl} emoji={logoEmoji} />
     <strong>{brandTitle}</strong>
   </div>
-  <button class:active={activeTab === "home"} type="button" on:click={onHome}>
+  <button class:active={activeTab === "home"} type="button" onclick={onHome}>
     <Home size={21} />
     <span>{t("wa_nav_home")}</span>
   </button>
-  <button class:active={activeTab === "invite"} type="button" on:click={onInvite}>
+  <button class:active={activeTab === "invite"} type="button" onclick={onInvite}>
     <Gift size={21} />
     <span>{t("wa_nav_bonuses")}</span>
   </button>
   {#if devicesEnabled}
-    <button class:active={activeTab === "devices"} type="button" on:click={onDevices}>
+    <button class:active={activeTab === "devices"} type="button" onclick={onDevices}>
       <Smartphone size={21} />
       <span>{t("wa_nav_devices")}</span>
     </button>
   {/if}
-  <button class:active={activeTab === "settings"} class="attention-wrap" type="button" on:click={onSettings}>
+  <button class:active={activeTab === "settings"} class="attention-wrap" type="button" onclick={onSettings}>
     {#if hasUnlinkedIdentity}
       <span class="attention-dot nav-attention-dot" aria-hidden="true"></span>
     {/if}
@@ -45,7 +45,7 @@
     <span>{t("wa_nav_settings")}</span>
   </button>
   {#if isAdmin}
-    <button class="rail-admin-entry" type="button" on:click={onAdmin}>
+    <button class="rail-admin-entry" type="button" onclick={onAdmin}>
       <Shield size={21} />
       <span>{t("admin_nav_title", {}, "Админ-панель")}</span>
     </button>

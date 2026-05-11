@@ -71,11 +71,10 @@ export function actionKey(action) {
   return `${action?.mode || ""}:${action?.months || ""}:${action?.traffic_gb || ""}:${action?.price || ""}`;
 }
 
-function formatMonthsForClient(value, lang) {
+function formatMonthsForClient(value, { t, termUnitLabel }) {
   const months = Number(value || 0);
-  if (months === 1) return lang === "en" ? "1 month" : "1 месяц";
-  if (months === 12) return lang === "en" ? "1 year" : "1 год";
-  return lang === "en" ? `${months} months` : `${months} мес.`;
+  if (months === 12) return t("wa_plan_one_year");
+  return t("wa_sub_term_value_unit", { value: String(months), unit: termUnitLabel(months, "month") });
 }
 
 export function planDisplayTitle(plan, { trafficMode, t }) {
@@ -90,7 +89,7 @@ export function planDisplayTitle(plan, { trafficMode, t }) {
   return plan?.title || "";
 }
 
-export function planSubtitle(plan, { lang }) {
+export function planSubtitle(plan, { t, termUnitLabel }) {
   if (!plan?.tariff_key) return "";
   if (plan?.subtitle) return plan.subtitle;
   if (
@@ -101,7 +100,7 @@ export function planSubtitle(plan, { lang }) {
   ) {
     return formatTrafficGb(plan?.traffic_gb || plan?.months);
   }
-  return formatMonthsForClient(plan?.months, lang);
+  return formatMonthsForClient(plan?.months, { t, termUnitLabel });
 }
 
 export function planUnitHint(plan, { trafficMode, selectedMethod, t }) {
