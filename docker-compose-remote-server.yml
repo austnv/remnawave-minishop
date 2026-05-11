@@ -14,10 +14,9 @@ services:
       - TZ=UTC
     volumes:
       - ./locales:/app/locales
-      # Optional Tariffs 2.0 config. Put tariffs.json near this compose file,
-      # then uncomment the mount below. If no JSON is mounted, legacy .env
-      # pricing is used.
-      # - ./tariffs.json:/app/config/tariffs.json:ro
+      # Tariffs 2.0 configuration. Mount the data directory to persist
+      # changes made via the admin panel.
+      # - ./data:/app/data
     restart: unless-stopped
     depends_on:
       - remnawave-minishop-db

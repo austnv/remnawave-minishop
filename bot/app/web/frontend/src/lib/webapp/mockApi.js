@@ -93,7 +93,7 @@ export async function mockApi(path, options = {}, context = {}) {
   if (path === "/admin/tariffs") {
     return {
       ok: true,
-      path: "config/tariffs.json",
+      path: "data/tariffs.json",
       catalog: {
         default_tariff: "standard",
         topup_packages_default: { rub: [{ gb: 10, price: 99 }], stars: [] },

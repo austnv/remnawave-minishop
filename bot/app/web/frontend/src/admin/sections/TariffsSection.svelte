@@ -69,7 +69,7 @@
     <header class="admin-card-head">
       <div>
         <h3>{at("tariffs_title", {}, "Каталог тарифов")}</h3>
-        <small>{tariffsPath || "config/tariffs.json"}</small>
+        <small>{tariffsPath || "data/tariffs.json"}</small>
       </div>
       <div class="admin-editor-section-actions">
         <button type="button" class="admin-btn admin-btn-sm" on:click={tariffsStore.loadTariffs} disabled={tariffsLoading || tariffsSaving}>

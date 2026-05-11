@@ -69,7 +69,7 @@ nano .env
 
 | Переменная | Назначение |
 | --- | --- |
-| `TARIFFS_CONFIG_PATH` | Путь к JSON-каталогу тарифов. По умолчанию `config/tariffs.json`. |
+| `TARIFFS_CONFIG_PATH` | Путь к JSON-каталогу тарифов. По умолчанию `data/tariffs.json`. |
 | `TARIFF_TRAFFIC_WARNING_LEVELS` | Проценты предупреждений по трафику, например `85,90,95`. |
 | `RUB_PRICE_1_MONTH`, `RUB_PRICE_3_MONTHS`, `RUB_PRICE_6_MONTHS`, `RUB_PRICE_12_MONTHS` | Цены подписок в рублях для режима без JSON-каталога. |
 | `STARS_PRICE_1_MONTH`, `STARS_PRICE_3_MONTHS`, `STARS_PRICE_6_MONTHS`, `STARS_PRICE_12_MONTHS` | Цены подписок в Telegram Stars для режима без JSON-каталога. |
@@ -79,7 +79,7 @@ nano .env
 
 Если файл из `TARIFFS_CONFIG_PATH` существует, бот использует каталог тарифов. Если файла нет, применяется конфигурация из переменных `.env`.
 
-В `docker-compose-dev.yml` каталог `./config` монтируется в контейнер как `/app/config`, чтобы Web App админка могла сохранять `config/tariffs.json`. После изменения compose-файла пересоздайте контейнер:
+В `docker-compose-dev.yml` каталог `./data` монтируется в контейнер как `/app/data`, чтобы Web App админка могла сохранять `data/tariffs.json`. После изменения compose-файла пересоздайте контейнер:
 
 ```bash
 docker compose -f docker-compose-dev.yml up -d --build --force-recreate

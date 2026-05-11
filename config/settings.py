@@ -261,7 +261,7 @@ class Settings(BaseSettings):
         default=None,
         description="Comma-separated list of traffic packages priced in Stars, e.g. '5:500,20:1500'",
     )
-    TARIFFS_CONFIG_PATH: str = Field(default="config/tariffs.json")
+    TARIFFS_CONFIG_PATH: str = Field(default="data/tariffs.json")
     TARIFF_TRAFFIC_WARNING_LEVELS: str = Field(
         default="85,90,95",
         description="Comma-separated traffic usage warning levels for tariff traffic limits, e.g. '85,90,95'",

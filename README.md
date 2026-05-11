@@ -61,7 +61,7 @@ docker compose logs -f remnawave-minishop
 - настройки платежного провайдера;
 - `SUBSCRIPTION_MINI_APP_URL`, если используется Web App.
 
-Для каталога тарифов используется `TARIFFS_CONFIG_PATH` со значением по умолчанию `config/tariffs.json`. Пример формата лежит в [config/tariffs.example.json](config/tariffs.example.json), подробности - в [docs/tariffs.md](docs/tariffs.md).
+Для каталога тарифов используется `TARIFFS_CONFIG_PATH` со значением по умолчанию `data/tariffs.json`. Пример формата лежит в [data/tariffs.example.json](data/tariffs.example.json), подробности - в [docs/tariffs.md](docs/tariffs.md).
 
 ## Полезные команды
 
