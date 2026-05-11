@@ -1,6 +1,6 @@
 <script>
-  import { Tabs, Select, Switch, Label } from "bits-ui";
-  import Dialog from "../../lib/components/ui/dialog.svelte";
+  import { Tabs, Select, Switch, Label } from "$components/ui/primitives.js";
+  import Dialog from "$components/ui/dialog.svelte";
   import { Check, ChevronDown, Plus, Save, Trash2, X } from "lucide-svelte";
   import { getContext } from "svelte";
   import { normalizeUuidList } from "../../lib/admin/tariffDraft.js";

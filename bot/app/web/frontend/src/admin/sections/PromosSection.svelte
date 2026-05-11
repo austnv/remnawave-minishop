@@ -1,8 +1,8 @@
 <script>
   import { Trash2 } from "lucide-svelte";
   import { getContext, onMount } from "svelte";
-  import Dialog from "../../lib/components/ui/dialog.svelte";
-  import { Label } from "bits-ui";
+  import Dialog from "$components/ui/dialog.svelte";
+  import { Label } from "$components/ui/primitives.js";
 
   export let at;
   export let fmtDateShort;

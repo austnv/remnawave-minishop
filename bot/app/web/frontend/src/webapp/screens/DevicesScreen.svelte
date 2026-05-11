@@ -1,8 +1,8 @@
 <script>
   import { CircleX, Plus, RefreshCw, Smartphone } from "lucide-svelte";
 
-  import Button from "../../lib/components/ui/button.svelte";
-  import Card from "../../lib/components/ui/card.svelte";
+  import Button from "$components/ui/button.svelte";
+  import Card from "$components/ui/card.svelte";
   import { devicesCountLabel, devicesLimitLabel, devicesPercent } from "../../lib/webapp/devicesLabels.js";
 
   export let devicesBusy = false;

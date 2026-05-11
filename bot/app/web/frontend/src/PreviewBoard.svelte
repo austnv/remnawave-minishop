@@ -19,8 +19,8 @@
     Zap,
   } from "lucide-svelte";
 
-  import Button from "./lib/components/ui/button.svelte";
-  import Card from "./lib/components/ui/card.svelte";
+  import Button from "$components/ui/button.svelte";
+  import Card from "$components/ui/card.svelte";
   import BackTitle from "./preview/BackTitle.svelte";
   import PhoneFrame from "./preview/PhoneFrame.svelte";
   import PreviewMethods from "./preview/PreviewMethods.svelte";

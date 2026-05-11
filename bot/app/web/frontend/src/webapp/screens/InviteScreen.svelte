@@ -1,10 +1,10 @@
 <script>
   import { Copy, Gift, Ticket, TriangleAlert } from "lucide-svelte";
-  import { Tooltip } from "bits-ui";
+  import { Tooltip } from "$components/ui/primitives.js";
 
-  import Button from "../../lib/components/ui/button.svelte";
-  import Card from "../../lib/components/ui/card.svelte";
-  import Input from "../../lib/components/ui/input.svelte";
+  import Button from "$components/ui/button.svelte";
+  import Card from "$components/ui/card.svelte";
+  import Input from "$components/ui/input.svelte";
 
   export let referral = {};
   export let referralBonusDetails = [];

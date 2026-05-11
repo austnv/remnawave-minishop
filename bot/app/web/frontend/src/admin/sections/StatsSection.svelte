@@ -2,8 +2,14 @@
   import { Activity, Radio, Server, TrendingDown, TrendingUp } from "lucide-svelte";
   import { getContext, onMount } from "svelte";
 
-  import Badge from "../../lib/components/shadcn/badge.svelte";
-  import * as Card from "../../lib/components/shadcn/card/index.js";
+  import Badge from "$components/ui/badge.svelte";
+  import * as Card from "$components/ui/card/index.js";
+  import {
+    AdminDashboardGrid,
+    AdminDashboardStack,
+    AdminEmptyState,
+    AdminSectionHeader,
+  } from "$components/patterns/admin/index.js";
 
   export let at;
   export let fmtDate = (value) => value;
@@ -125,13 +131,11 @@
 </script>
 
 {#if statsError}
-  <div class="admin-empty">{at("stats_error", { error: statsError }, "")}</div>
+  <AdminEmptyState>{at("stats_error", { error: statsError }, "")}</AdminEmptyState>
 {:else if showSkeleton}
-  <div class="admin-cn-dashboard-stack">
-    <div class="admin-dashboard-section-head">
-      <h3>{at("stats_section_audience", {}, "")}</h3>
-    </div>
-    <div class="admin-cn-dashboard-grid admin-cn-dashboard-grid--3">
+  <AdminDashboardStack>
+    <AdminSectionHeader title={at("stats_section_audience", {}, "")} />
+    <AdminDashboardGrid columns={3}>
       {#each Array(3) as _, i (i)}
         <Card.Root class="admin-cn-card-skeleton">
           <Card.Header>
@@ -144,7 +148,7 @@
           </Card.Footer>
         </Card.Root>
       {/each}
-    </div>
+    </AdminDashboardGrid>
     <Card.Root class="admin-cn-card-skeleton">
       <Card.Header>
         <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-short"></span>
@@ -156,9 +160,7 @@
         </div>
       </Card.Content>
     </Card.Root>
-    <div class="admin-dashboard-section-head">
-      <h3>{at("stats_recent_payments", {}, "")}</h3>
-    </div>
+    <AdminSectionHeader title={at("stats_recent_payments", {}, "")} />
     <div class="admin-table-wrap">
       <table class="admin-table admin-table-skeleton" aria-hidden="true">
         <thead>
@@ -185,15 +187,15 @@
         </tbody>
       </table>
     </div>
-  </div>
+  </AdminDashboardStack>
 {:else if stats}
-  <div class="admin-cn-dashboard-stack">
-    <div class="admin-dashboard-section-head">
-      <h3>{at("stats_section_audience", {}, "")}</h3>
-      <small>{at("stats_section_audience_hint", {}, "")}</small>
-    </div>
+  <AdminDashboardStack>
+    <AdminSectionHeader
+      title={at("stats_section_audience", {}, "")}
+      description={at("stats_section_audience_hint", {}, "")}
+    />
 
-    <div class="admin-cn-dashboard-grid admin-cn-dashboard-grid--3">
+    <AdminDashboardGrid columns={3}>
       <Card.Root>
         <Card.Header>
           <Card.Description>{at("stats_label_users", {}, "")}</Card.Description>
@@ -243,12 +245,12 @@
           <div class="admin-cn-card-footer-muted">{at("stats_card_inactive_caption", {}, "")}</div>
         </Card.Footer>
       </Card.Root>
-    </div>
+    </AdminDashboardGrid>
 
-    <div class="admin-dashboard-section-head">
-      <h3>{at("stats_section_revenue", {}, "")}</h3>
-      <small>{at("stats_section_revenue_hint", {}, "")}</small>
-    </div>
+    <AdminSectionHeader
+      title={at("stats_section_revenue", {}, "")}
+      description={at("stats_section_revenue_hint", {}, "")}
+    />
 
     <Card.Root>
       <Card.Header>
@@ -356,14 +358,10 @@
       </Card.Content>
     </Card.Root>
 
-    <div class="admin-dashboard-section-head">
-      <h3>{at("stats_section_panel", {}, "")}</h3>
-      {#if panelPayload?.error}
-        <small>{at("stats_panel_unavailable", {}, "")}</small>
-      {:else if panelMetrics}
-        <small>{at("stats_section_panel_hint", {}, "")}</small>
-      {/if}
-    </div>
+    <AdminSectionHeader
+      title={at("stats_section_panel", {}, "")}
+      description={panelPayload?.error ? at("stats_panel_unavailable", {}, "") : panelMetrics ? at("stats_section_panel_hint", {}, "") : ""}
+    />
 
     {#if panelPayload?.error}
       <p class="admin-muted" style="margin:0;">{at("stats_panel_unavailable_detail", {}, "")}</p>
@@ -511,10 +509,10 @@
               </tbody>
             </table>
           {:else}
-            <div class="admin-card-body"><span class="admin-muted">{at("no_data", {}, "")}</span></div>
+            <AdminEmptyState tone="card"><span class="admin-muted">{at("no_data", {}, "")}</span></AdminEmptyState>
           {/if}
         </div>
       </Card.Content>
     </Card.Root>
-  </div>
+  </AdminDashboardStack>
 {/if}

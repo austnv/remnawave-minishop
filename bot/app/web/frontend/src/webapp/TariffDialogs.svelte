@@ -1,7 +1,7 @@
 <script>
   import { ArrowRight, CheckCircle2, LockKeyhole } from "lucide-svelte";
 
-  import Button from "../lib/components/ui/button.svelte";
+  import Button from "$components/ui/button.svelte";
   import {
     planKey as planKeyFn,
     planUnitHint as planUnitHintFn,
@@ -12,8 +12,8 @@
   import { formatCompactNumber } from "../lib/webapp/formatters.js";
   import { Bitcoin, CreditCard } from "lucide-svelte";
 
-  import Card from "../lib/components/ui/card.svelte";
-  import Dialog from "../lib/components/ui/dialog.svelte";
+  import Card from "$components/ui/card.svelte";
+  import Dialog from "$components/ui/dialog.svelte";
 
   export let applyTariffChange = () => {};
   export let changeConfirmOpen = false;

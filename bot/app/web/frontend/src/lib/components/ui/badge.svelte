@@ -1,7 +1,7 @@
 <script>
-  import { cn } from "../../utils.js";
+  import { cn } from "$lib/utils.js";
 
-  /** @type {'default' | 'outline' | 'destructive'} */
+  /** @type {'default' | 'outline' | 'destructive' | 'success' | 'muted'} */
   export let variant = "default";
 
   let className = "";
@@ -14,6 +14,8 @@
     "admin-cn-badge",
     variant === "outline" && "admin-cn-badge-outline",
     variant === "destructive" && "admin-cn-badge-destructive",
+    variant === "success" && "admin-cn-badge-success",
+    variant === "muted" && "admin-cn-badge-muted",
     className,
   )}
   {...$$restProps}

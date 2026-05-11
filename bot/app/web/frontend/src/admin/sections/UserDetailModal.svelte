@@ -1,6 +1,6 @@
 <script>
-  import { Label, Select, Separator, Tabs } from "bits-ui";
-  import Dialog from "../../lib/components/ui/dialog.svelte";
+  import { Label, Select, Separator, Tabs } from "$components/ui/primitives.js";
+  import Dialog from "$components/ui/dialog.svelte";
   import {
     CalendarDays, Copy, CreditCard, ExternalLink, Eye, Info, Key,
     Mail, Map, MessageSquare, MousePointerClick, QrCode, RefreshCw, Send,

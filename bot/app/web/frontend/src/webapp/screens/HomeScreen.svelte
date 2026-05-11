@@ -2,8 +2,8 @@
   import { CheckCircle2, ChevronsUpDown, CircleX, Database, Download, Gift, RefreshCw } from "lucide-svelte";
 
   import BrandMark from "../../BrandMark.svelte";
-  import Button from "../../lib/components/ui/button.svelte";
-  import Card from "../../lib/components/ui/card.svelte";
+  import Button from "$components/ui/button.svelte";
+  import Card from "$components/ui/card.svelte";
   import { formatTrafficGb } from "../../lib/webapp/formatters.js";
   import {
     trafficPercent as trafficPercentFn,

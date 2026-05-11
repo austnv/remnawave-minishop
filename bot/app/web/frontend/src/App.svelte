@@ -4,7 +4,7 @@
   import { createBillingStore } from "./lib/webapp/stores/billingStore.js";
   import { createDevicesStore } from "./lib/webapp/stores/devicesStore.js";
   import { createAccountStore } from "./lib/webapp/stores/accountStore.js";
-  import { Tooltip } from "bits-ui";
+  import { Tooltip } from "$components/ui/primitives.js";
 
   import BrandMark from "./BrandMark.svelte";
   import PreviewBoard from "./PreviewBoard.svelte";

@@ -1,9 +1,9 @@
 <script>
   import { ArrowRight, Check, CheckCircle2, ChevronsUpDown, FileText, Globe2, Mail, Send, Shield, UserRound } from "lucide-svelte";
-  import { Select } from "bits-ui";
+  import { Select } from "$components/ui/primitives.js";
 
-  import Button from "../../lib/components/ui/button.svelte";
-  import Card from "../../lib/components/ui/card.svelte";
+  import Button from "$components/ui/button.svelte";
+  import Card from "$components/ui/card.svelte";
 
   export let currentLang = "ru";
   export let currentLanguageOption = null;

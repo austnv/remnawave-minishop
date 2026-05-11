@@ -1,6 +1,6 @@
 <script>
   import { ChevronRight, Eye, EyeOff, X } from "lucide-svelte";
-  import { Accordion, Switch } from "bits-ui";
+  import { Accordion, Switch } from "$components/ui/primitives.js";
   import { getContext, onMount } from "svelte";
 
   export let at;

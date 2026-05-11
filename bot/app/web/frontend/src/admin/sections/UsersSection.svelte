@@ -1,6 +1,6 @@
 <script>
   import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-svelte";
-  import { Label, Select } from "bits-ui";
+  import { Label, Select } from "$components/ui/primitives.js";
   import { getContext, onMount } from "svelte";
 
   export let at = (key) => key;

@@ -1,7 +1,7 @@
 <script>
   import { Send, ChevronDown, Check } from "lucide-svelte";
   import { getContext } from "svelte";
-  import { Label, Select } from "bits-ui";
+  import { Label, Select } from "$components/ui/primitives.js";
 
   export let at;
   export let optionLabel;

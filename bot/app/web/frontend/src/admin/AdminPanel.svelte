@@ -20,7 +20,7 @@
     UsersRound,
   } from "lucide-svelte";
   import { onMount, setContext } from "svelte";
-  import { Select } from "bits-ui";
+  import { Select } from "$components/ui/primitives.js";
 
   import BrandMark from "../BrandMark.svelte";
   import AdsSection from "./sections/AdsSection.svelte";

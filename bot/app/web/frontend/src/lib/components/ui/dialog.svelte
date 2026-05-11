@@ -1,6 +1,6 @@
 <script>
   import { X } from "lucide-svelte";
-  import { cn } from "../../utils.js";
+  import { cn } from "$lib/utils.js";
   import Button from "./button.svelte";
 
   export let open = false;
