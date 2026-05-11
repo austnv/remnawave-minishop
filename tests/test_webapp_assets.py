@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -11,6 +12,68 @@ from config.settings import Settings
 
 
 class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
+    def test_serialize_plans_prefers_tariffs_config_over_legacy_packages(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "tariffs.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "default_tariff": "standard",
+                        "tariffs": [
+                            {
+                                "key": "standard",
+                                "names": {"en": "Standard"},
+                                "descriptions": {"en": "100 GB monthly"},
+                                "squad_uuids": ["uuid"],
+                                "billing_model": "period",
+                                "monthly_gb": 100,
+                                "hwid_device_limit": 5,
+                                "hwid_device_packages": {
+                                    "rub": [{"count": 1, "price": 99}],
+                                    "stars": [{"count": 1, "price": 2500}],
+                                },
+                                "prices_rub": {"1": 150},
+                                "prices_stars": {"1": 0},
+                                "enabled_periods": [1],
+                                "enabled": True,
+                            },
+                            {
+                                "key": "traffic",
+                                "names": {"en": "Traffic"},
+                                "descriptions": {"en": "Pay as you go"},
+                                "squad_uuids": ["uuid"],
+                                "billing_model": "traffic",
+                                "traffic_packages": {
+                                    "rub": [{"gb": 50, "price": 799}],
+                                    "stars": [{"gb": 50, "price": 2500}],
+                                },
+                                "enabled": True,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = Settings(
+                _env_file=None,
+                BOT_TOKEN="token",
+                POSTGRES_USER="app_user",
+                POSTGRES_PASSWORD="app_password",
+                TARIFFS_CONFIG_PATH=str(path),
+                TRAFFIC_PACKAGES="10:199",
+            )
+
+            plans = subscription_webapp._serialize_plans(settings, "en")
+
+        self.assertEqual([plan["tariff_key"] for plan in plans], ["standard", "traffic"])
+        self.assertEqual(plans[0]["sale_mode"], "subscription")
+        self.assertEqual(plans[0]["months"], 1)
+        self.assertEqual(plans[0]["hwid_device_limit"], 5)
+        self.assertEqual(plans[0]["hwid_device_packages"][0]["device_count"], 1)
+        self.assertEqual(plans[1]["sale_mode"], "traffic_package")
+        self.assertEqual(plans[1]["traffic_gb"], 50.0)
+        self.assertEqual(plans[1]["stars_price"], 2500)
+
     def test_subscription_template_does_not_block_on_telegram_sdk(self):
         html = subscription_webapp.TEMPLATE_PATH.read_text(encoding="utf-8")
 
@@ -51,6 +114,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             BOT_TOKEN="token",
             POSTGRES_USER="app_user",
             POSTGRES_PASSWORD="app_password",
+            TARIFFS_CONFIG_PATH="missing-tariffs.json",
             TRAFFIC_PACKAGES="10:199,50:799",
             STARS_TRAFFIC_PACKAGES="50:2500",
         )
@@ -62,6 +126,33 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plans[0]["price"], 199.0)
         self.assertEqual(plans[1]["stars_price"], 2500)
 
+    def test_serialize_payment_methods_respects_runtime_provider_toggles(self):
+        settings = Settings(
+            _env_file=None,
+            BOT_TOKEN="token",
+            POSTGRES_USER="app_user",
+            POSTGRES_PASSWORD="app_password",
+            TARIFFS_CONFIG_PATH="missing-tariffs.json",
+            CRYPTOPAY_ENABLED=False,
+            FREEKASSA_ENABLED=False,
+            SEVERPAY_ENABLED=False,
+            YOOKASSA_ENABLED=False,
+            PLATEGA_ENABLED=False,
+            STARS_ENABLED=False,
+        )
+        configured_service = SimpleNamespace(configured=True)
+        app = {
+            "cryptopay_service": configured_service,
+            "freekassa_service": configured_service,
+            "severpay_service": configured_service,
+            "yookassa_service": configured_service,
+            "platega_service": configured_service,
+        }
+
+        methods = subscription_webapp._serialize_payment_methods(settings, app)
+
+        self.assertEqual(methods, [])
+
     def test_serialize_plans_includes_stars_only_subscription_options(self):
         settings = Settings(
             _env_file=None,
@@ -70,6 +161,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             POSTGRES_PASSWORD="app_password",
             YOOKASSA_ENABLED=False,
             CRYPTOPAY_ENABLED=False,
+            TARIFFS_CONFIG_PATH="missing-tariffs.json",
             RUB_PRICE_1_MONTH=None,
             STARS_PRICE_1_MONTH=250,
         )

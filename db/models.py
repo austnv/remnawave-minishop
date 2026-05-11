@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Float, ForeignKey, UniqueConstraint, Text, BigInteger, Index, LargeBinary
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Float, ForeignKey, UniqueConstraint, Text, BigInteger, Index, Numeric, LargeBinary
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.sql import func
@@ -110,6 +110,20 @@ class Subscription(Base):
     provider = Column(String, nullable=True)
     skip_notifications = Column(Boolean, default=False)
     auto_renew_enabled = Column(Boolean, default=True, index=True)
+    tariff_key = Column(String, nullable=True, index=True)
+    tier_baseline_bytes = Column(BigInteger, nullable=True)
+    topup_balance_bytes = Column(BigInteger, nullable=False, default=0)
+    premium_baseline_bytes = Column(BigInteger, nullable=False, default=0)
+    premium_topup_balance_bytes = Column(BigInteger, nullable=False, default=0)
+    premium_topup_used_bytes = Column(BigInteger, nullable=False, default=0)
+    premium_used_bytes = Column(BigInteger, nullable=False, default=0)
+    premium_is_limited = Column(Boolean, nullable=False, default=False, index=True)
+    premium_period_start_at = Column(DateTime(timezone=True), nullable=True)
+    period_start_at = Column(DateTime(timezone=True), nullable=True)
+    is_throttled = Column(Boolean, nullable=False, default=False, index=True)
+    effective_monthly_price_rub = Column(Numeric, nullable=True)
+    hwid_device_limit = Column(Integer, nullable=True)
+    extra_hwid_devices = Column(Integer, nullable=False, default=0)
 
     user = relationship("User", back_populates="subscriptions")
 
@@ -181,6 +195,10 @@ class Payment(Base):
     status = Column(String, nullable=False, index=True)
     description = Column(String, nullable=True)
     subscription_duration_months = Column(Integer, nullable=True)
+    sale_mode = Column(String, nullable=True, index=True)
+    tariff_key = Column(String, nullable=True, index=True)
+    purchased_gb = Column(Float, nullable=True)
+    purchased_hwid_devices = Column(Integer, nullable=True)
     promo_code_id = Column(Integer,
                            ForeignKey("promo_codes.promo_code_id"),
                            nullable=True)
@@ -192,6 +210,69 @@ class Payment(Base):
     user = relationship("User", back_populates="payments")
     promo_code_used = relationship("PromoCode",
                                    back_populates="payments_where_used")
+
+
+class TrafficTopup(Base):
+    __tablename__ = "traffic_topups"
+
+    topup_id = Column(Integer, primary_key=True, autoincrement=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.subscription_id"), nullable=False, index=True)
+    payment_id = Column(Integer, ForeignKey("payments.payment_id"), nullable=True, index=True)
+    purchased_bytes = Column(BigInteger, nullable=False)
+    kind = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    subscription = relationship("Subscription")
+    payment = relationship("Payment")
+
+
+class HwidDevicePurchase(Base):
+    __tablename__ = "hwid_device_purchases"
+
+    purchase_id = Column(Integer, primary_key=True, autoincrement=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.subscription_id"), nullable=False, index=True)
+    payment_id = Column(Integer, ForeignKey("payments.payment_id"), nullable=True, index=True)
+    purchased_devices = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    subscription = relationship("Subscription")
+    payment = relationship("Payment")
+
+
+class TrafficWarning(Base):
+    __tablename__ = "traffic_warnings"
+    __table_args__ = (
+        UniqueConstraint("subscription_id", "period_start_at", "level", name="uq_traffic_warning_period_level"),
+    )
+
+    warning_id = Column(Integer, primary_key=True, autoincrement=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.subscription_id"), nullable=False, index=True)
+    period_start_at = Column(DateTime(timezone=True), nullable=True)
+    level = Column(Integer, nullable=False)
+    traffic_limit_bytes = Column(BigInteger, nullable=True)
+    sent_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    subscription = relationship("Subscription")
+
+
+class TariffChange(Base):
+    __tablename__ = "tariff_changes"
+
+    change_id = Column(Integer, primary_key=True, autoincrement=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.subscription_id"), nullable=False, index=True)
+    from_tariff_key = Column(String, nullable=True)
+    to_tariff_key = Column(String, nullable=False)
+    mode = Column(String, nullable=False, index=True)
+    payment_id = Column(Integer, ForeignKey("payments.payment_id"), nullable=True, index=True)
+    days_before = Column(Integer, nullable=True)
+    days_after = Column(Integer, nullable=True)
+    converted_bytes = Column(BigInteger, nullable=True)
+    eff_price_before = Column(Numeric, nullable=True)
+    eff_price_after = Column(Numeric, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    subscription = relationship("Subscription")
+    payment = relationship("Payment")
 
 
 class UserBilling(Base):
@@ -340,3 +421,17 @@ class AdAttribution(Base):
 
     user = relationship("User")
     campaign = relationship("AdCampaign", back_populates="attributions")
+
+
+class AppSettingOverride(Base):
+    __tablename__ = "app_setting_overrides"
+
+    key = Column(String(128), primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    updated_by = Column(BigInteger, nullable=True)

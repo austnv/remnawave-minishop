@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field, ValidationError, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from config.tariffs_config import TariffsConfig, load_tariffs_config
 
 
 def _split_csv(value: Optional[str]) -> List[str]:
@@ -259,6 +260,11 @@ class Settings(BaseSettings):
     STARS_TRAFFIC_PACKAGES: Optional[str] = Field(
         default=None,
         description="Comma-separated list of traffic packages priced in Stars, e.g. '5:500,20:1500'",
+    )
+    TARIFFS_CONFIG_PATH: str = Field(default="config/tariffs.json")
+    TARIFF_TRAFFIC_WARNING_LEVELS: str = Field(
+        default="85,90,95",
+        description="Comma-separated traffic usage warning levels for tariff traffic limits, e.g. '85,90,95'",
     )
 
     SUBSCRIPTION_NOTIFICATIONS_ENABLED: bool = Field(default=True)
@@ -747,7 +753,31 @@ class Settings(BaseSettings):
     @property
     def traffic_sale_mode(self) -> bool:
         """When true, the bot sells traffic packages instead of time-based subscriptions."""
+        if self.tariffs_config is not None:
+            return False
         return bool(self.traffic_packages or self.stars_traffic_packages)
+
+    @computed_field
+    @property
+    def tariff_traffic_warning_levels(self) -> List[int]:
+        levels: List[int] = []
+        for part in (self.TARIFF_TRAFFIC_WARNING_LEVELS or "").split(","):
+            chunk = part.strip()
+            if not chunk:
+                continue
+            try:
+                level = int(float(chunk))
+            except ValueError:
+                logging.warning("Invalid TARIFF_TRAFFIC_WARNING_LEVELS entry skipped: %s", chunk)
+                continue
+            if 0 < level < 100 and level not in levels:
+                levels.append(level)
+        return sorted(levels) or [85, 90, 95]
+
+    @computed_field
+    @property
+    def tariffs_config(self) -> Optional[TariffsConfig]:
+        return load_tariffs_config(self.TARIFFS_CONFIG_PATH)
 
     @computed_field
     @property

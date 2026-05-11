@@ -46,29 +46,29 @@ class NotificationService:
         user_id: int,
         referrer_id: Optional[int] = None,
     ) -> InlineKeyboardMarkup:
-        """Create inline keyboard with links to user (and referrer) profiles."""
-        buttons = [
-            [
-                InlineKeyboardButton(
-                    text=translate(
-                        "log_open_profile_link",
-                    ),
-                    url=f"tg://user?id={user_id}",
-                )
-            ]
-        ]
+        """Create inline keyboard with links to user (and referrer) profiles.
 
-        if referrer_id:
+        Email-only users have a synthetic negative ``user_id`` with no
+        Telegram profile, so we skip the tg:// button for them.
+        """
+        buttons = []
+        if user_id and user_id > 0:
             buttons.append([
                 InlineKeyboardButton(
-                    text=translate(
-                        "log_open_referrer_profile_button",
-                    ),
+                    text=translate("log_open_profile_link"),
+                    url=f"tg://user?id={user_id}",
+                )
+            ])
+
+        if referrer_id and referrer_id > 0:
+            buttons.append([
+                InlineKeyboardButton(
+                    text=translate("log_open_referrer_profile_button"),
                     url=f"tg://user?id={referrer_id}",
                 )
             ])
 
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
+        return InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
     
     async def _send_to_log_channel(
         self,
