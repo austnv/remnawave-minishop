@@ -41,6 +41,11 @@
 
   import BrandMark from "../BrandMark.svelte";
   import Dialog from "../lib/components/ui/dialog.svelte";
+  import PaymentsSection from "./sections/PaymentsSection.svelte";
+  import SettingsSection from "./sections/SettingsSection.svelte";
+  import StatsSection from "./sections/StatsSection.svelte";
+  import TariffsSection from "./sections/TariffsSection.svelte";
+  import UsersSection from "./sections/UsersSection.svelte";
 
   export let api;
   export let onClose = () => {};
@@ -1631,309 +1636,57 @@
 
     <main class="admin-main">
       {#if active === "stats"}
-        {#if statsError}
-          <div class="admin-empty">Не удалось загрузить статистику: {statsError}</div>
-        {:else if statsLoading || !stats}
-          <div class="admin-empty">Загрузка…</div>
-        {:else}
-          <div class="admin-stat-grid">
-            <article class="admin-stat-card">
-              <span class="admin-stat-label"><UsersRound size={14} /> Пользователи</span>
-              <span class="admin-stat-value">{stats.users?.total_users ?? 0}</span>
-              <span class="admin-stat-trend">В бане: {stats.users?.banned_users ?? 0}</span>
-            </article>
-            <article class="admin-stat-card">
-              <span class="admin-stat-label"><Shield size={14} /> Платные подписки</span>
-              <span class="admin-stat-value">{stats.users?.paid_subscriptions ?? 0}</span>
-              <span class="admin-stat-trend">Триалы: {stats.users?.trial_users ?? 0}</span>
-            </article>
-            <article class="admin-stat-card">
-              <span class="admin-stat-label"><Coins size={14} /> Доход за день</span>
-              <span class="admin-stat-value">{fmtMoney(stats.financial?.today_revenue, stats.currency_symbol)}</span>
-              <span class="admin-stat-trend">{stats.financial?.today_payments_count ?? 0} платежей</span>
-            </article>
-            <article class="admin-stat-card">
-              <span class="admin-stat-label"><BarChart3 size={14} /> За неделю</span>
-              <span class="admin-stat-value">{fmtMoney(stats.financial?.week_revenue, stats.currency_symbol)}</span>
-              <span class="admin-stat-trend">Месяц: {fmtMoney(stats.financial?.month_revenue, stats.currency_symbol)}</span>
-            </article>
-            <article class="admin-stat-card">
-              <span class="admin-stat-label"><Database size={14} /> Всё время</span>
-              <span class="admin-stat-value">{fmtMoney(stats.financial?.all_time_revenue, stats.currency_symbol)}</span>
-              <span class="admin-stat-trend">Sync: {stats.panel_sync?.status ?? "—"}</span>
-            </article>
-            {#if stats.queue}
-              <article class="admin-stat-card">
-                <span class="admin-stat-label"><Send size={14} /> Очередь</span>
-                <span class="admin-stat-value">{stats.queue.user_queue_size ?? 0}</span>
-                <span class="admin-stat-trend">Группы: {stats.queue.group_queue_size ?? 0}</span>
-              </article>
-            {/if}
-          </div>
-
-          <div class="admin-table-wrap">
-            <header class="admin-card-head">
-              <h3>Последние платежи</h3>
-              <small>{(stats.recent_payments || []).length} записей</small>
-            </header>
-            {#if (stats.recent_payments || []).length}
-              <table class="admin-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Пользователь</th>
-                    <th>Сумма</th>
-                    <th>Провайдер</th>
-                    <th>Статус</th>
-                    <th>Дата</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each stats.recent_payments as p}
-                    <tr>
-                      <td class="admin-cell-id" data-label="ID">#{p.payment_id}</td>
-                      <td data-label="Пользователь">{p.user_label || p.user_id}</td>
-                      <td data-label="Сумма">{fmtMoney(p.amount, p.currency)}</td>
-                      <td data-label="Провайдер">{p.provider}</td>
-                      <td data-label="Статус">
-                        <span class="admin-badge admin-badge-{paymentStatusVariant(p.status)}">{p.status}</span>
-                      </td>
-                      <td data-label="Дата">{fmtDate(p.created_at)}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            {:else}
-              <div class="admin-card-body"><span class="admin-muted">Нет данных</span></div>
-            {/if}
-          </div>
-        {/if}
+        <StatsSection
+          {fmtDate}
+          {fmtMoney}
+          {paymentStatusVariant}
+          {stats}
+          {statsError}
+          {statsLoading}
+        />
       {/if}
 
       {#if active === "users"}
-        <div class="admin-toolbar admin-toolbar-users">
-          <div class="admin-toolbar-search">
-            <input
-              type="search"
-              class="input"
-              placeholder={at("users_search_placeholder", {}, "ID, @username или email")}
-              bind:value={usersQuery}
-              on:keydown={(e) => e.key === "Enter" && ((usersPage = 0), loadUsers())}
-            />
-            <button type="button" class="admin-btn admin-btn-primary" on:click={() => { usersPage = 0; loadUsers(); }}>{at("find", {}, "Найти")}</button>
-          </div>
-
-          <div class="admin-toolbar-controls">
-            <Label.Root class="admin-toolbar-field">
-              <span class="admin-toolbar-field-label">{at("filter", {}, "Фильтр")}</span>
-              <Select.Root
-                type="single"
-                value={usersFilter}
-                onValueChange={(value) => { usersFilter = value; usersPage = 0; loadUsers(); }}
-              >
-                <Select.Trigger class="admin-select-trigger admin-toolbar-select" aria-label={at("filter", {}, "Фильтр")}>
-                  <span>{optionLabel(USERS_FILTER_OPTIONS, usersFilter)}</span>
-                  <ChevronDown size={14} class="admin-select-icon" />
-                </Select.Trigger>
-                <Select.Portal>
-                  <Select.Content class="admin-select-content" sideOffset={6}>
-                    {#each USERS_FILTER_OPTIONS as opt}
-                      <Select.Item value={opt.value} class="admin-select-item">
-                        <span>{opt.label}</span>
-                        <Check size={14} class="admin-select-item-check" />
-                      </Select.Item>
-                    {/each}
-                  </Select.Content>
-                </Select.Portal>
-              </Select.Root>
-            </Label.Root>
-
-            <Label.Root class="admin-toolbar-field">
-              <span class="admin-toolbar-field-label">{at("panel_status", {}, "Статус панели")}</span>
-              <Select.Root
-                type="single"
-                value={usersPanelStatus}
-                onValueChange={(value) => { usersPanelStatus = value; usersPage = 0; loadUsers(); }}
-              >
-                <Select.Trigger class="admin-select-trigger admin-toolbar-select" aria-label={at("panel_status", {}, "Статус панели")}>
-                  <span>{optionLabel(USERS_PANEL_STATUS_OPTIONS, usersPanelStatus)}</span>
-                  <ChevronDown size={14} class="admin-select-icon" />
-                </Select.Trigger>
-                <Select.Portal>
-                  <Select.Content class="admin-select-content" sideOffset={6}>
-                    {#each USERS_PANEL_STATUS_OPTIONS as opt}
-                      <Select.Item value={opt.value} class="admin-select-item">
-                        <span>{opt.label}</span>
-                        <Check size={14} class="admin-select-item-check" />
-                      </Select.Item>
-                    {/each}
-                  </Select.Content>
-                </Select.Portal>
-              </Select.Root>
-            </Label.Root>
-
-            <Label.Root class="admin-toolbar-field">
-              <span class="admin-toolbar-field-label">{at("sort", {}, "Сортировка")}</span>
-              <Select.Root
-                type="single"
-                value={usersSort}
-                onValueChange={(value) => { usersSort = value; usersPage = 0; loadUsers(); }}
-              >
-                <Select.Trigger class="admin-select-trigger admin-toolbar-select" aria-label={at("sort", {}, "Сортировка")}>
-                  <span>{optionLabel(USERS_SORT_OPTIONS, usersSort)}</span>
-                  <ChevronDown size={14} class="admin-select-icon" />
-                </Select.Trigger>
-                <Select.Portal>
-                  <Select.Content class="admin-select-content" sideOffset={6}>
-                    {#each USERS_SORT_OPTIONS as opt}
-                      <Select.Item value={opt.value} class="admin-select-item">
-                        <span>{opt.label}</span>
-                        <Check size={14} class="admin-select-item-check" />
-                      </Select.Item>
-                    {/each}
-                  </Select.Content>
-                </Select.Portal>
-              </Select.Root>
-            </Label.Root>
-
-            <div class="admin-toolbar-summary">
-              <span class="admin-toolbar-field-label">{at("total", {}, "Всего")}</span>
-              <strong>{usersTotal}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div class="admin-table-wrap">
-          {#if usersLoading}
-            <ul class="admin-user-list admin-user-list-skeleton" aria-hidden="true">
-              {#each Array(USERS_PAGE_SIZE) as _, i (i)}
-                <li>
-                  <div class="admin-user-row admin-user-row-skeleton">
-                    <span class="admin-skeleton admin-skeleton-avatar"></span>
-                    <span class="admin-user-main">
-                      <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-strong"></span>
-                      <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-soft"></span>
-                    </span>
-                    <span class="admin-user-side">
-                      <span class="admin-skeleton admin-skeleton-badge"></span>
-                      <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-tiny"></span>
-                    </span>
-                  </div>
-                </li>
-              {/each}
-            </ul>
-          {:else if !users.length}
-            <div class="admin-card-body"><span class="admin-muted">{at("users_empty", {}, "Никого не найдено")}</span></div>
-          {:else}
-            <ul class="admin-user-list">
-              {#each users as user}
-                {@const avatar = resolvedAvatarUrl(user)}
-                {@const badge = panelStatusBadge(user)}
-                <li>
-                  <button type="button" class="admin-user-row" on:click={() => openUser(user)}>
-                    <span class="admin-avatar admin-avatar-sm">
-                      {#if avatar}
-                        <img src={avatar} alt="" loading="lazy" referrerpolicy="no-referrer" />
-                      {:else}
-                        <span>{userInitials(user)}</span>
-                      {/if}
-                    </span>
-                    <span class="admin-user-main">
-                      <strong>{userDisplayName(user)}</strong>
-                      <small>{userSecondaryName(user)}</small>
-                    </span>
-                    <span class="admin-user-side">
-                      <span class="admin-badge admin-badge-{badge.variant}">{badge.label}</span>
-                      <span class="admin-user-tertiary">{fmtDateShort(user.registration_date)}</span>
-                    </span>
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
-
-        <div class="admin-pagination">
-          <span class="admin-pagination-meta">{at("page", {}, "Страница")} {usersPage + 1}</span>
-          <div class="admin-pagination-buttons">
-            <button type="button" class="admin-btn admin-btn-sm" disabled={usersPage === 0} on:click={() => { usersPage = Math.max(0, usersPage - 1); loadUsers(); }}>
-              <ChevronLeft size={14} /> {at("back", {}, "Назад")}
-            </button>
-            <button type="button" class="admin-btn admin-btn-sm" disabled={!usersHasMore} on:click={() => { usersPage += 1; loadUsers(); }}>
-              {at("next", {}, "Далее")} <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        <UsersSection
+          bind:usersFilter
+          bind:usersPage
+          bind:usersPanelStatus
+          bind:usersQuery
+          bind:usersSort
+          {USERS_FILTER_OPTIONS}
+          {USERS_PAGE_SIZE}
+          {USERS_PANEL_STATUS_OPTIONS}
+          {USERS_SORT_OPTIONS}
+          {at}
+          {fmtDateShort}
+          {loadUsers}
+          {openUser}
+          {optionLabel}
+          {panelStatusBadge}
+          {resolvedAvatarUrl}
+          {userDisplayName}
+          {userInitials}
+          {userSecondaryName}
+          {users}
+          {usersHasMore}
+          {usersLoading}
+          {usersTotal}
+        />
       {/if}
 
       {#if active === "payments"}
-        <div class="admin-table-wrap">
-          {#if paymentsLoading}
-            <table class="admin-table admin-table-skeleton" aria-hidden="true">
-              <thead>
-                <tr>
-                  <th>ID</th><th>{at("user", {}, "Пользователь")}</th><th>{at("amount", {}, "Сумма")}</th><th>{at("provider", {}, "Провайдер")}</th><th>{at("description", {}, "Описание")}</th><th>{at("status", {}, "Статус")}</th><th>{at("date", {}, "Дата")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each Array(8) as _, i (i)}
-                  <tr>
-                    <td><span class="admin-skeleton admin-skeleton-line admin-skeleton-line-tiny"></span></td>
-                    <td><span class="admin-skeleton admin-skeleton-line"></span></td>
-                    <td><span class="admin-skeleton admin-skeleton-line admin-skeleton-line-short"></span></td>
-                    <td><span class="admin-skeleton admin-skeleton-line admin-skeleton-line-short"></span></td>
-                    <td><span class="admin-skeleton admin-skeleton-line"></span></td>
-                    <td><span class="admin-skeleton admin-skeleton-badge"></span></td>
-                    <td><span class="admin-skeleton admin-skeleton-line admin-skeleton-line-short"></span></td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {:else if !payments.length}
-            <div class="admin-card-body"><span class="admin-muted">{at("payments_empty", {}, "Нет платежей")}</span></div>
-          {:else}
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>{at("user", {}, "Пользователь")}</th>
-                  <th>{at("amount", {}, "Сумма")}</th>
-                  <th>{at("provider", {}, "Провайдер")}</th>
-                  <th>{at("description", {}, "Описание")}</th>
-                  <th>{at("status", {}, "Статус")}</th>
-                  <th>{at("date", {}, "Дата")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each payments as p}
-                  <tr>
-                    <td class="admin-cell-id" data-label="ID">#{p.payment_id}</td>
-                    <td data-label={at("user", {}, "Пользователь")}>{p.user_label || p.user_id}</td>
-                    <td data-label={at("amount", {}, "Сумма")}>{fmtMoney(p.amount, p.currency)}</td>
-                    <td data-label={at("provider", {}, "Провайдер")}>{p.provider}</td>
-                    <td class="admin-cell-wrap" data-label={at("description", {}, "Описание")}>{p.description || "—"}</td>
-                    <td data-label={at("status", {}, "Статус")}>
-                      <span class="admin-badge admin-badge-{paymentStatusVariant(p.status)}">{p.status}</span>
-                    </td>
-                    <td data-label={at("date", {}, "Дата")}>{fmtDate(p.created_at)}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {/if}
-        </div>
-
-        <div class="admin-pagination">
-          <span class="admin-pagination-meta">{at("page_short", {}, "Стр.")} {paymentsPage + 1} · {at("total", {}, "Всего")} {paymentsTotal}</span>
-          <div class="admin-pagination-buttons">
-            <button type="button" class="admin-btn admin-btn-sm" disabled={paymentsPage === 0} on:click={() => { paymentsPage = Math.max(0, paymentsPage - 1); loadPayments(); }}>
-              <ChevronLeft size={14} /> {at("back", {}, "Назад")}
-            </button>
-            <button type="button" class="admin-btn admin-btn-sm" disabled={!paymentsHasMore} on:click={() => { paymentsPage += 1; loadPayments(); }}>
-              {at("next", {}, "Далее")} <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        <PaymentsSection
+          bind:paymentsPage
+          {at}
+          {fmtDate}
+          {fmtMoney}
+          {loadPayments}
+          {paymentStatusVariant}
+          {payments}
+          {paymentsHasMore}
+          {paymentsLoading}
+          {paymentsTotal}
+        />
       {/if}
 
       {#if active === "promos"}
@@ -2200,177 +1953,38 @@
       {/if}
 
       {#if active === "tariffs"}
-        {#if tariffsLoading}
-          <div class="admin-empty">Загрузка…</div>
-        {:else}
-          <div class="admin-stat-grid">
-            <div class="admin-stat-card">
-              <span class="admin-stat-label">Всего тарифов</span>
-              <strong class="admin-stat-value">{tariffsCatalog.tariffs.length}</strong>
-              <span class="admin-stat-trend">Включено: {enabledTariffs.length}</span>
-            </div>
-            <div class="admin-stat-card">
-              <span class="admin-stat-label">По умолчанию</span>
-              <strong class="admin-stat-value">{tariffsCatalog.default_tariff || "—"}</strong>
-              <span class="admin-stat-trend">Используется для новых подписок</span>
-            </div>
-            <div class="admin-stat-card">
-              <span class="admin-stat-label">Отключено</span>
-              <strong class="admin-stat-value">{disabledTariffs}</strong>
-              <span class="admin-stat-trend">Скрыто с витрины</span>
-            </div>
-          </div>
-
-          <article class="admin-card">
-            <header class="admin-card-head">
-              <div>
-                <h3>Каталог тарифов</h3>
-                <small>{tariffsPath || "config/tariffs.json"}</small>
-              </div>
-              <button type="button" class="admin-btn admin-btn-sm" on:click={loadTariffs} disabled={tariffsLoading || tariffsSaving}>
-                <RefreshCw size={13} /> Обновить
-              </button>
-            </header>
-            <div class="admin-card-body">
-              {#if !tariffsCatalog.tariffs.length}
-                <div class="admin-empty">
-                  Каталог пуст. Добавьте первый тариф, после сохранения будет создан JSON-файл каталога.
-                </div>
-              {:else}
-                <div class="admin-tariff-grid">
-                  {#each tariffsCatalog.tariffs as tariff}
-                    <article class="admin-tariff-card" class:is-disabled={tariff.enabled === false}>
-                      <div class="admin-tariff-top">
-                        <div>
-                          <div class="admin-tariff-title">
-                            <strong>{tariffName(tariff)}</strong>
-                            {#if tariff.key === tariffsCatalog.default_tariff}
-                              <span class="admin-badge admin-badge-success">Default</span>
-                            {/if}
-                          </div>
-                          <code>{tariff.key}</code>
-                        </div>
-                        {#if tariff.enabled === false}
-                          <span class="admin-badge admin-badge-muted">Выключен</span>
-                        {:else}
-                          <span class="admin-badge admin-badge-success">Активен</span>
-                        {/if}
-                      </div>
-                      <p>{tariff.descriptions?.ru || tariff.descriptions?.en || "Без описания"}</p>
-                      <div class="admin-tariff-facts">
-                        <span>{tariff.billing_model === "traffic" ? "Трафик" : "Периоды"}</span>
-                        <span>{tariffPriceSummary(tariff)}</span>
-                        <span>Squads: {(tariff.squad_uuids || []).length}</span>
-                        <span>Premium: {(tariff.premium_squad_uuids || []).length ? `${tariff.premium_monthly_gb || 0} GB` : "—"}</span>
-                        <span>Устройства: {tariff.hwid_device_limit ?? "env"}</span>
-                      </div>
-                      <div class="admin-tariff-actions">
-                        <button type="button" class="admin-btn admin-btn-sm" on:click={() => openEditTariff(tariff)}>
-                          Настроить
-                        </button>
-                        <button type="button" class="admin-btn admin-btn-sm" on:click={() => toggleTariffEnabled(tariff)} disabled={tariffsSaving}>
-                          {tariff.enabled === false ? "Включить" : "Выключить"}
-                        </button>
-                        <button
-                          type="button"
-                          class="admin-btn admin-btn-sm"
-                          on:click={() => setDefaultTariff(tariff.key)}
-                          disabled={tariffsSaving || tariff.enabled === false || tariff.key === tariffsCatalog.default_tariff}
-                        >
-                          По умолчанию
-                        </button>
-                        <button
-                          type="button"
-                          class="admin-btn admin-btn-sm admin-btn-danger"
-                          on:click={() => { tariffDeleteTarget = tariff; tariffDeleteOpen = true; }}
-                          disabled={tariffsSaving}
-                          aria-label="Удалить тариф"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </article>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          </article>
-        {/if}
+        <TariffsSection
+          bind:tariffDeleteOpen
+          bind:tariffDeleteTarget
+          {disabledTariffs}
+          {enabledTariffs}
+          {loadTariffs}
+          {openEditTariff}
+          {setDefaultTariff}
+          {tariffName}
+          {tariffPriceSummary}
+          {tariffsCatalog}
+          {tariffsLoading}
+          {tariffsPath}
+          {tariffsSaving}
+          {toggleTariffEnabled}
+        />
       {/if}
 
       {#if active === "settings"}
-        {#if settingsLoading || !settingsSections.length}
-          <div class="admin-empty">{settingsLoading ? "Загрузка…" : "Нет данных"}</div>
-        {:else}
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <p class="admin-muted" style="margin:0;">
-              Изменения в админке имеют приоритет над <code>.env</code>. Кнопка «Восстановить» возвращает значение из переменных окружения.
-            </p>
-            <button type="button" class="admin-btn admin-btn-sm admin-btn-ghost" on:click={toggleAllSections}>
-              {settingsAllOpen ? "Свернуть всё" : "Развернуть всё"}
-            </button>
-          </div>
-          <Accordion.Root type="multiple" bind:value={settingsOpenSections} class="admin-accordion">
-            {#each settingsSections as section}
-              {@const dirtyInSection = section.fields.filter((f) => Boolean(settingsDirty[f.key])).length}
-              {@const overriddenInSection = section.fields.filter((f) => isOverridden(f)).length}
-              <Accordion.Item value={section.id} class="admin-accordion-item admin-card">
-                <Accordion.Header class="admin-accordion-header">
-                  <Accordion.Trigger class="admin-accordion-trigger">
-                    <span class="admin-accordion-title">{sectionTitle(section.id)}</span>
-                    <span class="admin-accordion-meta">
-                      {section.fields.length} параметров{#if overriddenInSection} · {overriddenInSection} override{/if}{#if dirtyInSection} · {dirtyInSection} изм.{/if}
-                    </span>
-                    <ChevronRight size={16} class="admin-accordion-chev" />
-                  </Accordion.Trigger>
-                </Accordion.Header>
-                <Accordion.Content class="admin-accordion-content">
-                  {@const groups = groupSectionFields(section)}
-                  {@const rootGroup = groups.find((g) => !g.label)}
-                  {@const labelGroups = groups.filter((g) => g.label)}
-                  <div class="admin-settings-fields">
-                    {#if rootGroup}
-                      {#each rootGroup.fields as field}
-                        {@render renderField(field)}
-                      {/each}
-                    {/if}
-                    {#if labelGroups.length}
-                      <Accordion.Root
-                        type="multiple"
-                        value={settingsOpenSubsections[section.id] || []}
-                        onValueChange={(v) => (settingsOpenSubsections = { ...settingsOpenSubsections, [section.id]: v })}
-                        class="admin-subsection-accordion"
-                      >
-                        {#each labelGroups as group}
-                          {@const subDirty = group.fields.filter((f) => Boolean(settingsDirty[f.key])).length}
-                          {@const subOverridden = group.fields.filter((f) => isOverridden(f)).length}
-                          <Accordion.Item value={group.id} class="admin-settings-subsection">
-                            <Accordion.Header class="admin-accordion-header">
-                              <Accordion.Trigger class="admin-settings-subsection-trigger">
-                                <strong>{group.label}</strong>
-                                <span class="admin-settings-subsection-meta">
-                                  {group.fields.length} полей{#if subOverridden} · {subOverridden} override{/if}{#if subDirty} · {subDirty} изм.{/if}
-                                </span>
-                                <ChevronRight size={14} class="admin-accordion-chev" />
-                              </Accordion.Trigger>
-                            </Accordion.Header>
-                            <Accordion.Content class="admin-accordion-content">
-                              <div class="admin-settings-subsection-body">
-                                {#each group.fields as field}
-                                  {@render renderField(field)}
-                                {/each}
-                              </div>
-                            </Accordion.Content>
-                          </Accordion.Item>
-                        {/each}
-                      </Accordion.Root>
-                    {/if}
-                  </div>
-                </Accordion.Content>
-              </Accordion.Item>
-            {/each}
-          </Accordion.Root>
-        {/if}
+        <SettingsSection
+          bind:settingsOpenSections
+          bind:settingsOpenSubsections
+          {groupSectionFields}
+          {isOverridden}
+          {renderField}
+          {sectionTitle}
+          {settingsAllOpen}
+          {settingsDirty}
+          {settingsLoading}
+          {settingsSections}
+          {toggleAllSections}
+        />
       {/if}
     </main>
   </section>

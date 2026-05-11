@@ -14,7 +14,6 @@
     FileText,
     Gift,
     Globe2,
-    Home,
     LockKeyhole,
     Mail,
     Plus,
@@ -22,7 +21,6 @@
     Send,
     Smartphone,
     TriangleAlert,
-    Settings as SettingsIcon,
     Shield,
     Ticket,
     UserRound,
@@ -37,189 +35,48 @@
   import Input from "./lib/components/ui/input.svelte";
   import PreviewBoard from "./PreviewBoard.svelte";
   import AdminPanel from "./admin/AdminPanel.svelte";
+  import BottomNav from "./webapp/BottomNav.svelte";
+  import PaymentDialogs from "./webapp/PaymentDialogs.svelte";
+  import TariffDialogs from "./webapp/TariffDialogs.svelte";
+  import DevicesScreen from "./webapp/screens/DevicesScreen.svelte";
+  import HomeScreen from "./webapp/screens/HomeScreen.svelte";
+  import InviteScreen from "./webapp/screens/InviteScreen.svelte";
+  import SettingsScreen from "./webapp/screens/SettingsScreen.svelte";
 
-  const MANUAL_LOGOUT_FLAG_KEY = "rw_webapp_manual_logout";
-  const LANGUAGE_LABELS = {
-    ru: "Русский",
-    en: "English",
-    de: "Deutsch",
-    es: "Español",
-    fr: "Français",
-    tr: "Türkçe",
-    uk: "Українська",
-  };
-  const LANGUAGE_FLAGS = {
-    ru: "🇷🇺",
-    en: "🇬🇧",
-    de: "🇩🇪",
-    es: "🇪🇸",
-    fr: "🇫🇷",
-    tr: "🇹🇷",
-    uk: "🇺🇦",
-  };
-  const WEBAPP_LANGUAGE_ORDER = ["ru", "en"];
-  const APP_SECTION_PATHS = {
-    home: "/home",
-    invite: "/invite",
-    devices: "/devices",
-    settings: "/settings",
-    admin: "/admin",
-  };
-  const ADMIN_SECTIONS = new Set([
-    "stats",
-    "users",
-    "payments",
-    "promos",
-    "ads",
-    "broadcast",
-    "logs",
-    "tariffs",
-    "settings",
-  ]);
-  const TELEGRAM_WEBAPP_SCRIPT_URL = "https://telegram.org/js/telegram-web-app.js";
-  const TELEGRAM_SDK_BOOT_TIMEOUT_MS = 900;
-  const TELEGRAM_SDK_ACTION_TIMEOUT_MS = 1800;
-  const TELEGRAM_MINI_APP_AUTH_TIMEOUT_MS = 15000;
-
-  const DEV_MOCK = {
-    config: {
-      title: "/minishop",
-      primaryColor: "#00fe7a",
-      logoUrl: "",
-      logoEmoji: "🫥",
-      apiBase: "/api",
-      supportUrl: "https://t.me/support",
-      privacyPolicyUrl: "https://example.com/privacy",
-      userAgreementUrl: "https://example.com/agreement",
-      currency: "RUB",
-      language: "ru",
-      emailAuthEnabled: true,
-      telegramLoginBotUsername: "preview_bot",
-      telegramLoginBotId: 1234567890,
-      telegramOAuthClientId: 1234567890,
-      telegramOAuthRequestAccess: ["write"],
-      appVersion: "dev+local",
-      appRepositoryUrl: "https://github.com/3252a8/remnawave-minishop",
-    },
-    data: {
-      ok: true,
-      user: {
-        id: 100200300,
-        username: "username",
-        email: "user@example.com",
-        email_verified: true,
-        telegram_id: 100200300,
-        telegram_linked: true,
-        telegram_photo_url: "",
-        first_name: "Preview",
-        language_code: "ru",
-        is_admin: true,
-      },
-      subscription: {
-        active: true,
-        status: "ACTIVE",
-        remaining_text: "25 д. 8 ч.",
-        end_date_text: "24.05.2026",
-        days_left: 25,
-        config_link: "https://sub.example.com/sub/preview-token",
-        connect_url: "https://sub.example.com/connect/preview-token",
-        traffic_used: "18.4 GB",
-        traffic_limit: "100 GB",
-        traffic_used_bytes: 19756849561,
-        traffic_limit_bytes: 107374182400,
-        premium_used: "32.0 GB",
-        premium_limit: "50.0 GB",
-        premium_used_bytes: 34359738368,
-        premium_limit_bytes: 53687091200,
-        premium_baseline_bytes: 53687091200,
-        premium_topup_balance_bytes: 0,
-        premium_is_limited: false,
-        premium_title: "Premium-серверы",
-        premium_node_labels: ["Premium NL-1", "Premium DE-1"],
-        can_topup_regular_traffic: true,
-        can_topup_premium_traffic: true,
-        max_devices: 5,
-      },
-      devices: {
-        ok: true,
-        enabled: true,
-        current_devices: 3,
-        max_devices: 5,
-        max_devices_label: "5",
-        devices: [
-          {
-            index: 1,
-            display_name: "iPhone 15 Pro",
-            platform_label: "iOS 18.4",
-            user_agent: "Streisand/1.6 CFNetwork",
-            created_at_text: "28.04.2026 16:12",
-            hwid_short: "A1B2C3D4...98FA01",
-            token: "preview-device-1",
-            can_disconnect: true,
-          },
-          {
-            index: 2,
-            display_name: "MacBook Air",
-            platform_label: "macOS 15.4",
-            user_agent: "Happ/3.1.0",
-            created_at_text: "29.04.2026 09:40",
-            hwid_short: "F0E1D2C3...44AB22",
-            token: "preview-device-2",
-            can_disconnect: true,
-          },
-          {
-            index: 3,
-            display_name: "Android Phone",
-            platform_label: "Android 15",
-            user_agent: "v2rayNG/1.9.35",
-            created_at_text: "30.04.2026 07:55",
-            hwid_short: "778899AA...BCDD10",
-            token: "preview-device-3",
-            can_disconnect: true,
-          },
-        ],
-      },
-      plans: [
-        { months: 1, price: 290, currency: "RUB", title: "1 месяц" },
-        { months: 3, price: 790, currency: "RUB", title: "3 месяца" },
-        { months: 6, price: 1490, currency: "RUB", title: "6 месяцев" },
-        { months: 12, price: 2690, currency: "RUB", title: "12 месяцев" },
-      ],
-      payment_methods: [
-        { id: "yookassa", name: "Карта" },
-        { id: "platega_sbp", name: "Telegram Pay" },
-        { id: "cryptopay", name: "Криптовалюта" },
-        { id: "freekassa", name: "Другие способы" },
-      ],
-      referral: {
-        code: "ABCD1234",
-        bot_link: "https://t.me/preview_bot?start=ref_uABCD1234",
-        webapp_link: "https://minishop.app/ref/ABCD1234",
-        invited_count: 4,
-        purchased_count: 2,
-        welcome_bonus_days: 3,
-        one_bonus_per_referee: false,
-        bonus_details: [
-          { months: 1, title: "1 месяц", inviter_days: 14, friend_days: 7 },
-          { months: 3, title: "3 месяца", inviter_days: 21, friend_days: 14 },
-          { months: 6, title: "6 месяцев", inviter_days: 31, friend_days: 21 },
-          { months: 12, title: "12 месяцев", inviter_days: 62, friend_days: 31 },
-        ],
-      },
-      settings: {
-        support_url: "https://t.me/support",
-        traffic_mode: false,
-        my_devices_enabled: false,
-        user_hwid_device_limit: 5,
-        trial_enabled: true,
-        trial_available: true,
-        trial_duration_days: 5,
-        trial_traffic_limit_gb: 10,
-        trial_traffic_strategy: "NO_RESET",
-        email_auth_enabled: true,
-      },
-    },
-  };
+  import {
+    LANGUAGE_FLAGS,
+    LANGUAGE_LABELS,
+    MANUAL_LOGOUT_FLAG_KEY,
+    TELEGRAM_MINI_APP_AUTH_TIMEOUT_MS,
+    TELEGRAM_SDK_ACTION_TIMEOUT_MS,
+    TELEGRAM_SDK_BOOT_TIMEOUT_MS,
+    TELEGRAM_WEBAPP_SCRIPT_URL,
+    WEBAPP_LANGUAGE_ORDER,
+  } from "./lib/webapp/constants.js";
+  import { applyFavicon, readJsonScript, structuredCloneSafe } from "./lib/webapp/browser.js";
+  import { createApiClient } from "./lib/webapp/publicApi.js";
+  import {
+    clearManualLogoutFlag as clearManualLogoutFlagInStorage,
+    clearStoredToken,
+    CSRF_COOKIE_NAME,
+    isManuallyLoggedOut as readManualLogoutFlag,
+    markManualLogout as markManualLogoutInStorage,
+    persistToken,
+    readCookie,
+    readReferral,
+    readStoredToken,
+    rememberReferral,
+  } from "./lib/webapp/session.js";
+  import { createTelegramSdk } from "./lib/webapp/telegramSdk.js";
+  import { mockApi as runMockApi } from "./lib/webapp/mockApi.js";
+  import { DEV_MOCK, applyPreviewMock } from "./lib/webapp/previewMock.js";
+  import {
+    adminSectionFromPath,
+    adminUserIdFromPath,
+    normalizeSection,
+    sectionFromPath,
+    syncSectionPath,
+  } from "./lib/webapp/routes.js";
 
   const query = new URLSearchParams(window.location.search);
   applyPreviewMock(query.get("mock"));
@@ -236,10 +93,7 @@
     ...(injectedConfig || {}),
   };
   const I18N = injectedI18n || {};
-  let tg = resolveTelegramWebApp();
-  let telegramSdkStatus = tg ? "ready" : "idle";
-  let telegramSdkPromise = null;
-  let telegramLaunchParamsDetected = false;
+  let telegramSdkStatus = "idle";
   let telegramMiniAppInitData = "";
 
   let mode = isPreviewBoard ? "preview" : "loading";
@@ -312,186 +166,38 @@
   let emailCode = "";
   let emailAvatarUrl = "";
   let avatarHashToken = "";
-  let token = MOCK ? "local-preview" : localStorage.getItem("rw_webapp_token") || "";
-  let csrfToken = MOCK ? "" : readCookie("rw_webapp_csrf") || "";
+  let token = MOCK ? "local-preview" : readStoredToken();
+  let csrfToken = MOCK ? "" : readCookie(CSRF_COOKIE_NAME) || "";
   let linkEmailResendCooldown = 0;
   let linkEmailResendTimer = null;
   let scrollLockApplied = false;
+  let tg = null;
+  const telegramSdk = createTelegramSdk({
+    scriptUrl: TELEGRAM_WEBAPP_SCRIPT_URL,
+    bootTimeoutMs: TELEGRAM_SDK_BOOT_TIMEOUT_MS,
+    actionTimeoutMs: TELEGRAM_SDK_ACTION_TIMEOUT_MS,
+    miniAppAuthTimeoutMs: TELEGRAM_MINI_APP_AUTH_TIMEOUT_MS,
+    onStatusChange: (status) => (telegramSdkStatus = status),
+    onInitDataChange: (initData) => (telegramMiniAppInitData = initData || ""),
+  });
+  tg = telegramSdk.refresh();
+  telegramSdkStatus = tg ? "ready" : "idle";
+  telegramMiniAppInitData = telegramSdk.initData;
+  const apiClient = createApiClient({
+    apiBase: CFG.apiBase,
+    csrfCookieName: CSRF_COOKIE_NAME,
+    getToken: () => token,
+    getCsrfToken: () => csrfToken,
+    onUnauthorized: () => {
+      clearToken();
+      showLogin();
+    },
+    mockApi: MOCK
+      ? (path, options, context) => runMockApi(path, options, context)
+      : null,
+    getMockContext: () => ({ currentLang, normalizeLangCode, clone: structuredCloneSafe }),
+  });
 
-  function applyPreviewMock(kind) {
-    const mode = String(kind || "").trim().toLowerCase();
-    if (mode === "traffic") {
-      DEV_MOCK.data.settings.traffic_mode = true;
-      DEV_MOCK.data.settings.trial_available = false;
-      DEV_MOCK.data.subscription = {
-        ...DEV_MOCK.data.subscription,
-        active: true,
-        status: "ACTIVE",
-        remaining_text: "Навсегда",
-        end_date_text: "01.01.2099 00:00",
-        days_left: 26000,
-        traffic_used: "18.4 GB",
-        traffic_limit: "100 GB",
-        traffic_used_bytes: 19756849561,
-        traffic_limit_bytes: 107374182400,
-        traffic_limit_strategy: "NO_RESET",
-      };
-      DEV_MOCK.data.plans = [
-        { months: 10, traffic_gb: 10, price: 199, currency: "RUB", title: "10 GB", sale_mode: "traffic" },
-        { months: 50, traffic_gb: 50, price: 799, currency: "RUB", title: "50 GB", sale_mode: "traffic" },
-        { months: 100, traffic_gb: 100, price: 1390, currency: "RUB", title: "100 GB", sale_mode: "traffic" },
-        { months: 300, traffic_gb: 300, price: 3490, currency: "RUB", title: "300 GB", sale_mode: "traffic" },
-      ];
-    } else if (mode === "tariffs") {
-      DEV_MOCK.data.settings.traffic_mode = false;
-      DEV_MOCK.data.subscription = {
-        ...DEV_MOCK.data.subscription,
-        tariff_key: "standard",
-        tariff_name: "Стандарт",
-        tariff_description: "100 GB каждый месяц",
-        billing_model: "period",
-        traffic_limit_strategy: "MONTH",
-      };
-      DEV_MOCK.data.plans = [
-        {
-          id: "standard:period:1",
-          tariff_key: "standard",
-          tariff_name: "Стандарт",
-          billing_model: "period",
-          sale_mode: "subscription",
-          months: 1,
-          price: 150,
-          currency: "RUB",
-          title: "Стандарт",
-          subtitle: "1 месяц",
-          description: "100 GB каждый месяц",
-          monthly_gb: 100,
-        },
-        {
-          id: "standard:period:3",
-          tariff_key: "standard",
-          tariff_name: "Стандарт",
-          billing_model: "period",
-          sale_mode: "subscription",
-          months: 3,
-          price: 400,
-          currency: "RUB",
-          title: "Стандарт",
-          subtitle: "3 месяца",
-          description: "100 GB каждый месяц",
-          monthly_gb: 100,
-        },
-        {
-          id: "business:period:1",
-          tariff_key: "business",
-          tariff_name: "Бизнес",
-          billing_model: "period",
-          sale_mode: "subscription",
-          months: 1,
-          price: 350,
-          currency: "RUB",
-          title: "Бизнес",
-          subtitle: "1 месяц",
-          description: "300 GB и приоритетные серверы",
-          monthly_gb: 300,
-        },
-        {
-          id: "traffic:traffic:50",
-          tariff_key: "traffic",
-          tariff_name: "Трафик",
-          billing_model: "traffic",
-          sale_mode: "traffic_package",
-          months: 50,
-          traffic_gb: 50,
-          price: 799,
-          currency: "RUB",
-          title: "Трафик",
-          subtitle: "50 GB",
-          description: "Пакет без срока действия",
-        },
-      ];
-      DEV_MOCK.data.tariff_change_options = {
-        ok: true,
-        current: {
-          tariff_key: "standard",
-          title: "Стандарт",
-          description: "100 GB каждый месяц",
-          billing_model: "period",
-        },
-        targets: [
-          {
-            tariff_key: "business",
-            title: "Бизнес",
-            description: "300 GB и приоритетные серверы",
-            billing_model: "period",
-            monthly_gb: 300,
-            actions: [
-              { mode: "recalc_days", kind: "free", title: "recalc_days", days_after: 10, remaining_days: 25 },
-              { mode: "paid_diff", kind: "payment", title: "paid_diff", price: 190, currency: "RUB" },
-            ],
-          },
-          {
-            tariff_key: "traffic",
-            title: "Трафик",
-            description: "Пакеты без срока действия",
-            billing_model: "traffic",
-            actions: [
-              { mode: "convert_days_to_gb", kind: "free", title: "convert_days_to_gb", converted_gb: 18, remaining_days: 25 },
-              { mode: "buy_package", kind: "payment", title: "+50 GB", traffic_gb: 50, price: 799, currency: "RUB" },
-            ],
-          },
-        ],
-      };
-      DEV_MOCK.data.topup_options = {
-        ok: true,
-        tariff_key: "standard",
-        tariff_name: "Стандарт",
-        traffic_percent: 86,
-        warning_levels: [85, 90, 95],
-        plans: [
-          { id: "standard:topup:10", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "topup", traffic_gb: 10, months: 10, price: 99, currency: "RUB", title: "10 GB", subtitle: "Стандарт" },
-          { id: "standard:topup:50", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "topup", traffic_gb: 50, months: 50, price: 399, currency: "RUB", title: "50 GB", subtitle: "Стандарт" },
-          { id: "standard:topup:200", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "topup", traffic_gb: 200, months: 200, price: 1299, currency: "RUB", title: "200 GB", subtitle: "Стандарт" },
-        ],
-      };
-      DEV_MOCK.data.device_topup_options = {
-        ok: true,
-        tariff_key: "standard",
-        tariff_name: "Стандарт",
-        current_limit: 5,
-        plans: [
-          { id: "standard:hwid:1", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "hwid_devices", device_count: 1, months: 1, price: 99, currency: "RUB", title: "+1", subtitle: "Стандарт" },
-          { id: "standard:hwid:3", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "hwid_devices", device_count: 3, months: 3, price: 249, currency: "RUB", title: "+3", subtitle: "Стандарт" },
-        ],
-      };
-    } else if (mode === "devices") {
-      DEV_MOCK.data.settings.my_devices_enabled = true;
-      DEV_MOCK.data.subscription = {
-        ...DEV_MOCK.data.subscription,
-        active: true,
-        max_devices: 5,
-      };
-    } else if (mode === "trial") {
-      DEV_MOCK.data.settings.traffic_mode = false;
-      DEV_MOCK.data.settings.trial_enabled = true;
-      DEV_MOCK.data.settings.trial_available = true;
-      DEV_MOCK.data.settings.trial_duration_days = 5;
-      DEV_MOCK.data.settings.trial_traffic_limit_gb = 10;
-      DEV_MOCK.data.subscription = {
-        active: false,
-        status: "INACTIVE",
-        remaining_text: "Подписка не активна",
-        end_date_text: "",
-        days_left: 0,
-        config_link: null,
-        connect_url: null,
-        traffic_used: "0 B",
-        traffic_limit: "10 GB",
-        traffic_used_bytes: 0,
-        traffic_limit_bytes: 10737418240,
-      };
-    }
-  }
 
   $: brandTitle = CFG.title || "/minishop";
   $: brandEmoji = CFG.logoEmoji || "🫥";
@@ -634,43 +340,6 @@
     };
   });
 
-  function readJsonScript(id) {
-    const node = document.getElementById(id);
-    if (!node || !node.textContent) return null;
-    try {
-      return JSON.parse(node.textContent);
-    } catch (error) {
-      console.warn(`Failed to parse JSON config from #${id}`, error);
-      return null;
-    }
-  }
-
-  function structuredCloneSafe(value) {
-    try {
-      return structuredClone(value);
-    } catch {
-      return JSON.parse(JSON.stringify(value));
-    }
-  }
-
-  function applyFavicon(logoUrl, emoji) {
-    if (typeof document === "undefined") return;
-    const favicon = document.getElementById("app-favicon");
-    if (!favicon) return;
-
-    const normalizedLogoUrl = String(logoUrl || "").trim();
-    if (normalizedLogoUrl) {
-      favicon.setAttribute("href", normalizedLogoUrl);
-      return;
-    }
-
-    const normalizedEmoji = String(emoji || "🫥").trim() || "🫥";
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="52">${escapeHtml(
-      normalizedEmoji,
-    )}</text></svg>`;
-    const encoded = encodeURIComponent(svg);
-    favicon.setAttribute("href", `data:image/svg+xml,${encoded}`);
-  }
 
   function syncBodyScrollLock(locked) {
     if (typeof document === "undefined") return;
@@ -714,14 +383,6 @@
     }, 260);
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-  }
 
   function normalizeLangCode(lang) {
     const key = String(lang || "").trim().toLowerCase();
@@ -751,184 +412,41 @@
     return formatTemplate(raw, params);
   }
 
-  function normalizeSection(value) {
-    const section = String(value || "").trim().toLowerCase();
-    if (section === "invite" || section === "devices" || section === "settings" || section === "admin") {
-      return section;
-    }
-    return "home";
-  }
-
-  function sectionFromPath(pathname) {
-    const normalizedPath = String(pathname || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\/+$/, "");
-    if (!normalizedPath || normalizedPath === "/") return "home";
-    if (normalizedPath === "/admin" || normalizedPath.startsWith("/admin/")) return "admin";
-    const section = normalizedPath.startsWith("/") ? normalizedPath.slice(1) : normalizedPath;
-    return normalizeSection(section);
-  }
-
-  function adminSectionFromPath(pathname) {
-    const normalized = String(pathname || "").toLowerCase().replace(/\/+$/, "");
-    const m = normalized.match(/^\/admin\/([a-z0-9_-]+)(?:\/[^/]+)?$/);
-    if (m && ADMIN_SECTIONS.has(m[1])) return m[1];
-    return "stats";
-  }
-
-  function adminUserIdFromPath(pathname) {
-    const normalized = String(pathname || "").toLowerCase().replace(/\/+$/, "");
-    const m = normalized.match(/^\/admin\/users\/(-?\d+)$/);
-    return m ? Number(m[1]) : null;
-  }
-
-  function syncSectionPath(section, replace = false, adminSection = null, adminUserId = null) {
-    if (window.location.protocol === "file:") return;
-    const normalized = normalizeSection(section);
-    let targetPath = APP_SECTION_PATHS[normalized] || APP_SECTION_PATHS.home;
-    if (normalized === "admin") {
-      const adm = adminSection || adminSectionFromPath(window.location.pathname) || "stats";
-      const uid = adminUserId ?? (adm === "users" ? adminUserIdFromPath(window.location.pathname) : null);
-      targetPath = adm === "users" && uid ? `/admin/users/${uid}` : `/admin/${adm}`;
-    }
-    if (window.location.pathname === targetPath) return;
-    const nextUrl = `${targetPath}${window.location.search}${window.location.hash}`;
-    window.history[replace ? "replaceState" : "pushState"](null, "", nextUrl);
-  }
 
   function resolveTelegramWebApp() {
-    return window.Telegram?.WebApp || null;
+    return telegramSdk.tg;
   }
 
   function refreshTelegramWebApp() {
-    tg = resolveTelegramWebApp();
-    if (tg) telegramSdkStatus = "ready";
-    telegramMiniAppInitData = tg?.initData || readTelegramMiniAppInitDataFromLocation();
-    if (telegramMiniAppInitData) telegramLaunchParamsDetected = true;
+    tg = telegramSdk.refresh();
+    telegramMiniAppInitData = telegramSdk.initData;
     return tg;
   }
 
   function readTelegramMiniAppInitDataFromLocation() {
-    const queryText = window.location.search.replace(/^\?/, "");
-    const hashText = window.location.hash.replace(/^#/, "");
-    for (const text of [queryText, hashText]) {
-      if (!text) continue;
-      const params = new URLSearchParams(text);
-      const initData = params.get("tgWebAppData");
-      if (initData) return initData;
-    }
-    return "";
+    return telegramSdk.readInitDataFromLocation();
   }
 
   function hasTelegramLaunchParams() {
-    refreshTelegramWebApp();
-    if (telegramLaunchParamsDetected || telegramMiniAppInitData) {
-      telegramLaunchParamsDetected = true;
-      return true;
-    }
-    const queryText = window.location.search.replace(/^\?/, "");
-    const hashText = window.location.hash.replace(/^#/, "");
-    const detected = [queryText, hashText].some((text) => {
-      if (!text) return false;
-      const params = new URLSearchParams(text);
-      return ["tgWebAppData", "tgWebAppVersion", "tgWebAppPlatform", "tgWebAppThemeParams"].some((key) =>
-        params.has(key),
-      );
-    });
-    if (detected) telegramLaunchParamsDetected = true;
-    return detected;
+    return telegramSdk.hasLaunchParams();
   }
 
   function loadTelegramSdk(timeoutMs = TELEGRAM_SDK_BOOT_TIMEOUT_MS) {
-    if (refreshTelegramWebApp()) return Promise.resolve(tg);
-    if (telegramSdkPromise) return telegramSdkPromise;
-    if (typeof document === "undefined") return Promise.resolve(null);
-
-    telegramSdkStatus = "loading";
-    telegramSdkPromise = new Promise((resolve) => {
-      const existingScript = document.querySelector("script[data-rw-telegram-web-app-sdk]");
-      const script = existingScript || document.createElement("script");
-      let resolved = false;
-      let timeoutId = null;
-
-      const resolveOnce = (value) => {
-        if (resolved) return;
-        resolved = true;
-        if (timeoutId) window.clearTimeout(timeoutId);
-        resolve(value);
-      };
-
-      const refreshFromScript = () => {
-        tg = resolveTelegramWebApp();
-        telegramSdkStatus = tg ? "ready" : "unavailable";
-        return tg;
-      };
-
-      script.addEventListener("load", () => resolveOnce(refreshFromScript()), { once: true });
-      script.addEventListener(
-        "error",
-        () => {
-          telegramSdkStatus = "unavailable";
-          resolveOnce(null);
-        },
-        { once: true },
-      );
-
-      if (!existingScript) {
-        script.src = TELEGRAM_WEBAPP_SCRIPT_URL;
-        script.async = true;
-        script.defer = true;
-        script.dataset.rwTelegramWebAppSdk = "1";
-        document.head.appendChild(script);
-      }
-
-      timeoutId = window.setTimeout(() => {
-        if (!tg) telegramSdkStatus = "unavailable";
-        resolveOnce(tg);
-      }, timeoutMs);
-    }).finally(() => {
-      telegramSdkPromise = null;
+    return telegramSdk.load(timeoutMs).then((value) => {
+      tg = value;
+      telegramMiniAppInitData = telegramSdk.initData;
+      return value;
     });
-    return telegramSdkPromise;
   }
 
   async function ensureTelegramSdkForAction() {
-    if (refreshTelegramWebApp()) return tg;
-    return await loadTelegramSdk(TELEGRAM_SDK_ACTION_TIMEOUT_MS);
+    tg = await telegramSdk.ensureForAction();
+    telegramMiniAppInitData = telegramSdk.initData;
+    return tg;
   }
 
   function createTelegramMiniAppAuthTimeout() {
-    const controller = typeof AbortController === "undefined" ? null : new AbortController();
-    let timedOut = false;
-    let timeoutId = null;
-    let timeoutPromise = new Promise(() => {});
-
-    if (typeof window !== "undefined") {
-      timeoutPromise = new Promise((_, reject) => {
-        timeoutId = window.setTimeout(() => {
-          timedOut = true;
-          controller?.abort();
-          const error = new Error("telegram_mini_app_auth_timeout");
-          error.name = "AbortError";
-          reject(error);
-        }, TELEGRAM_MINI_APP_AUTH_TIMEOUT_MS);
-      });
-    }
-
-    return {
-      promise: timeoutPromise,
-      get signal() {
-        return controller?.signal;
-      },
-      get timedOut() {
-        return timedOut;
-      },
-      clear() {
-        if (timeoutId) window.clearTimeout(timeoutId);
-        timeoutId = null;
-      },
-    };
+    return telegramSdk.createMiniAppAuthTimeout();
   }
 
   function shouldWaitForTelegramSdkBeforeOAuth() {
@@ -1033,266 +551,36 @@
   }
 
   async function api(path, options = {}) {
-    if (MOCK) return mockApi(path, options);
-    const method = String(options.method || "GET").toUpperCase();
-    const headers = { ...(options.headers || {}) };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const csrf = csrfToken || readCookie("rw_webapp_csrf") || "";
-    if (csrf && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-      headers["X-CSRF-Token"] = csrf;
-    }
-    if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-    const response = await fetch(`${CFG.apiBase}${path}`, { ...options, headers });
-    const payload = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      clearToken();
-      showLogin();
-    }
-    return payload;
+    return apiClient.api(path, options);
   }
 
   async function publicApi(path, payload = {}, options = {}) {
-    if (MOCK) {
-      return mockApi(path, { method: "POST", body: JSON.stringify(payload) });
-    }
-    const response = await fetch(`${CFG.apiBase}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: options.signal,
-    });
-    return response.json();
-  }
-
-  async function mockApi(path, options = {}) {
-    await new Promise((resolve) => window.setTimeout(resolve, 120));
-    const cleanPath = String(path || "").split("?")[0];
-    const adminUsers = [
-      {
-        user_id: 100200300,
-        telegram_id: 100200300,
-        username: "anna_ops",
-        first_name: "Анна",
-        last_name: "Смирнова",
-        email: "anna@example.com",
-        telegram_photo_url: "",
-        registration_date: "2026-04-24T10:20:00Z",
-        is_banned: false,
-      },
-      {
-        user_id: 100200301,
-        telegram_id: 87543123,
-        username: "client_pro",
-        first_name: "Максим",
-        last_name: "Котов",
-        email: "",
-        telegram_photo_url: "",
-        registration_date: "2026-04-26T08:15:00Z",
-        is_banned: false,
-      },
-      {
-        user_id: 100200302,
-        telegram_id: 88440011,
-        username: "",
-        first_name: "Daria",
-        last_name: "",
-        email: "daria@example.com",
-        telegram_photo_url: "",
-        registration_date: "2026-04-29T16:45:00Z",
-        is_banned: true,
-      },
-    ];
-    if (path === "/admin/stats") {
-      return {
-        ok: true,
-        users: { total_users: 248, active_subscriptions: 172, banned_users: 3 },
-        financial: { total_revenue: 186240, successful_payments_count: 934 },
-        panel_sync: { status: "success", last_sync_time: new Date().toISOString(), users_processed: 172, subscriptions_synced: 168 },
-        recent_payments: [
-          { payment_id: 1, user_id: 100200300, user_label: "anna_ops", amount: 790, currency: "RUB", provider: "yookassa", status: "succeeded", created_at: new Date().toISOString() },
-        ],
-      };
-    }
-    if (cleanPath === "/admin/users") return { ok: true, users: adminUsers, total: adminUsers.length, page: 0, page_size: 25 };
-    if (cleanPath.startsWith("/admin/users/")) {
-      const id = Number(cleanPath.split("/")[3]);
-      const user = adminUsers.find((item) => item.user_id === id) || adminUsers[0];
-      return {
-        ok: true,
-        user,
-        active_subscription: {
-          subscription_id: 10,
-          end_date: "2026-06-08T12:00:00Z",
-          tariff_key: "standard",
-          auto_renew_enabled: true,
-          provider: "yookassa",
-        },
-        subscriptions: [
-          { subscription_id: 10, end_date: "2026-06-08T12:00:00Z", tariff_key: "standard", is_active: true, status_from_panel: "ACTIVE" },
-          { subscription_id: 9, end_date: "2026-05-08T12:00:00Z", tariff_key: "standard", is_active: false, status_from_panel: "EXPIRED" },
-        ],
-        total_paid: 2380,
-        recent_payments: [
-          { payment_id: 12, amount: 790, currency: "RUB", provider: "yookassa", status: "succeeded", created_at: "2026-05-01T14:15:00Z" },
-          { payment_id: 11, amount: 790, currency: "RUB", provider: "stars", status: "succeeded", created_at: "2026-04-01T14:15:00Z" },
-        ],
-        log_count: 18,
-        subscription_url: "https://panel.example.com/sub/aBcDeFgHiJkLmNoP",
-        referral: {
-          code: "ABCD1234",
-          bot_link: "https://t.me/preview_bot?start=ref_uABCD1234",
-          webapp_link: "https://app.example.com/?ref=uABCD1234",
-        },
-      };
-    }
-    if (path === "/admin/tariffs") {
-      return {
-        ok: true,
-        path: "config/tariffs.json",
-        catalog: {
-          default_tariff: "standard",
-          topup_packages_default: { rub: [{ gb: 10, price: 99 }], stars: [] },
-          tariffs: [
-            {
-              key: "standard",
-              names: { ru: "Стандарт", en: "Standard" },
-              descriptions: { ru: "Базовый набор серверов" },
-              squad_uuids: ["db786ee8-816b-4760-80aa-1fc7a3669ff2"],
-              billing_model: "period",
-              monthly_gb: 500,
-              prices_rub: { "1": 150, "3": 400 },
-              prices_stars: { "1": 0, "3": 0 },
-              enabled_periods: [1, 3],
-              enabled: true,
-            },
-          ],
-        },
-      };
-    }
-    if (path === "/admin/settings") return { ok: true, sections: [] };
-    if (cleanPath.startsWith("/admin/")) return { ok: true, payments: [], promos: [], logs: [], campaigns: [], total: 0 };
-    if (path === "/me") return structuredCloneSafe(DEV_MOCK.data);
-    if (path === "/auth/email/request") return { ok: true };
-    if (path === "/auth/email/verify" || path === "/auth/email/magic") {
-      return { ok: true, token: "local-preview", csrf_token: "local-preview-csrf" };
-    }
-    if (path === "/auth/token") {
-      return { ok: true, token: "local-preview", csrf_token: "local-preview-csrf" };
-    }
-    if (path === "/promo/apply") return { ok: true, end_date_text: "31.05.2026" };
-    if (path === "/devices") return structuredCloneSafe(DEV_MOCK.data.devices);
-    if (path === "/devices/topup-options") return structuredCloneSafe(DEV_MOCK.data.device_topup_options || { ok: true, plans: [] });
-    if (cleanPath === "/tariffs/topup-options") {
-      const kind = new URLSearchParams(String(path || "").split("?")[1] || "").get("kind") || "regular";
-      const payload = structuredCloneSafe(DEV_MOCK.data.topup_options || { ok: true, plans: [] });
-      payload.topup_kind = kind;
-      payload.plans = (payload.plans || []).filter((plan) => kind === "premium" ? plan.sale_mode === "premium_topup" : plan.sale_mode !== "premium_topup");
-      return payload;
-    }
-    if (path === "/tariffs/change-options") return structuredCloneSafe(DEV_MOCK.data.tariff_change_options || { ok: true, targets: [] });
-    if (path === "/devices/disconnect" && String(options.method || "").toUpperCase() === "POST") {
-      let payload = {};
-      try {
-        payload = options?.body ? JSON.parse(String(options.body)) : {};
-      } catch {}
-      DEV_MOCK.data.devices.devices = DEV_MOCK.data.devices.devices.filter((device) => device.token !== payload.token);
-      DEV_MOCK.data.devices.current_devices = DEV_MOCK.data.devices.devices.length;
-      return { ok: true };
-    }
-    if (path === "/trial/activate" && String(options.method || "").toUpperCase() === "POST") {
-      DEV_MOCK.data.subscription = {
-        ...DEV_MOCK.data.subscription,
-        active: true,
-        status: "TRIAL",
-        remaining_text: "5 д. 0 ч.",
-        end_date_text: "05.05.2026 12:00",
-        days_left: 5,
-        traffic_limit: "10 GB",
-        traffic_limit_bytes: 10737418240,
-        traffic_used: "0 B",
-        traffic_used_bytes: 0,
-      };
-      DEV_MOCK.data.settings.trial_available = false;
-      return { ok: true, activated: true, end_date_text: "05.05.2026 12:00" };
-    }
-    if (path === "/auth/logout") return { ok: true };
-    if (path === "/account/language" && String(options.method || "").toUpperCase() === "POST") {
-      let payload = {};
-      try {
-        payload = options?.body ? JSON.parse(String(options.body)) : {};
-      } catch {}
-      const language = normalizeLangCode(payload?.language || currentLang);
-      DEV_MOCK.data.user.language_code = language;
-      return { ok: true, language };
-    }
-    if (path === "/account/email/request" && String(options.method || "").toUpperCase() === "POST") {
-      return { ok: true };
-    }
-    if (path === "/account/email/verify" && String(options.method || "").toUpperCase() === "POST") {
-      return { ok: true, token: "local-preview", csrf_token: "local-preview-csrf" };
-    }
-    if (path === "/account/telegram/link" && String(options.method || "").toUpperCase() === "POST") {
-      return { ok: true, token: "local-preview", csrf_token: "local-preview-csrf" };
-    }
-    if (path === "/payments" && String(options.method || "").toUpperCase() === "POST") {
-      return {
-        ok: true,
-        action: "open_link",
-        payment_url: "https://example.com/payment-preview",
-        payment_id: 10001,
-      };
-    }
-    if (path === "/tariffs/change" && String(options.method || "").toUpperCase() === "POST") {
-      return { ok: true, tariff_key: "business" };
-    }
-    if (path === "/tariffs/change-payment" && String(options.method || "").toUpperCase() === "POST") {
-      return {
-        ok: true,
-        action: "open_link",
-        payment_url: "https://example.com/tariff-change-payment-preview",
-        payment_id: 10002,
-      };
-    }
-    return { ok: false, error: "not_found" };
-  }
-
-  function readCookie(name) {
-    const prefix = `${name}=`;
-    const cookie = document.cookie.split("; ").find((part) => part.startsWith(prefix));
-    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
+    return apiClient.publicApi(path, payload, options);
   }
 
   function setToken(nextToken, nextCsrf = "") {
     clearManualLogoutFlag();
     token = nextToken || "";
-    csrfToken = nextCsrf || readCookie("rw_webapp_csrf") || "";
-    if (token && !MOCK) localStorage.setItem("rw_webapp_token", token);
+    csrfToken = nextCsrf || readCookie(CSRF_COOKIE_NAME) || "";
+    if (token && !MOCK) persistToken(token);
   }
 
   function clearToken() {
     token = "";
     csrfToken = "";
-    localStorage.removeItem("rw_webapp_token");
+    clearStoredToken();
   }
 
   function markManualLogout() {
-    try {
-      localStorage.setItem(MANUAL_LOGOUT_FLAG_KEY, "1");
-    } catch {}
+    markManualLogoutInStorage(MANUAL_LOGOUT_FLAG_KEY);
   }
 
   function clearManualLogoutFlag() {
-    try {
-      localStorage.removeItem(MANUAL_LOGOUT_FLAG_KEY);
-    } catch {}
+    clearManualLogoutFlagInStorage(MANUAL_LOGOUT_FLAG_KEY);
   }
 
   function isManuallyLoggedOut() {
-    try {
-      return localStorage.getItem(MANUAL_LOGOUT_FLAG_KEY) === "1";
-    } catch {
-      return false;
-    }
+    return readManualLogoutFlag(MANUAL_LOGOUT_FLAG_KEY);
   }
 
   function readReferralParam() {
@@ -1300,11 +588,7 @@
     const fromQuery = params.get("ref") || params.get("start") || params.get("start_param") || "";
     const fromTelegram = tg?.initDataUnsafe?.start_param || "";
     const value = String(fromTelegram || fromQuery || "").trim();
-    if (value) {
-      localStorage.setItem("rw_webapp_referral", value);
-      return value;
-    }
-    return localStorage.getItem("rw_webapp_referral") || "";
+    return value ? rememberReferral(value) : readReferral();
   }
 
   function readTelegramAuthStatus() {
@@ -3024,1049 +2308,207 @@
         {/if}
 
         {#if screen === "home"}
-          <main class="home-layout">
-            <div class="login-brand home-brand">
-              <BrandMark class="brand-mark-xl" logoUrl={CFG.logoUrl} emoji={brandEmoji} />
-              <h1>{brandTitle}</h1>
-            </div>
-
-            <div class="home-bottom">
-              <Card class={`status-card${subscription.active ? "" : " status-card-inactive"}`}>
-                {#if subscription.active}
-                  <div class="sub-status">
-                    <CheckCircle2 size={23} />
-                    <div>
-                      <h2>{trafficMode ? t("wa_home_access_active") : t("wa_home_subscription_active")} | {activeSubscriptionTermLabel(subscription)}</h2>
-                      {#if hasActiveTariffSubscription && hasMultipleTariffs && currentTariffName}
-                        <p class="current-tariff-line">{t("wa_current_tariff", { tariff: currentTariffName })}</p>
-                      {/if}
-                      <p>{subscription.end_date_text ? t("wa_until_date", { date: subscription.end_date_text }) : subscription.remaining_text}</p>
-                    </div>
-                  </div>
-                {:else}
-                  <div class="sub-status sub-status-inactive">
-                    <CircleX size={23} />
-                    <h2>{t("wa_home_subscription_inactive")}</h2>
-                  </div>
-                {/if}
-              </Card>
-
-              {#if subscription.active}
-                <Card class={canOpenRegularTopupModal ? "traffic-card-clickable" : ""}>
-                  {#if canOpenRegularTopupModal}
-                    <button class="card-click-target" type="button" on:click={() => openTopupModal("regular")} aria-label={t("wa_topup_traffic")}></button>
-                  {/if}
-                  <div class="traffic-top">
-                    <span>{t("wa_home_traffic_used")}</span>
-                    <strong>{trafficLabel(subscription)}</strong>
-                  </div>
-                  <div class="progress">
-                    <span style={`width: ${trafficPercent(subscription)}%`}></span>
-                  </div>
-                  <div class="traffic-meta">
-                    <span>{trafficResetLabel(subscription)}</span>
-                    <span class="traffic-percent">{trafficPercent(subscription)}%</span>
-                  </div>
-                </Card>
-                {#if Number(subscription?.premium_limit_bytes || 0) > 0}
-                  <Card class={`${canOpenPremiumTopupModal ? "traffic-card-clickable " : ""}premium-traffic-card${subscription?.premium_is_limited ? " premium-traffic-card-limited" : ""}`}>
-                    {#if canOpenPremiumTopupModal}
-                      <button class="card-click-target" type="button" on:click={() => openTopupModal("premium")} aria-label={premiumTitle(subscription)}></button>
-                    {/if}
-                    <div class="traffic-top">
-                      <span>{premiumTitle(subscription)}</span>
-                      <strong>{premiumTrafficLabel(subscription)}</strong>
-                    </div>
-                    <div class="progress premium-progress">
-                      <span style={`width: ${premiumTrafficPercent(subscription)}%`}></span>
-                    </div>
-                    <div class="traffic-meta premium-traffic-meta">
-                      {#if premiumServerLabels(subscription).length}
-                        <details class="premium-server-dropdown">
-                          <summary>
-                            <span>{subscription?.premium_is_limited ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен") : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span>
-                            <ChevronsUpDown size={13} />
-                          </summary>
-                          <div class="premium-server-list premium-server-list-dropdown">
-                            <small>{t("wa_premium_servers_limited", {}, "Отдельный лимит действует на")}</small>
-                            <div>
-                              {#each premiumServerLabels(subscription).slice(0, 8) as label}
-                                <span>{label}</span>
-                              {/each}
-                            </div>
-                          </div>
-                        </details>
-                      {:else}
-                        <span>{subscription?.premium_is_limited ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен") : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span>
-                      {/if}
-                      <span class="traffic-percent">{premiumTrafficPercent(subscription)}%</span>
-                    </div>
-                  </Card>
-                {/if}
-              {:else if appSettings?.trial_enabled && appSettings?.trial_available}
-                <Card class="trial-card">
-                  <div class="trial-card-head">
-                    <Gift size={22} />
-                    <span>
-                      <strong>{t("wa_trial_title")}</strong>
-                      <small>{t("wa_trial_details", { days: Number(appSettings?.trial_duration_days || 0), traffic: trialTrafficLabel() })}</small>
-                    </span>
-                  </div>
-                </Card>
-              {/if}
-
-              <div class="action-stack">
-                {#if subscription.active}
-                  <Button class="wide" onclick={openConnectLink}>
-                    <Download size={18} />
-                    {t("wa_install_and_configure")}
-                  </Button>
-                {/if}
-                <Button class="wide" variant={subscription.active ? "secondary" : "default"} onclick={openPaymentModal}>
-                  {#if subscription.active}
-                    <RefreshCw size={18} />
-                  {:else if trafficMode}
-                    <Database size={18} />
-                  {/if}
-                  {primaryPayActionLabel()}
-                </Button>
-                {#if !subscription.active && appSettings?.trial_enabled && appSettings?.trial_available}
-                  <Button class="wide" variant="secondary" onclick={activateTrial} disabled={trialBusy}>
-                    <Gift size={18} />
-                    {t("wa_activate_trial")}
-                  </Button>
-                {/if}
-                {#if canChangeTariff}
-                  <Button class="wide" variant="secondary" onclick={openTariffChangeModal}>
-                    <RefreshCw size={18} />
-                    {t("wa_change_tariff")}
-                  </Button>
-                {/if}
-                {#if canShowTopupButton}
-                  <Button class="wide" variant="secondary" onclick={() => openTopupModal(canOpenRegularTopupModal ? "regular" : "premium")}>
-                    <Database size={18} />
-                    {t("wa_topup_traffic")}
-                  </Button>
-                {/if}
-              </div>
-            </div>
-          </main>
+          <HomeScreen
+            {CFG}
+            {appSettings}
+            {brandEmoji}
+            {brandTitle}
+            {canChangeTariff}
+            {canOpenPremiumTopupModal}
+            {canOpenRegularTopupModal}
+            {canShowTopupButton}
+            {currentTariffName}
+            {hasActiveTariffSubscription}
+            {hasMultipleTariffs}
+            {subscription}
+            {trafficMode}
+            {trialBusy}
+            {activeSubscriptionTermLabel}
+            {activateTrial}
+            {openConnectLink}
+            {openPaymentModal}
+            {openTariffChangeModal}
+            {openTopupModal}
+            {premiumServerLabels}
+            {premiumTitle}
+            {premiumTrafficLabel}
+            {premiumTrafficPercent}
+            {primaryPayActionLabel}
+            {t}
+            {trafficLabel}
+            {trafficPercent}
+            {trafficResetLabel}
+            {trialTrafficLabel}
+          />
         {:else if screen === "invite"}
-          <main class="content with-nav">
-            <Card class="bonus-card">
-              <div class="bonus-card-head">
-                <Gift size={42} />
-                <div>
-                  <strong>{t("wa_referral_bonus_overview_title")}</strong>
-                  {#if referralOneBonusPerReferee}
-                    <p>{t("wa_referral_bonus_once_note")}</p>
-                  {/if}
-                </div>
-              </div>
-              <div>
-                <h3 class="card-heading">{t("wa_referral_link_title")}</h3>
-                <div class="copy-row referral-copy-row">
-                  <code>{referral.webapp_link || referral.bot_link || t("wa_link_unavailable")}</code>
-                  <Button class="referral-copy-button" onclick={() => copyText(referral.webapp_link || referral.bot_link, t("wa_link_copied"))}>
-                    {t("wa_copy")}
-                    <Copy size={17} />
-                  </Button>
-                </div>
-              </div>
-              {#if referralBonusDetails.length || referralWelcomeBonusDays > 0}
-                <div class="referral-bonus-list">
-                  {#if referralWelcomeBonusDays > 0}
-                    <div class="referral-bonus-row">
-                      <strong>{t("wa_referral_bonus_registration_title")}</strong>
-                      <small>{t("wa_referral_bonus_friend_days", { days: referralWelcomeBonusDays })}</small>
-                    </div>
-                  {/if}
-                  {#if referralBonusDetails.length}
-                    <p class="referral-bonus-intro">{t("wa_referral_bonus_paid_intro")}</p>
-                  {/if}
-                  {#each referralBonusDetails as bonus, index (bonus.months || index)}
-                    <div class="referral-bonus-row">
-                      <strong>{bonus.title || `${bonus.months || "?"}`}</strong>
-                      <small>{t("wa_referral_bonus_you_days", { days: Number(bonus.inviter_days || 0) })}</small>
-                      <small>{t("wa_referral_bonus_friend_days", { days: Number(bonus.friend_days || 0) })}</small>
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <p class="status-line">{t("wa_referral_bonus_not_configured")}</p>
-              {/if}
-            </Card>
-            <Card>
-              <h3 class="card-heading card-heading-accent promo-heading">
-                <Ticket size={18} />
-                <span>{t("wa_activate_promo_title")}</span>
-              </h3>
-              <div class="copy-row">
-                <div class="field-error-wrap">
-                  <Tooltip.Root open={Boolean(promoFieldError)}>
-                    <Input
-                      bind:value={promoCode}
-                      placeholder="PROMO2026"
-                      class={promoFieldError ? "input-error" : ""}
-                      on:input={() => (promoFieldError = "")}
-                    />
-                    {#if promoFieldError}
-                      <Tooltip.Trigger class="field-error-trigger" aria-label={promoFieldError}>
-                        <span class="field-error-icon" aria-hidden="true"><TriangleAlert size={18} /></span>
-                      </Tooltip.Trigger>
-                    {/if}
-                    {#if promoFieldError}
-                      <Tooltip.Portal>
-                        <Tooltip.Content class="field-error-tooltip">{promoFieldError}</Tooltip.Content>
-                      </Tooltip.Portal>
-                    {/if}
-                  </Tooltip.Root>
-                </div>
-                <Button variant="outline" onclick={applyPromo} disabled={promoBusy}>
-                  {t("wa_activate")}
-                </Button>
-              </div>
-              {#if promoStatus && !(promoIsError && promoFieldError)}
-                <p class:error={promoIsError} class="status-line">{promoStatus}</p>
-              {/if}
-            </Card>
-          </main>
+          <InviteScreen
+            {referral}
+            {referralBonusDetails}
+            {referralOneBonusPerReferee}
+            {referralWelcomeBonusDays}
+            bind:promoCode
+            bind:promoFieldError
+            {promoBusy}
+            {promoIsError}
+            {promoStatus}
+            {applyPromo}
+            clearPromoFieldError={() => (promoFieldError = "")}
+            {copyText}
+            {t}
+          />
         {:else if screen === "devices"}
-          <main class="content with-nav">
-            <Card class="devices-summary-card">
-              <div class="devices-summary-head">
-                <Smartphone size={28} />
-                <span>
-                  <strong>{t("wa_devices_title")}</strong>
-                  <small>{devicesCountLabel()}</small>
-                </span>
-                <Button variant="icon" size="icon" onclick={() => loadDevices(true)} disabled={devicesBusy} aria-label={t("wa_devices_refresh")}>
-                  <RefreshCw size={18} />
-                </Button>
-              </div>
-              <div class="progress devices-progress">
-                <span style={`width: ${devicesPercent()}%`}></span>
-              </div>
-              {#if subscription?.active && subscription?.max_devices !== 0}
-                <Button variant="secondary" class="wide" onclick={openDeviceTopupModal}>
-                  <Plus size={17} />
-                  {t("wa_buy_hwid_devices")}
-                </Button>
-              {/if}
-            </Card>
-
-            {#if devicesBusy && !devicesLoaded}
-              <Card class="empty-card">{t("wa_devices_loading")}</Card>
-            {:else if devicesStatus}
-              <Card class="empty-card">
-                <p class:error={devicesIsError} class="status-line">{devicesStatus}</p>
-              </Card>
-            {:else if !devicesData?.devices?.length}
-              <Card class="empty-card devices-empty-card">
-                <Smartphone size={28} />
-                <span>{t("wa_devices_empty")}</span>
-                <small>{t("wa_devices_empty_hint", { max: devicesLimitLabel() })}</small>
-              </Card>
-            {:else}
-              <div class="devices-list">
-                {#each devicesData.devices as device (device.token || device.index)}
-                  <Card class="device-card">
-                    <div class="device-card-head">
-                      <div class="device-icon"><Smartphone size={20} /></div>
-                      <span>
-                        <strong>{device.display_name || t("wa_device_fallback_name", { index: device.index })}</strong>
-                        <small>{device.platform_label || t("wa_devices_platform_unknown")}</small>
-                      </span>
-                    </div>
-                    <div class="device-meta">
-                      {#if device.created_at_text}
-                        <div>
-                          <span>{t("wa_devices_connected_at")}</span>
-                          <strong>{device.created_at_text}</strong>
-                        </div>
-                      {/if}
-                      {#if device.hwid_short}
-                        <div>
-                          <span>HWID</span>
-                          <code>{device.hwid_short}</code>
-                        </div>
-                      {/if}
-                      {#if device.user_agent}
-                        <div class="device-user-agent">
-                          <span>User Agent</span>
-                          <small>{device.user_agent}</small>
-                        </div>
-                      {/if}
-                    </div>
-                    {#if device.can_disconnect}
-                      <Button variant="outline" class="wide device-disconnect-button" onclick={() => openDeviceDisconnectDialog(device)}>
-                        <CircleX size={17} />
-                        {t("wa_devices_disconnect")}
-                      </Button>
-                    {/if}
-                  </Card>
-                {/each}
-              </div>
-            {/if}
-          </main>
+          <DevicesScreen
+            {devicesBusy}
+            {devicesData}
+            {devicesIsError}
+            {devicesLoaded}
+            {devicesStatus}
+            {subscription}
+            {devicesCountLabel}
+            {devicesLimitLabel}
+            {devicesPercent}
+            {loadDevices}
+            {openDeviceDisconnectDialog}
+            {openDeviceTopupModal}
+            {t}
+          />
         {:else if screen === "settings"}
-          <main class="content with-nav">
-            <Card class="settings-profile">
-              <div class="settings-avatar">
-                {#if profileAvatarUrl}
-                  <img src={profileAvatarUrl} alt={t("wa_settings_avatar_alt")} loading="lazy" referrerpolicy="no-referrer" />
-                {:else}
-                  <UserRound size={30} />
-                {/if}
-              </div>
-              <div class="settings-profile-meta">
-                <strong>{telegramProfileName}</strong>
-                <small>{profileEmail}</small>
-                <small>{profileTelegramId}</small>
-              </div>
-            </Card>
-            {#if isAdmin}
-              <div class="settings-admin-block">
-                <div class="settings-divider" aria-hidden="true"></div>
-                <button class="settings-row settings-row-admin" type="button" on:click={openAdminPanel}>
-                  <Shield size={21} />
-                  <span>
-                    <strong>Админ-панель</strong>
-                    <small>Управление приложением</small>
-                  </span>
-                  <ArrowRight size={17} />
-                </button>
-              </div>
-            {/if}
-            <div class="settings-links-block">
-              <div class="settings-divider" aria-hidden="true"></div>
-              {#if user?.telegram_linked}
-                <div class="settings-row settings-row-linked">
-                  <CheckCircle2 size={21} />
-                  <span>
-                    <strong>{t("wa_settings_telegram_linked_title")}</strong>
-                    <small>{profileTelegramId}</small>
-                  </span>
-                </div>
-              {:else}
-                <Button
-                  variant="telegram"
-                  class="wide settings-telegram-link-btn attention-wrap"
-                  onclick={linkTelegramAccount}
-                  disabled={linkTelegramBusy}
-                >
-                  <span class="attention-dot" aria-hidden="true"></span>
-                  <Send size={18} />
-                  {t("wa_settings_link_telegram_action")}
-                </Button>
-              {/if}
-              {#if user?.email}
-                <div class="settings-row settings-row-linked">
-                  <CheckCircle2 size={21} />
-                  <span>
-                    <strong>{t("wa_settings_email_linked_title")}</strong>
-                    <small>{user?.email}</small>
-                  </span>
-                </div>
-              {:else}
-                <button class="settings-row attention-wrap" type="button" on:click={openLinkEmailDialog} disabled={linkEmailBusy}>
-                  <span class="attention-dot" aria-hidden="true"></span>
-                  <Mail size={21} />
-                  <span>
-                    <strong>{t("wa_settings_link_email_action")}</strong>
-                    <small>{emailLinkStatus}</small>
-                  </span>
-                  <ArrowRight size={17} />
-                </button>
-              {/if}
-              <div class="settings-divider" aria-hidden="true"></div>
-            </div>
-            {#if languageMenuOpen || languageClickGuard}
-              <button
-                class="language-select-guard"
-                class:language-select-guard--armed={languageClickGuardArmed}
-                type="button"
-                aria-label={t("wa_close")}
-                on:pointerdown|preventDefault|stopPropagation={() => languageClickGuardArmed && setLanguageMenuOpen(false)}
-                on:click|preventDefault|stopPropagation={() => languageClickGuardArmed && setLanguageMenuOpen(false)}
-              ></button>
-            {/if}
-            <div class="settings-list" class:settings-list--language-open={languageMenuOpen}>
-              <div class="settings-row settings-row-language">
-                <Globe2 size={21} />
-                <Select.Root
-                  type="single"
-                  bind:open={languageMenuOpen}
-                  value={currentLang}
-                  items={languageOptions}
-                  disabled={languageBusy}
-                  onOpenChange={setLanguageMenuOpen}
-                  onValueChange={updateAccountLanguage}
-                >
-                  <Select.Trigger class="language-select-trigger" aria-label={t("wa_settings_language")}>
-                    <span class="language-select-copy">
-                      <strong>{t("wa_settings_language")}</strong>
-                      <small class="language-select-current">
-                        <span class="emoji-flag" aria-hidden="true">{currentLanguageOption?.flag || "🏳️"}</span>
-                        {currentLanguageOption?.label || userLanguage}
-                      </small>
-                    </span>
-                    <ChevronsUpDown size={16} />
-                  </Select.Trigger>
-                  <Select.Content class="language-select-content" side="bottom" align="end" sideOffset={6}>
-                    <Select.Viewport class="language-select-viewport">
-                      {#each languageOptions as option (option.value)}
-                        <Select.Item value={option.value} label={option.label} class="language-select-item">
-                          <span class="language-select-item-main">
-                            <span class="emoji-flag" aria-hidden="true">{option.flag}</span>
-                            <span>{option.label}</span>
-                          </span>
-                          <Check size={15} class="language-select-item-check" />
-                        </Select.Item>
-                      {/each}
-                    </Select.Viewport>
-                  </Select.Content>
-                </Select.Root>
-              </div>
-              {#if supportUrl}
-                <button class="settings-row settings-row-support" type="button" on:click={() => openExternalLink(supportUrl)}>
-                  <Send size={21} />
-                  <span><strong>{t("menu_support_button")}</strong></span>
-                  <ArrowRight size={17} />
-                </button>
-              {/if}
-              {#if userAgreementUrl}
-                <button class="settings-row settings-row-policy" type="button" on:click={() => openExternalLink(userAgreementUrl)}>
-                  <FileText size={21} />
-                  <span><strong>{t("wa_settings_user_agreement")}</strong></span>
-                  <ArrowRight size={17} />
-                </button>
-              {/if}
-              {#if privacyPolicyUrl}
-                <button class="settings-row settings-row-policy" type="button" on:click={() => openExternalLink(privacyPolicyUrl)}>
-                  <Shield size={21} />
-                  <span><strong>{t("wa_settings_privacy_policy")}</strong></span>
-                  <ArrowRight size={17} />
-                </button>
-              {/if}
-              <button class="settings-row settings-row-logout" type="button" on:click={logout}>
-                <UserRound size={21} />
-                <span><strong>{t("wa_logout")}</strong><small>{t("wa_end_session")}</small></span>
-                <ArrowRight size={17} />
-              </button>
-            </div>
-          </main>
+          <SettingsScreen
+            {currentLang}
+            {currentLanguageOption}
+            {emailLinkStatus}
+            {isAdmin}
+            {languageBusy}
+            {languageClickGuard}
+            {languageClickGuardArmed}
+            bind:languageMenuOpen
+            {languageOptions}
+            {linkEmailBusy}
+            {linkTelegramBusy}
+            {privacyPolicyUrl}
+            {profileAvatarUrl}
+            {profileEmail}
+            {profileTelegramId}
+            {supportUrl}
+            {telegramProfileName}
+            {user}
+            {userAgreementUrl}
+            {userLanguage}
+            {linkTelegramAccount}
+            {logout}
+            {openAdminPanel}
+            {openExternalLink}
+            {openLinkEmailDialog}
+            {setLanguageMenuOpen}
+            {t}
+            {updateAccountLanguage}
+          />
         {/if}
 
         {#if screen === "home" || screen === "invite" || screen === "devices" || screen === "settings"}
-          <nav class:bottom-nav-devices={devicesEnabled} class="bottom-nav" aria-label={t("wa_navigation")}>
-            <div class="rail-brand" aria-hidden="true">
-              <BrandMark logoUrl={CFG.logoUrl} emoji={brandEmoji} />
-              <strong>{brandTitle}</strong>
-            </div>
-            <button class:active={activeTab === "home"} type="button" on:click={goHome}>
-              <Home size={21} />
-              <span>{t("wa_nav_home")}</span>
-            </button>
-            <button class:active={activeTab === "invite"} type="button" on:click={goInvite}>
-              <Gift size={21} />
-              <span>{t("wa_nav_bonuses")}</span>
-            </button>
-            {#if devicesEnabled}
-              <button class:active={activeTab === "devices"} type="button" on:click={goDevices}>
-                <Smartphone size={21} />
-                <span>{t("wa_nav_devices")}</span>
-              </button>
-            {/if}
-            <button class:active={activeTab === "settings"} class="attention-wrap" type="button" on:click={goSettings}>
-              {#if hasUnlinkedIdentity}
-                <span class="attention-dot nav-attention-dot" aria-hidden="true"></span>
-              {/if}
-              <SettingsIcon size={21} />
-              <span>{t("wa_nav_settings")}</span>
-            </button>
-            {#if isAdmin}
-              <button class="rail-admin-entry" type="button" on:click={openAdminPanel}>
-                <Shield size={21} />
-                <span>Админ-панель</span>
-              </button>
-            {/if}
-          </nav>
+          <BottomNav
+            {activeTab}
+            {brandTitle}
+            {devicesEnabled}
+            {hasUnlinkedIdentity}
+            {isAdmin}
+            logoEmoji={brandEmoji}
+            logoUrl={CFG.logoUrl}
+            onAdmin={openAdminPanel}
+            onDevices={goDevices}
+            onHome={goHome}
+            onInvite={goInvite}
+            onSettings={goSettings}
+            {t}
+          />
         {/if}
       </div>
 
-      <Dialog
-        open={paymentModalOpen}
-        title={paymentTitle()}
-        description={paymentDescription()}
-        closeLabel={t("wa_close")}
-        onclose={closePaymentModal}
-        class="payment-dialog-card"
-      >
-        <div class="payment-dialog-body">
-          {#if tariffMode && !singleTariffMode && paymentStep === "tariff"}
-            {#if tariffCatalog.length}
-              <div class="option-list tariff-list">
-                {#each tariffCatalog as tariff}
-                  <button
-                    class:active={selectedTariffKey === tariff.key}
-                    class="option-row tariff-row"
-                    type="button"
-                    on:click={() => selectTariff(tariff)}
-                  >
-                    <span class="option-row-main">
-                      <strong>{tariff.title}</strong>
-                      <small>{tariff.description || t("wa_tariff_no_description")}</small>
-                    </span>
-                    <span class="option-row-meta">
-                      <em>{tariffLimitLabel(tariff)}</em>
-                      {#if selectedTariffKey === tariff.key}
-                        <CheckCircle2 size={18} />
-                      {:else}
-                        <ArrowRight size={17} />
-                      {/if}
-                    </span>
-                  </button>
-                {/each}
-              </div>
-              <Button class="wide bottom-action payment-submit-button" onclick={continueWithSelectedTariff} disabled={!selectedTariffKey}>
-                {t("wa_next")}
-                <ArrowRight size={17} />
-              </Button>
-            {:else}
-              <Card class="empty-card">{t("wa_no_tariff_change_options")}</Card>
-            {/if}
-          {:else}
-            {#if tariffMode}
-              {#if !singleTariffMode && !(subscription?.active && subscription?.tariff_key && tariffCatalog.some((t) => t.key === subscription.tariff_key))}
-                <button class="back-inline" type="button" on:click={backToTariffList}>
-                  <ArrowLeft size={16} />
-                  {t("wa_back_to_tariffs")}
-                </button>
-              {/if}
-              {#if hasMultipleTariffs && selectedTariff}
-                <p class="tariff-step-caption">{t("wa_selected_tariff", { tariff: selectedTariff.title })}</p>
-              {/if}
-            {/if}
-            {#if selectedTariffPlans.length}
-              <div class="period-grid period-grid-two-columns">
-                {#each selectedTariffPlans as plan}
-                  <button
-                    class:active={planKey(selectedPlan) === planKey(plan)}
-                    class="period-card"
-                    type="button"
-                    on:click={() => (selectedPlan = plan)}
-                  >
-                    <strong>{planSubtitle(plan) || planDisplayTitle(plan)}</strong>
-                    <span>{priceLabel(plan)}</span>
-                    {#if planUnitHint(plan)}
-                      <small>{planUnitHint(plan)}</small>
-                    {/if}
-                    {#if planKey(selectedPlan) === planKey(plan)}
-                      <CheckCircle2 size={18} />
-                    {/if}
-                  </button>
-                {/each}
-              </div>
-              <div class="payment-divider" aria-hidden="true"></div>
-              <div class="method-grid">
-                {#if methods.length}
-                  {#each methods as method}
-                    {@const meta = methodMeta(method)}
-                    <button
-                      class:active={selectedMethod === method.id}
-                      class="method-card"
-                      type="button"
-                      on:click={() => (selectedMethod = method.id)}
-                    >
-                      <span class="method-card-main">
-                        {#if meta.icon}
-                          <svelte:component this={meta.icon} size={19} />
-                        {/if}
-                        <strong>{meta.title}</strong>
-                      </span>
-                    </button>
-                  {/each}
-                {:else}
-                  <Card class="empty-card">{t("wa_payment_methods_not_configured")}</Card>
-                {/if}
-              </div>
-              <Button class="wide bottom-action payment-submit-button" onclick={createPayment} disabled={!selectedPlan || !methods.length || payBusy}>
-                {t("wa_pay")} {selectedPlan ? priceLabel(selectedPlan) : ""}
-                <LockKeyhole size={17} />
-              </Button>
-            {:else}
-              <Card class="empty-card">{t("wa_no_tariff_change_options")}</Card>
-            {/if}
-          {/if}
-          {#if !tariffMode}
-            <div class="period-grid period-grid-two-columns">
-              {#each plans as plan}
-                <button
-                  class:active={planKey(selectedPlan) === planKey(plan)}
-                  class="period-card"
-                  type="button"
-                  on:click={() => (selectedPlan = plan)}
-                >
-                  <strong>{planDisplayTitle(plan)}</strong>
-                  {#if planSubtitle(plan)}
-                    <em>{planSubtitle(plan)}</em>
-                  {/if}
-                  <span>{priceLabel(plan)}</span>
-                  {#if planUnitHint(plan)}
-                    <small>{planUnitHint(plan)}</small>
-                  {/if}
-                  {#if planKey(selectedPlan) === planKey(plan)}
-                    <CheckCircle2 size={18} />
-                  {/if}
-                </button>
-              {/each}
-            </div>
-            <div class="payment-divider" aria-hidden="true"></div>
-            <div class="method-grid">
-              {#if methods.length}
-                {#each methods as method}
-                  {@const meta = methodMeta(method)}
-                  <button
-                    class:active={selectedMethod === method.id}
-                    class="method-card"
-                    type="button"
-                    on:click={() => (selectedMethod = method.id)}
-                  >
-                    <span class="method-card-main">
-                      {#if meta.icon}
-                        <svelte:component this={meta.icon} size={19} />
-                      {/if}
-                      <strong>{meta.title}</strong>
-                    </span>
-                  </button>
-                {/each}
-              {:else}
-                <Card class="empty-card">{t("wa_payment_methods_not_configured")}</Card>
-              {/if}
-            </div>
-            <Button class="wide bottom-action payment-submit-button" onclick={createPayment} disabled={!selectedPlan || !methods.length || payBusy}>
-              {t("wa_pay")} {selectedPlan ? priceLabel(selectedPlan) : ""}
-              <LockKeyhole size={17} />
-            </Button>
-          {/if}
-        </div>
-      </Dialog>
+      <PaymentDialogs
+        bind:linkEmailCode
+        bind:linkEmailFieldError
+        bind:linkEmailValue
+        bind:paymentModalOpen
+        bind:paymentStep
+        bind:selectedMethod
+        bind:selectedPlan
+        bind:selectedTariffKey
+        {createPayment}
+        {deviceConfirmOpen}
+        {deviceDisconnectBusy}
+        {deviceToDisconnect}
+        {disconnectDevice}
+        {linkEmailBusy}
+        {linkEmailIsError}
+        {linkEmailOpen}
+        {linkEmailPending}
+        {linkEmailResendCooldown}
+        {linkEmailStatus}
+        {methods}
+        {payBusy}
+        {plans}
+        {selectedTariff}
+        {selectedTariffPlans}
+        {singleTariffMode}
+        {subscription}
+        {tariffCatalog}
+        {tariffMode}
+        {closeDeviceDisconnectDialog}
+        {closeLinkEmailDialog}
+        {closePaymentModal}
+        {continueWithSelectedTariff}
+        {methodMeta}
+        {paymentDescription}
+        {paymentTitle}
+        {planKey}
+        {planSubtitle}
+        {planUnitHint}
+        {priceLabel}
+        {requestLinkEmailCode}
+        {selectTariff}
+        {t}
+        {verifyLinkEmailCode}
+      />
 
-      <Dialog
-        open={changeModalOpen}
-        title={t("wa_change_tariff")}
-        description={tariffChangeModalDescription()}
-        closeLabel={t("wa_close")}
-        onclose={closeTariffChangeModal}
-        class="payment-dialog-card"
-      >
-        <div class="payment-dialog-body">
-          {#if !changeOptions}
-            <div class="dialog-skeleton" aria-label={t("wa_tariff_options_loading")}>
-              <div class="tariff-action-list">
-                {#each [1, 2] as _}
-                  <div class="tariff-action-card skeleton-row">
-                    <span>
-                      <span class="skeleton-line skeleton-line-title"></span>
-                      <span class="skeleton-line skeleton-line-short"></span>
-                    </span>
-                    <span class="skeleton-line skeleton-line-price"></span>
-                  </div>
-                {/each}
-              </div>
-              <div class="payment-divider" aria-hidden="true"></div>
-              <div class="option-list">
-                {#each [1, 2] as _}
-                  <div class="option-row change-action-row skeleton-row">
-                    <span class="option-row-main">
-                      <span class="skeleton-line skeleton-line-title"></span>
-                      <span class="skeleton-line skeleton-line-short"></span>
-                    </span>
-                  </div>
-                {/each}
-              </div>
-              <div class="skeleton-pay-button"></div>
-            </div>
-          {:else if changeOptions?.targets?.length}
-            <p class="section-kicker">{t("wa_tariff_change_targets_title")}</p>
-            <div class="tariff-action-list">
-              {#each changeOptions.targets as target}
-                <button
-                  class:active={selectedChangeTarget?.tariff_key === target.tariff_key}
-                  class="tariff-action-card"
-                  type="button"
-                  on:click={() => {
-                    selectedChangeTarget = target;
-                    selectedChangeAction = target.actions?.[0] || null;
-                  }}
-                >
-                  <span>
-                    <strong>{target.title}</strong>
-                    <small>{target.description}</small>
-                  </span>
-                  <em>{target.billing_model === "traffic" ? t("wa_tariff_model_traffic") : t("wa_tariff_model_period")}</em>
-                </button>
-              {/each}
-            </div>
-            {#if selectedChangeTarget?.actions?.length}
-              <div class="payment-divider" aria-hidden="true"></div>
-              <p class="section-kicker">{t("wa_tariff_change_strategy_title")}</p>
-              <div class="option-list">
-                {#each selectedChangeTarget.actions as action}
-                  <button
-                    class:active={actionKey(selectedChangeAction) === actionKey(action)}
-                    class="option-row change-action-row"
-                    type="button"
-                    on:click={() => (selectedChangeAction = action)}
-                  >
-                    <span class="option-row-main">
-                      <strong>{changeActionTitle(action)}</strong>
-                      {#if action.mode === "recalc_days"}
-                        <small>{t("wa_tariff_change_recalc_hint", { days: Number(action.remaining_days || 0) })}</small>
-                      {:else if action.mode === "convert_days_to_gb"}
-                        <small>{t("wa_tariff_change_convert_hint", { days: Number(action.remaining_days || 0) })}</small>
-                      {:else if action.kind === "payment"}
-                        <small>{t("wa_tariff_change_payment_hint")}</small>
-                      {/if}
-                    </span>
-                    {#if actionKey(selectedChangeAction) === actionKey(action)}
-                      <CheckCircle2 size={18} />
-                    {/if}
-                  </button>
-                {/each}
-              </div>
-              {#if selectedChangeAction?.kind === "payment"}
-                <div class="method-grid">
-                  {#each methods as method}
-                    {@const meta = methodMeta(method)}
-                    <button
-                      class:active={selectedMethod === method.id}
-                      class="method-card"
-                      type="button"
-                      on:click={() => (selectedMethod = method.id)}
-                    >
-                      <span class="method-card-main">
-                        {#if meta.icon}
-                          <svelte:component this={meta.icon} size={19} />
-                        {/if}
-                        <strong>{meta.title}</strong>
-                      </span>
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-              <Button class="wide bottom-action payment-submit-button" onclick={openTariffChangeConfirm} disabled={tariffActionBusy || payBusy}>
-                {selectedChangeAction?.kind === "payment" ? t("wa_pay") : t("wa_apply")}
-                <ArrowRight size={17} />
-              </Button>
-            {:else}
-              <Card class="empty-card">{t("wa_no_tariff_change_options")}</Card>
-            {/if}
-          {:else}
-            <Card class="empty-card">{t("wa_no_tariff_change_options")}</Card>
-          {/if}
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={changeConfirmOpen}
-        title={t("wa_tariff_change_confirm_title")}
-        description={t("wa_tariff_change_confirm_desc")}
-        closeLabel={t("wa_close")}
-        onclose={closeTariffChangeConfirm}
-        class="payment-dialog-card"
-      >
-        <div class="payment-dialog-body">
-          <Card class="confirm-summary-card">
-            {#each tariffChangeSummary() as row}
-              <p>{row}</p>
-            {/each}
-          </Card>
-          <Button class="wide bottom-action payment-submit-button" onclick={applyTariffChange} disabled={tariffActionBusy || payBusy}>
-            {selectedChangeAction?.kind === "payment" ? t("wa_confirm_and_pay") : t("wa_confirm_and_apply")}
-            <ArrowRight size={17} />
-          </Button>
-          <Button variant="secondary" class="wide" onclick={closeTariffChangeConfirm} disabled={tariffActionBusy || payBusy}>
-            {t("wa_cancel")}
-          </Button>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={topupModalOpen}
-        title={topupModalTitle()}
-        description={topupModalDescription()}
-        closeLabel={t("wa_close")}
-        onclose={closeTopupModal}
-        class="payment-dialog-card"
-      >
-        <div class="payment-dialog-body">
-          {#if !topupOptions}
-            <div class="dialog-skeleton" aria-label={t("wa_tariff_options_loading")}>
-              <div class="option-list">
-                {#each [1, 2, 3] as _}
-                  <div class="option-row plan-row skeleton-row">
-                    <span class="option-row-main">
-                      <span class="skeleton-line skeleton-line-title"></span>
-                      <span class="skeleton-line skeleton-line-short"></span>
-                    </span>
-                    <span class="option-row-meta">
-                      <span class="skeleton-line skeleton-line-price"></span>
-                      <span class="skeleton-line skeleton-line-tiny"></span>
-                    </span>
-                  </div>
-                {/each}
-              </div>
-              <div class="method-grid">
-                {#each [1, 2] as _}
-                  <div class="method-card skeleton-method">
-                    <span class="skeleton-dot"></span>
-                    <span class="skeleton-line skeleton-line-method"></span>
-                  </div>
-                {/each}
-              </div>
-              <div class="skeleton-pay-button"></div>
-            </div>
-          {:else if topupOptions?.plans?.length}
-            <div class="option-list">
-              {#each topupOptions.plans as plan}
-                <button
-                  class:active={planKey(selectedTopupPlan) === planKey(plan)}
-                  class="option-row plan-row"
-                  type="button"
-                  on:click={() => (selectedTopupPlan = plan)}
-                >
-                  <span class="option-row-main">
-                    <strong>{plan.title}</strong>
-                    {#if !singleTariffMode || plan.sale_mode === "premium_topup"}
-                      <small>{plan.subtitle || topupOptions.tariff_name}</small>
-                    {/if}
-                  </span>
-                  <span class="option-row-meta">
-                    <em>{priceLabel(plan)}</em>
-                    {#if planUnitHint(plan)}
-                      <small>{planUnitHint(plan)}</small>
-                    {/if}
-                  </span>
-                </button>
-              {/each}
-            </div>
-            {@const carryoverNotes = topupCarryoverNotes()}
-            {#if carryoverNotes.length}
-              <div class="topup-carryover-note">
-                {#each carryoverNotes as note}
-                  <p>{note}</p>
-                {/each}
-              </div>
-            {/if}
-            <div class="method-grid">
-              {#each methods as method}
-                {@const meta = methodMeta(method)}
-                <button
-                  class:active={selectedMethod === method.id}
-                  class="method-card"
-                  type="button"
-                  on:click={() => (selectedMethod = method.id)}
-                >
-                  <span class="method-card-main">
-                    {#if meta.icon}
-                      <svelte:component this={meta.icon} size={19} />
-                    {/if}
-                    <strong>{meta.title}</strong>
-                  </span>
-                </button>
-              {/each}
-            </div>
-            <Button class="wide bottom-action payment-submit-button" onclick={createTopupPayment} disabled={!selectedTopupPlan || !methods.length || payBusy}>
-              {t("wa_buy_traffic")} {selectedTopupPlan ? priceLabel(selectedTopupPlan) : ""}
-              <LockKeyhole size={17} />
-            </Button>
-          {:else}
-            <Card class="empty-card">{t("wa_no_topup_options")}</Card>
-          {/if}
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={deviceTopupModalOpen}
-        title={t("wa_buy_hwid_devices")}
-        description={deviceTopupModalDescription()}
-        closeLabel={t("wa_close")}
-        onclose={closeDeviceTopupModal}
-        class="payment-dialog-card"
-      >
-        <div class="payment-dialog-body">
-          {#if !deviceTopupOptions}
-            <div class="dialog-skeleton" aria-label={t("wa_tariff_options_loading")}>
-              <div class="option-list">
-                {#each [1, 2, 3] as _}
-                  <div class="option-row plan-row skeleton-row">
-                    <span class="option-row-main">
-                      <span class="skeleton-line skeleton-line-title"></span>
-                      <span class="skeleton-line skeleton-line-short"></span>
-                    </span>
-                    <span class="option-row-meta">
-                      <span class="skeleton-line skeleton-line-price"></span>
-                    </span>
-                  </div>
-                {/each}
-              </div>
-              <div class="method-grid">
-                {#each [1, 2] as _}
-                  <div class="method-card skeleton-method">
-                    <span class="skeleton-dot"></span>
-                    <span class="skeleton-line skeleton-line-method"></span>
-                  </div>
-                {/each}
-              </div>
-              <div class="skeleton-pay-button"></div>
-            </div>
-          {:else if deviceTopupOptions?.plans?.length}
-            <div class="option-list">
-              {#each deviceTopupOptions.plans as plan}
-                <button
-                  class:active={planKey(selectedDeviceTopupPlan) === planKey(plan)}
-                  class="option-row plan-row"
-                  type="button"
-                  on:click={() => (selectedDeviceTopupPlan = plan)}
-                >
-                  <span class="option-row-main">
-                    <strong>{t("wa_hwid_devices_package", { count: Number(plan.device_count || plan.months || 0) })}</strong>
-                    <small>{plan.subtitle || deviceTopupOptions.tariff_name}</small>
-                  </span>
-                  <span class="option-row-meta">
-                    <em>{priceLabel(plan)}</em>
-                    {#if planKey(selectedDeviceTopupPlan) === planKey(plan)}
-                      <CheckCircle2 size={18} />
-                    {/if}
-                  </span>
-                </button>
-              {/each}
-            </div>
-            <div class="method-grid">
-              {#each methods as method}
-                {@const meta = methodMeta(method)}
-                <button
-                  class:active={selectedMethod === method.id}
-                  class="method-card"
-                  type="button"
-                  on:click={() => (selectedMethod = method.id)}
-                >
-                  <span class="method-card-main">
-                    {#if meta.icon}
-                      <svelte:component this={meta.icon} size={19} />
-                    {/if}
-                    <strong>{meta.title}</strong>
-                  </span>
-                </button>
-              {/each}
-            </div>
-            <Button class="wide bottom-action payment-submit-button" onclick={createDeviceTopupPayment} disabled={!selectedDeviceTopupPlan || !methods.length || payBusy}>
-              {t("wa_pay")} {selectedDeviceTopupPlan ? priceLabel(selectedDeviceTopupPlan) : ""}
-              <LockKeyhole size={17} />
-            </Button>
-          {:else}
-            <Card class="empty-card">{t("wa_no_hwid_device_options")}</Card>
-          {/if}
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={deviceConfirmOpen}
-        title={t("wa_devices_disconnect_title")}
-        description={t("wa_devices_disconnect_desc", {
-          device: deviceToDisconnect?.display_name || t("wa_device_fallback_name", { index: deviceToDisconnect?.index || "" }),
-        })}
-        closeLabel={t("wa_close")}
-        onclose={closeDeviceDisconnectDialog}
-        class="payment-dialog-card"
-      >
-        <div class="payment-dialog-body">
-          <Button variant="outline" class="wide device-danger-button" onclick={disconnectDevice} disabled={deviceDisconnectBusy}>
-            <CircleX size={17} />
-            {t("wa_devices_disconnect_confirm")}
-          </Button>
-          <Button variant="secondary" class="wide" onclick={closeDeviceDisconnectDialog} disabled={deviceDisconnectBusy}>
-            {t("wa_cancel")}
-          </Button>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={linkEmailOpen}
-        title={t("wa_link_email_modal_title")}
-        description={linkEmailPending ? t("wa_email_sent_to", { email: linkEmailPending }) : t("wa_link_email_modal_desc")}
-        closeLabel={t("wa_close")}
-        onclose={closeLinkEmailDialog}
-        class={`payment-dialog-card${linkEmailPending ? " link-email-dialog-card" : ""}`}
-      >
-        <div class="payment-dialog-body">
-          {#if !linkEmailPending}
-            <div class="field-error-wrap">
-              <Tooltip.Root open={Boolean(linkEmailFieldError)}>
-                <Input
-                  bind:value={linkEmailValue}
-                  type="email"
-                  placeholder={t("wa_email_placeholder")}
-                  autocomplete="email"
-                  class={linkEmailFieldError ? "input-error" : ""}
-                  on:input={() => (linkEmailFieldError = "")}
-                />
-                {#if linkEmailFieldError}
-                  <Tooltip.Trigger class="field-error-trigger" aria-label={linkEmailFieldError}>
-                    <span class="field-error-icon" aria-hidden="true"><TriangleAlert size={18} /></span>
-                  </Tooltip.Trigger>
-                {/if}
-                {#if linkEmailFieldError}
-                  <Tooltip.Portal>
-                    <Tooltip.Content class="field-error-tooltip">{linkEmailFieldError}</Tooltip.Content>
-                  </Tooltip.Portal>
-                {/if}
-              </Tooltip.Root>
-            </div>
-            <Button class="wide bottom-action payment-submit-button" onclick={requestLinkEmailCode} disabled={linkEmailBusy}>
-              {t("wa_send_code_email")}
-            </Button>
-          {:else}
-            <div class="link-email-code-layout">
-              <div class="otp-wrap link-email-code-center">
-                <label class="otp-input-wrap">
-                  <input
-                    bind:value={linkEmailCode}
-                    inputmode="numeric"
-                    autocomplete="one-time-code"
-                    maxlength="6"
-                    aria-label={t("wa_email_code_aria")}
-                  />
-                  <span class="otp-slots" aria-hidden="true">
-                    {#each Array.from({ length: 6 }) as _, index}
-                      <span class:filled={linkEmailCode[index]}>{linkEmailCode[index] || ""}</span>
-                    {/each}
-                  </span>
-                </label>
-                <Button class="wide bottom-action payment-submit-button" onclick={verifyLinkEmailCode} disabled={linkEmailBusy}>
-                  {t("wa_confirm")}
-                </Button>
-              </div>
-              <button
-                class="link-button link-email-resend"
-                type="button"
-                on:click={requestLinkEmailCode}
-                disabled={linkEmailBusy || linkEmailResendCooldown > 0}
-              >
-                <RefreshCw size={15} />
-                {linkEmailResendCooldown > 0
-                  ? t("wa_auth_resend_wait", { seconds: linkEmailResendCooldown })
-                  : t("wa_resend_code")}
-              </button>
-            </div>
-          {/if}
-          {#if linkEmailStatus}
-            <p class:error={linkEmailIsError} class="status-line">{linkEmailStatus}</p>
-          {/if}
-        </div>
-      </Dialog>
+      <TariffDialogs
+        bind:changeConfirmOpen
+        bind:changeModalOpen
+        bind:deviceTopupModalOpen
+        bind:selectedChangeAction
+        bind:selectedChangeTarget
+        bind:selectedDeviceTopupPlan
+        bind:selectedMethod
+        bind:selectedTopupPlan
+        bind:topupModalOpen
+        {actionKey}
+        {applyTariffChange}
+        {changeActionTitle}
+        {changeOptions}
+        {closeDeviceTopupModal}
+        {closeTariffChangeConfirm}
+        {closeTariffChangeModal}
+        {closeTopupModal}
+        {createDeviceTopupPayment}
+        {createTopupPayment}
+        {deviceTopupModalDescription}
+        {deviceTopupOptions}
+        {methods}
+        {methodMeta}
+        {openTariffChangeConfirm}
+        {payBusy}
+        {planKey}
+        {planUnitHint}
+        {priceLabel}
+        {singleTariffMode}
+        {tariffActionBusy}
+        {tariffChangeModalDescription}
+        {tariffChangeSummary}
+        {topupCarryoverNotes}
+        {topupModalDescription}
+        {topupModalTitle}
+        {topupOptions}
+        {t}
+      />
     {/if}
 
     {#if toastText}
@@ -4076,4 +2518,3 @@
     {/if}
   {/key}
 </Tooltip.Provider>
-

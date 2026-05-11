@@ -1,0 +1,4 @@
+/*
+  Dialog-specific selectors are kept importable as a separate bundle boundary.
+  Existing rules remain in webapp.css to avoid visual churn during componentization.
+*/
