@@ -23,11 +23,7 @@
 
   const statsStore = getContext("statsStore");
 
-  $: ({
-    stats,
-    statsError,
-    statsLoading,
-  } = $statsStore);
+  $: ({ stats, statsError, statsLoading } = $statsStore);
 
   $: showSkeleton = !stats && !statsError;
 
@@ -35,10 +31,8 @@
   $: fin = stats?.financial || {};
   $: users = stats?.users || {};
   $: panelPayload = stats?.panel;
-  $: panelMetrics =
-    panelPayload && !panelPayload.error ? parsePanelSystem(panelPayload) : null;
-  $: panelBw =
-    panelPayload && !panelPayload.error ? parsePanelBandwidth(panelPayload) : null;
+  $: panelMetrics = panelPayload && !panelPayload.error ? parsePanelSystem(panelPayload) : null;
+  $: panelBw = panelPayload && !panelPayload.error ? parsePanelBandwidth(panelPayload) : null;
   $: panelNodeTraffic =
     panelPayload && !panelPayload.error ? parsePanelNodeTraffic(panelPayload) : null;
 
@@ -91,8 +85,7 @@
     const bw = panel?.bandwidth;
     if (!bw || typeof bw !== "object") return null;
     const week = bw.bandwidthLastSevenDays?.current;
-    const month =
-      bw.bandwidthLast30Days?.current ?? bw.bandwidthLastThirtyDays?.current;
+    const month = bw.bandwidthLast30Days?.current ?? bw.bandwidthLastThirtyDays?.current;
     if (week == null && month == null) return null;
     return { week, month };
   }
@@ -101,11 +94,9 @@
     if (!row || typeof row !== "object") return 0;
     const total = Number(row.total);
     if (Number.isFinite(total) && total > 0) return total;
-    const up = Number(
-      row.uploadBytes ?? row.uplinkBytes ?? row.uplink ?? row.up ?? row.upload,
-    );
+    const up = Number(row.uploadBytes ?? row.uplinkBytes ?? row.uplink ?? row.up ?? row.upload);
     const down = Number(
-      row.downloadBytes ?? row.downlinkBytes ?? row.downlink ?? row.down ?? row.download,
+      row.downloadBytes ?? row.downlinkBytes ?? row.downlink ?? row.down ?? row.download
     );
     const sum = (Number.isFinite(up) ? up : 0) + (Number.isFinite(down) ? down : 0);
     return sum > 0 ? sum : 0;
@@ -117,10 +108,10 @@
     const combined = Number(item.total ?? item.bytes ?? item.value);
     if (Number.isFinite(combined) && combined > 0) return combined;
     const up = Number(
-      item.uplink ?? item.upload ?? item.uploadBytes ?? item.up ?? item.tx ?? item.sent,
+      item.uplink ?? item.upload ?? item.uploadBytes ?? item.up ?? item.tx ?? item.sent
     );
     const down = Number(
-      item.downlink ?? item.download ?? item.downloadBytes ?? item.down ?? item.rx ?? item.received,
+      item.downlink ?? item.download ?? item.downloadBytes ?? item.down ?? item.rx ?? item.received
     );
     return (Number.isFinite(up) ? up : 0) + (Number.isFinite(down) ? down : 0);
   }
@@ -140,7 +131,7 @@
       sumTaggedStatsList(node.outbounds_stats);
     if (b <= 0) b = panelRowBytes(node);
     const life = Number(
-      node.totalBytesLifetime ?? node.totalBytes ?? node.bytesLifetime ?? node.totalTrafficBytes,
+      node.totalBytesLifetime ?? node.totalBytes ?? node.bytesLifetime ?? node.totalTrafficBytes
     );
     if (b <= 0 && Number.isFinite(life) && life > 0) b = life;
     return b;
@@ -266,7 +257,7 @@
     for (const row of rows) {
       if (!row || typeof row !== "object") continue;
       const key = String(
-        row.nodeUuid ?? row.node_uuid ?? row.uuid ?? row.nodeName ?? row.name ?? panelRowLabel(row),
+        row.nodeUuid ?? row.node_uuid ?? row.uuid ?? row.nodeName ?? row.name ?? panelRowLabel(row)
       );
       const prev = map.get(key) || { label: panelRowLabel(row), bytes: 0, stringHint: "" };
       const add = isNodeMetricsShape(row) ? trafficBytesFromNodeRecord(row) : panelRowBytes(row);
@@ -386,7 +377,9 @@
         return { seven: attachNodeOnlineToRows(buildNodeMetricsRows(raw.nodes), onlineLookup) };
       }
       if (Array.isArray(raw.lastSevenDays) && raw.lastSevenDays.length) {
-        return { seven: attachNodeOnlineToRows(aggregatePanelNodeRows(raw.lastSevenDays), onlineLookup) };
+        return {
+          seven: attachNodeOnlineToRows(aggregatePanelNodeRows(raw.lastSevenDays), onlineLookup),
+        };
       }
     }
 
@@ -423,7 +416,9 @@
       const y = pad.t + innerH - (amt / maxY) * innerH;
       return { x, y, amt, date: series[i]?.date };
     });
-    const lineD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join("");
+    const lineD = pts
+      .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      .join("");
     const baseY = (pad.t + innerH).toFixed(1);
     const areaD = `${lineD} L${pts[n - 1].x.toFixed(1)},${baseY} L${pts[0].x.toFixed(1)},${baseY} Z`;
     const pickIdx = (() => {
@@ -460,11 +455,17 @@
         <Card.Root class="admin-cn-card-skeleton">
           <Card.Header>
             <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-short"></span>
-            <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-strong" style="width:72%"></span>
+            <span
+              class="admin-skeleton admin-skeleton-line admin-skeleton-line-strong"
+              style="width:72%"
+            ></span>
           </Card.Header>
           <Card.Footer class="admin-cn-card-footer--stack">
             <span class="admin-skeleton admin-skeleton-line" style="width:88%"></span>
-            <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-tiny" style="width:60%"></span>
+            <span
+              class="admin-skeleton admin-skeleton-line admin-skeleton-line-tiny"
+              style="width:60%"
+            ></span>
           </Card.Footer>
         </Card.Root>
       {/each}
@@ -472,7 +473,10 @@
     <Card.Root class="admin-cn-card-skeleton">
       <Card.Header>
         <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-short"></span>
-        <span class="admin-skeleton admin-skeleton-line admin-skeleton-line-strong" style="width:40%"></span>
+        <span
+          class="admin-skeleton admin-skeleton-line admin-skeleton-line-strong"
+          style="width:40%"
+        ></span>
       </Card.Header>
       <Card.Content class="admin-cn-card-content--flush">
         <div class="admin-revenue-svg-frame">
@@ -481,7 +485,11 @@
       </Card.Content>
     </Card.Root>
     <AdminSectionHeader title={at("stats_recent_payments", {}, "")} />
-    <AdminTableSkeleton headers={recentPaymentHeaders} rows={6} widths={["48px", "120px", "78px", "82px", "72px", "96px"]} />
+    <AdminTableSkeleton
+      headers={recentPaymentHeaders}
+      rows={6}
+      widths={["48px", "120px", "78px", "82px", "72px", "96px"]}
+    />
   </AdminDashboardStack>
 {:else if stats}
   <AdminDashboardStack>
@@ -530,7 +538,11 @@
           <Card.Description>{at("stats_label_inactive", {}, "")}</Card.Description>
           <Card.Title>{users.inactive_users ?? 0}</Card.Title>
           <Card.Action>
-            <Badge variant="outline">{users.total_users ? Math.round(((users.inactive_users ?? 0) / (users.total_users || 1)) * 100) : 0}%</Badge>
+            <Badge variant="outline"
+              >{users.total_users
+                ? Math.round(((users.inactive_users ?? 0) / (users.total_users || 1)) * 100)
+                : 0}%</Badge
+            >
           </Card.Action>
         </Card.Header>
         <Card.Footer class="admin-cn-card-footer--stack">
@@ -569,11 +581,15 @@
       <Card.Content>
         <div class="admin-revenue-kpis">
           <div class="admin-revenue-kpi">
-            <div class="admin-revenue-kpi-label">{at("stats_trend_payments", { count: fin.today_payments_count ?? 0 }, "")}</div>
+            <div class="admin-revenue-kpi-label">
+              {at("stats_trend_payments", { count: fin.today_payments_count ?? 0 }, "")}
+            </div>
             <div class="admin-revenue-kpi-value">{fin.today_payments_count ?? 0}</div>
           </div>
           <div class="admin-revenue-kpi">
-            <div class="admin-revenue-kpi-label">{at("stats_revenue_avg_ticket_label", {}, "")}</div>
+            <div class="admin-revenue-kpi-label">
+              {at("stats_revenue_avg_ticket_label", {}, "")}
+            </div>
             <div class="admin-revenue-kpi-value">
               {revenueKpis.avgToday != null ? fmtMoney(revenueKpis.avgToday, currency) : "—"}
             </div>
@@ -619,8 +635,16 @@
         <div class="admin-revenue-chart">
           <div class="admin-revenue-chart-title">{at("stats_revenue_chart_title", {}, "")}</div>
           {#if chartModel}
-            <div class="admin-revenue-svg-frame" role="img" aria-label={at("stats_revenue_chart_aria", {}, "")}>
-              <svg class="admin-revenue-svg" viewBox="0 0 {chartModel.W} {chartModel.H}" preserveAspectRatio="none">
+            <div
+              class="admin-revenue-svg-frame"
+              role="img"
+              aria-label={at("stats_revenue_chart_aria", {}, "")}
+            >
+              <svg
+                class="admin-revenue-svg"
+                viewBox="0 0 {chartModel.W} {chartModel.H}"
+                preserveAspectRatio="none"
+              >
                 <defs>
                   <linearGradient id="adminRevenueFillDashboard" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="var(--admin-muted)" stop-opacity="0.28" />
@@ -628,7 +652,15 @@
                   </linearGradient>
                 </defs>
                 {#each chartModel.gridYs as gy}
-                  <line x1={chartModel.pad.l} y1={gy} x2={chartModel.W - chartModel.pad.r} y2={gy} stroke="var(--admin-border)" stroke-opacity="0.45" stroke-width="1" />
+                  <line
+                    x1={chartModel.pad.l}
+                    y1={gy}
+                    x2={chartModel.W - chartModel.pad.r}
+                    y2={gy}
+                    stroke="var(--admin-border)"
+                    stroke-opacity="0.45"
+                    stroke-width="1"
+                  />
                 {/each}
                 <path d={chartModel.areaD} fill="url(#adminRevenueFillDashboard)" stroke="none" />
                 <path
@@ -655,7 +687,11 @@
 
     <AdminSectionHeader
       title={at("stats_section_panel", {}, "")}
-      description={panelPayload?.error ? at("stats_panel_unavailable", {}, "") : panelMetrics ? at("stats_section_panel_hint", {}, "") : ""}
+      description={panelPayload?.error
+        ? at("stats_panel_unavailable", {}, "")
+        : panelMetrics
+          ? at("stats_section_panel_hint", {}, "")
+          : ""}
     />
 
     {#if panelPayload?.error}
@@ -664,7 +700,11 @@
       <Card.Root>
         <Card.Content class="admin-cn-card-content admin-panel-dash-card">
           <div class="admin-panel-dash">
-            <div class="admin-panel-dash-tiles" role="group" aria-label={at("stats_section_panel", {}, "")}>
+            <div
+              class="admin-panel-dash-tiles"
+              role="group"
+              aria-label={at("stats_section_panel", {}, "")}
+            >
               <div class="admin-panel-dash-tile">
                 <div class="admin-panel-dash-tile-label">
                   <span class="admin-panel-dash-ico" aria-hidden="true"><Radio size={12} /></span>
@@ -678,7 +718,8 @@
               </div>
               <div class="admin-panel-dash-tile">
                 <div class="admin-panel-dash-tile-label">
-                  <span class="admin-panel-dash-ico" aria-hidden="true"><Activity size={12} /></span>
+                  <span class="admin-panel-dash-ico" aria-hidden="true"><Activity size={12} /></span
+                  >
                   {at("stats_panel_total_users", {}, "")}
                 </div>
                 <div class="admin-panel-dash-tile-value">{panelMetrics.totalPanelUsers}</div>
@@ -698,7 +739,8 @@
               {#if panelMetrics.nodesOnline != null}
                 <div class="admin-panel-dash-tile">
                   <div class="admin-panel-dash-tile-label">
-                    <span class="admin-panel-dash-ico" aria-hidden="true"><Server size={12} /></span>
+                    <span class="admin-panel-dash-ico" aria-hidden="true"><Server size={12} /></span
+                    >
                     {at("stats_panel_nodes_online", {}, "")}
                   </div>
                   <div class="admin-panel-dash-tile-value">{panelMetrics.nodesOnline}</div>
@@ -722,13 +764,19 @@
               {#if panelBw?.week != null}
                 <div class="admin-panel-dash-tile admin-panel-dash-tile--wide">
                   <div class="admin-panel-dash-tile-label">{at("stats_panel_bw_week", {}, "")}</div>
-                  <div class="admin-panel-dash-tile-value admin-panel-dash-tile-value--sm">{panelBw.week}</div>
+                  <div class="admin-panel-dash-tile-value admin-panel-dash-tile-value--sm">
+                    {panelBw.week}
+                  </div>
                 </div>
               {/if}
               {#if panelBw?.month != null}
                 <div class="admin-panel-dash-tile admin-panel-dash-tile--wide">
-                  <div class="admin-panel-dash-tile-label">{at("stats_panel_bw_month", {}, "")}</div>
-                  <div class="admin-panel-dash-tile-value admin-panel-dash-tile-value--sm">{panelBw.month}</div>
+                  <div class="admin-panel-dash-tile-label">
+                    {at("stats_panel_bw_month", {}, "")}
+                  </div>
+                  <div class="admin-panel-dash-tile-value admin-panel-dash-tile-value--sm">
+                    {panelBw.month}
+                  </div>
                 </div>
               {/if}
             </div>
@@ -736,8 +784,12 @@
             {#if panelNodeTraffic?.seven?.length}
               <div class="admin-panel-dash-nodes">
                 <div class="admin-panel-dash-nodes-head">
-                  <h3 class="admin-panel-dash-nodes-title">{at("stats_panel_inner_nodes", {}, "")}</h3>
-                  <p class="admin-panel-dash-nodes-hint">{at("stats_panel_inner_nodes_hint", {}, "")}</p>
+                  <h3 class="admin-panel-dash-nodes-title">
+                    {at("stats_panel_inner_nodes", {}, "")}
+                  </h3>
+                  <p class="admin-panel-dash-nodes-hint">
+                    {at("stats_panel_inner_nodes_hint", {}, "")}
+                  </p>
                 </div>
                 <div class="admin-panel-dash-nodes-grid">
                   {#each panelNodeTraffic.seven.slice(0, PANEL_NODE_TILE_LIMIT) as node}
@@ -754,7 +806,11 @@
                 </div>
                 {#if panelNodeTraffic.seven.length > PANEL_NODE_TILE_LIMIT}
                   <p class="admin-panel-dash-nodes-more">
-                    {at("stats_panel_nodes_overflow", { count: panelNodeTraffic.seven.length - PANEL_NODE_TILE_LIMIT }, "")}
+                    {at(
+                      "stats_panel_nodes_overflow",
+                      { count: panelNodeTraffic.seven.length - PANEL_NODE_TILE_LIMIT },
+                      ""
+                    )}
                   </p>
                 {/if}
               </div>
@@ -767,22 +823,35 @@
     {/if}
 
     <Card.Root>
-      <Card.Content class="admin-cn-card-content--flush" style="padding-top:12px;padding-bottom:12px;">
+      <Card.Content
+        class="admin-cn-card-content--flush"
+        style="padding-top:12px;padding-bottom:12px;"
+      >
         <div class="admin-sync-strip" style="border:0;background:transparent;padding:0;">
           <span
             ><strong>{at("stats_sync_label", {}, "")}:</strong>
             {stats.panel_sync?.status ?? "—"}{#if stats.panel_sync?.last_sync_time}
-              · {at("stats_sync_last", {}, "")}: {fmtDateShort(stats.panel_sync.last_sync_time)}{/if}</span
+              · {at("stats_sync_last", {}, "")}: {fmtDateShort(
+                stats.panel_sync.last_sync_time
+              )}{/if}</span
           >
           {#if stats.panel_sync && (stats.panel_sync.users_processed > 0 || stats.panel_sync.subscriptions_synced > 0)}
             <span
-              >{at("stats_sync_processed", { users: stats.panel_sync.users_processed, subs: stats.panel_sync.subscriptions_synced }, "")}</span
+              >{at(
+                "stats_sync_processed",
+                {
+                  users: stats.panel_sync.users_processed,
+                  subs: stats.panel_sync.subscriptions_synced,
+                },
+                ""
+              )}</span
             >
           {/if}
           {#if stats.queue}
             <span
               ><strong>{at("stats_label_queue", {}, "")}:</strong>
-              {stats.queue.user_queue_size ?? 0}{at("stats_queue_users", {}, "")}, {stats.queue.group_queue_size ?? 0}{at("stats_queue_groups", {}, "")}</span
+              {stats.queue.user_queue_size ?? 0}{at("stats_queue_users", {}, "")}, {stats.queue
+                .group_queue_size ?? 0}{at("stats_queue_groups", {}, "")}</span
             >
           {/if}
         </div>
@@ -791,13 +860,25 @@
 
     <Card.Root>
       <Card.Header class="admin-cn-card-header--lead">
-        <Card.Title class="admin-cn-card-title--section">{at("stats_recent_payments", {}, "")}</Card.Title>
-        <Card.Description>{at("stats_records_count", { count: (stats.recent_payments || []).length }, "")}</Card.Description>
+        <Card.Title class="admin-cn-card-title--section"
+          >{at("stats_recent_payments", {}, "")}</Card.Title
+        >
+        <Card.Description
+          >{at(
+            "stats_records_count",
+            { count: (stats.recent_payments || []).length },
+            ""
+          )}</Card.Description
+        >
       </Card.Header>
       <Card.Content class="admin-cn-card-content--flush">
         <div class="admin-table-wrap">
           {#if statsLoading}
-            <AdminTableSkeleton headers={recentPaymentHeaders} rows={5} widths={["48px", "120px", "78px", "82px", "72px", "96px"]} />
+            <AdminTableSkeleton
+              headers={recentPaymentHeaders}
+              rows={5}
+              widths={["48px", "120px", "78px", "82px", "72px", "96px"]}
+            />
           {:else if (stats.recent_payments || []).length}
             <AdminTable>
               <thead>
@@ -826,7 +907,9 @@
               </tbody>
             </AdminTable>
           {:else}
-            <AdminEmptyState tone="card"><span class="admin-muted">{at("no_data", {}, "")}</span></AdminEmptyState>
+            <AdminEmptyState tone="card"
+              ><span class="admin-muted">{at("no_data", {}, "")}</span></AdminEmptyState
+            >
           {/if}
         </div>
       </Card.Content>

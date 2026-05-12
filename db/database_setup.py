@@ -1,9 +1,11 @@
 import logging
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from config.settings import Settings
 from db.models import Base
+
 from .migrator import run_database_migrations
 
 async_engine = None
@@ -13,9 +15,7 @@ def init_db_connection(settings: Settings) -> sessionmaker:
     global async_engine
 
     if async_engine is None:
-        logging.info(
-            f"Attempting to create SQLAlchemy engine with URL: {settings.DATABASE_URL}"
-        )
+        logging.info(f"Attempting to create SQLAlchemy engine with URL: {settings.DATABASE_URL}")
         async_engine = create_async_engine(
             settings.DATABASE_URL,
             echo=False,
@@ -31,17 +31,14 @@ def init_db_connection(settings: Settings) -> sessionmaker:
         autocommit=False,
         autoflush=False,
     )
-    logging.info(
-        f"SQLAlchemy Async Engine and SessionFactory configured for PostgreSQL."
-    )
+    logging.info("SQLAlchemy Async Engine and SessionFactory configured for PostgreSQL.")
     return local_async_session_factory
 
 
 async def get_async_session(session_factory: sessionmaker) -> AsyncSession:
 
     if session_factory is None:
-        raise RuntimeError(
-            "AsyncSessionFactory is not provided or initialized.")
+        raise RuntimeError("AsyncSessionFactory is not provided or initialized.")
 
     async_session = session_factory()
     try:
@@ -54,10 +51,7 @@ async def init_db(settings: Settings, session_factory: sessionmaker):
 
     global async_engine
     if async_engine is None:
-
-        logging.warning(
-            "init_db: async_engine was None, re-initializing via init_db_connection."
-        )
+        logging.warning("init_db: async_engine was None, re-initializing via init_db_connection.")
 
         raise RuntimeError(
             "async_engine is not initialized. Call init_db_connection and get session_factory first."
@@ -66,41 +60,42 @@ async def init_db(settings: Settings, session_factory: sessionmaker):
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(run_database_migrations)
-    logging.info(
-        "PostgreSQL database initialized/checked successfully using SQLAlchemy."
-    )
+    logging.info("PostgreSQL database initialized/checked successfully using SQLAlchemy.")
 
     try:
         from bot.services.settings_override_service import load_overrides_from_db
+
         await load_overrides_from_db(settings, session_factory)
     except Exception as e_overrides:
-        logging.warning(
-            f"Failed to load setting overrides on startup: {e_overrides}"
-        )
+        logging.warning(f"Failed to load setting overrides on startup: {e_overrides}")
 
     async with session_factory() as session:
-        from .dal.panel_sync_dal import get_panel_sync_status, update_panel_sync_status
         from sqlalchemy import text
+
+        from .dal.panel_sync_dal import get_panel_sync_status, update_panel_sync_status
+
         try:
             current_status = await get_panel_sync_status(session)
             if current_status is None:
                 logging.info("Initializing panel_sync_status record.")
-                await update_panel_sync_status(session,
-                                               status="never_run",
-                                               details="System initialized",
-                                               users_processed=0,
-                                               subs_synced=0)
+                await update_panel_sync_status(
+                    session,
+                    status="never_run",
+                    details="System initialized",
+                    users_processed=0,
+                    subs_synced=0,
+                )
                 await session.commit()
         except Exception as e_sync_init:
             await session.rollback()
-            logging.error(
-                f"Failed to initialize PanelSyncStatus: {e_sync_init}",
-                exc_info=True)
+            logging.error(f"Failed to initialize PanelSyncStatus: {e_sync_init}", exc_info=True)
 
         if settings.tariffs_config:
             try:
                 default_tariff = settings.tariffs_config.default
-                default_price = default_tariff.period_price(1, "rub") or default_tariff.min_period_price_rub()
+                default_price = (
+                    default_tariff.period_price(1, "rub") or default_tariff.min_period_price_rub()
+                )
                 await session.execute(
                     text(
                         """

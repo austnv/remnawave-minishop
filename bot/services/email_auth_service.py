@@ -7,7 +7,7 @@ import secrets
 import smtplib
 import ssl
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formataddr
 from typing import Optional
@@ -15,10 +15,10 @@ from typing import Optional
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.services.email_templates import EmailContent, render_login_code
 from config.settings import Settings
 from db.dal import security_dal
 from db.models import EmailVerificationCode
-from bot.services.email_templates import EmailContent, render_login_code
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,9 @@ class EmailAuthService:
         existing_query = parsed.query
         new_query = urlencode(params)
         merged_query = f"{existing_query}&{new_query}" if existing_query else new_query
-        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, merged_query, parsed.fragment))
+        return urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, merged_query, parsed.fragment)
+        )
 
     async def request_code(
         self,

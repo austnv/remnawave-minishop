@@ -4,7 +4,11 @@
   import Button from "$components/ui/button.svelte";
   import Card from "$components/ui/card.svelte";
   import { EmptyCard, LinearProgress, StatusMessage } from "$components/patterns/webapp/index.js";
-  import { devicesCountLabel, devicesLimitLabel, devicesPercent } from "../../lib/webapp/devicesLabels.js";
+  import {
+    devicesCountLabel,
+    devicesLimitLabel,
+    devicesPercent,
+  } from "../../lib/webapp/devicesLabels.js";
 
   export let devicesBusy = false;
   export let devicesData = {};
@@ -17,7 +21,6 @@
   export let openDeviceDisconnectDialog = () => {};
   export let openDeviceTopupModal = () => {};
   export let t = (key) => key;
-
 </script>
 
 <main class="content with-nav">
@@ -28,11 +31,21 @@
         <strong>{t("wa_devices_title")}</strong>
         <small>{devicesCountLabel(devicesData, t)}</small>
       </span>
-      <Button variant="icon" size="icon" onclick={() => loadDevices(true)} disabled={devicesBusy} aria-label={t("wa_devices_refresh")}>
+      <Button
+        variant="icon"
+        size="icon"
+        onclick={() => loadDevices(true)}
+        disabled={devicesBusy}
+        aria-label={t("wa_devices_refresh")}
+      >
         <RefreshCw size={18} />
       </Button>
     </div>
-    <LinearProgress class="devices-progress" value={devicesPercent(devicesData)} label={t("wa_devices_title")} />
+    <LinearProgress
+      class="devices-progress"
+      value={devicesPercent(devicesData)}
+      label={t("wa_devices_title")}
+    />
     {#if subscription?.active && subscription?.max_devices !== 0}
       <Button variant="secondary" class="wide" onclick={openDeviceTopupModal}>
         <Plus size={17} />
@@ -60,7 +73,10 @@
           <div class="device-card-head">
             <div class="device-icon"><Smartphone size={20} /></div>
             <span>
-              <strong>{device.display_name || t("wa_device_fallback_name", { index: device.index })}</strong>
+              <strong
+                >{device.display_name ||
+                  t("wa_device_fallback_name", { index: device.index })}</strong
+              >
               <small>{device.platform_label || t("wa_devices_platform_unknown")}</small>
             </span>
           </div>
@@ -85,7 +101,11 @@
             {/if}
           </div>
           {#if device.can_disconnect}
-            <Button variant="outline" class="wide device-disconnect-button" onclick={() => openDeviceDisconnectDialog(device)}>
+            <Button
+              variant="outline"
+              class="wide device-disconnect-button"
+              onclick={() => openDeviceDisconnectDialog(device)}
+            >
               <CircleX size={17} />
               {t("wa_devices_disconnect")}
             </Button>

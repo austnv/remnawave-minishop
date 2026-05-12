@@ -17,7 +17,7 @@
     variant === "tiny" && "ui-skeleton-line ui-skeleton-tiny",
     variant === "badge" && "ui-skeleton-badge",
     variant === "dot" && "ui-skeleton-dot",
-    className,
+    className
   )}
   style={`${width ? `width:${width};` : ""}${height ? `height:${height};` : ""}`}
   aria-hidden="true"

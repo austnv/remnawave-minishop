@@ -20,7 +20,9 @@
   <thead>
     <tr>
       {#each headers as header}
-        <th class:admin-cell-actions={actionColumn && header === headers[headers.length - 1]}>{header}</th>
+        <th class:admin-cell-actions={actionColumn && header === headers[headers.length - 1]}
+          >{header}</th
+        >
       {/each}
     </tr>
   </thead>

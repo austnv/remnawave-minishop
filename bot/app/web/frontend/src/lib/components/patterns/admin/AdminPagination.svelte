@@ -15,10 +15,12 @@
   <span class="admin-pagination-meta">{meta}</span>
   <div class="admin-pagination-buttons">
     <AdminButton size="sm" disabled={prevDisabled} onclick={onPrev}>
-      <ChevronLeft size={14} /> {prevLabel}
+      <ChevronLeft size={14} />
+      {prevLabel}
     </AdminButton>
     <AdminButton size="sm" disabled={nextDisabled} onclick={onNext}>
-      {nextLabel} <ChevronRight size={14} />
+      {nextLabel}
+      <ChevronRight size={14} />
     </AdminButton>
   </div>
 </div>

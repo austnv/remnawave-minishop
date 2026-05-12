@@ -50,7 +50,10 @@ export function createUsersStore({ api, onToast, at }) {
   async function loadUsers() {
     state.update((s) => ({ ...s, usersLoading: true }));
     let s;
-    state.update((st) => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
 
     try {
       const params = new URLSearchParams({
@@ -59,14 +62,15 @@ export function createUsersStore({ api, onToast, at }) {
       });
       if (s.usersQuery.trim()) params.set("q", s.usersQuery.trim());
       if (s.usersFilter && s.usersFilter !== "all") params.set("filter", s.usersFilter);
-      if (s.usersPanelStatus && s.usersPanelStatus !== "all") params.set("panel_status", s.usersPanelStatus);
+      if (s.usersPanelStatus && s.usersPanelStatus !== "all")
+        params.set("panel_status", s.usersPanelStatus);
       if (s.usersPremiumTraffic && s.usersPremiumTraffic !== "all") {
         params.set("premium_traffic", s.usersPremiumTraffic);
       }
       if (s.usersSort && s.usersSort !== "registered_desc") params.set("sort", s.usersSort);
       const data = await api(`/admin/users?${params.toString()}`);
       if (data?.ok) {
-        state.update(st => ({
+        state.update((st) => ({
           ...st,
           users: data.users || [],
           usersTotal: data.total || (data.users || []).length,
@@ -78,12 +82,14 @@ export function createUsersStore({ api, onToast, at }) {
   }
 
   async function openUser(userOrId, opts = {}) {
-    const userId = typeof userOrId === "object" && userOrId !== null ? userOrId.user_id : Number(userOrId);
+    const userId =
+      typeof userOrId === "object" && userOrId !== null ? userOrId.user_id : Number(userOrId);
     if (!userId) return;
-    
-    state.update(s => ({
+
+    state.update((s) => ({
       ...s,
-      openedUser: typeof userOrId === "object" && userOrId !== null ? userOrId : { user_id: userId },
+      openedUser:
+        typeof userOrId === "object" && userOrId !== null ? userOrId : { user_id: userId },
       openedUserDetail: null,
       userMessageDraft: "",
       userMessageConfirmOpen: false,
@@ -99,30 +105,31 @@ export function createUsersStore({ api, onToast, at }) {
         const sub = res.active_subscription || null;
         const bonusBytes = Number(sub?.premium_bonus_bytes || 0);
         const regularBonusBytes = Number(sub?.regular_bonus_bytes || 0);
-        state.update(s => ({
+        state.update((s) => ({
           ...s,
           openedUserDetail: res,
           openedUser: res.user ? { ...res.user, ...s.openedUser, ...res.user } : s.openedUser,
           premiumUnlimitedDraft: Boolean(sub?.premium_unlimited_override),
-          premiumBonusGbDraft: bonusBytes > 0 ? +(bonusBytes / (1024 ** 3)).toFixed(2) : "",
+          premiumBonusGbDraft: bonusBytes > 0 ? +(bonusBytes / 1024 ** 3).toFixed(2) : "",
           regularUnlimitedDraft: Boolean(sub?.regular_unlimited_override),
-          regularBonusGbDraft: regularBonusBytes > 0 ? +(regularBonusBytes / (1024 ** 3)).toFixed(2) : "",
+          regularBonusGbDraft:
+            regularBonusBytes > 0 ? +(regularBonusBytes / 1024 ** 3).toFixed(2) : "",
           grantTrafficGbDraft: "",
           grantTrafficKindDraft: "regular",
         }));
       } else {
         onToast(res?.error || "load_failed");
-        state.update(s => ({ ...s, openedUser: null }));
+        state.update((s) => ({ ...s, openedUser: null }));
         if (!opts.skipPush) _pushUserPath(null);
       }
     } finally {
-      state.update(s => ({ ...s, userDetailLoading: false }));
+      state.update((s) => ({ ...s, userDetailLoading: false }));
     }
   }
 
   function closeUser(opts = {}) {
     let wasOpen = false;
-    state.update(s => {
+    state.update((s) => {
       wasOpen = Boolean(s.openedUser);
       return {
         ...s,
@@ -150,27 +157,33 @@ export function createUsersStore({ api, onToast, at }) {
 
   function requestBanToggle() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
     if (s.openedUser.is_banned) {
       applyBanToggle(false);
     } else {
-      state.update(st => ({ ...st, userBanConfirmOpen: true }));
+      state.update((st) => ({ ...st, userBanConfirmOpen: true }));
     }
   }
 
   async function applyBanToggle(banned) {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const res = await api(`/admin/users/${s.openedUser.user_id}/ban`, {
         method: "POST",
         body: JSON.stringify({ banned }),
       });
       if (res?.ok) {
-        state.update(st => {
+        state.update((st) => {
           const updatedUser = { ...st.openedUser, is_banned: banned };
           return {
             ...st,
@@ -179,18 +192,23 @@ export function createUsersStore({ api, onToast, at }) {
             userBanConfirmOpen: false,
           };
         });
-        onToast(banned ? at("user_banned", {}, "Заблокирован") : at("user_unbanned", {}, "Разблокирован"));
+        onToast(
+          banned ? at("user_banned", {}, "Заблокирован") : at("user_unbanned", {}, "Разблокирован")
+        );
       } else onToast(res?.error || at("error", {}, "Ошибка"));
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   async function sendUserMessage() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser || !s.userMessageDraft.trim()) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const res = await api(`/admin/users/${s.openedUser.user_id}/message`, {
         method: "POST",
@@ -198,19 +216,19 @@ export function createUsersStore({ api, onToast, at }) {
       });
       if (res?.ok) {
         onToast(at("message_sent", {}, "Отправлено"));
-        state.update(st => ({
+        state.update((st) => ({
           ...st,
           userMessageDraft: "",
           userMessageConfirmOpen: false,
         }));
       } else onToast(res?.error || at("message_send_failed", {}, "Ошибка отправки"));
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   function requestSendUserMessage() {
-    state.update(s => {
+    state.update((s) => {
       if (!s.openedUser || !s.userMessageDraft.trim()) return s;
       return { ...s, userMessageConfirmOpen: true };
     });
@@ -218,9 +236,12 @@ export function createUsersStore({ api, onToast, at }) {
 
   async function previewUserMessage() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser || !s.userMessageDraft.trim()) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const res = await api(`/admin/users/${s.openedUser.user_id}/message/preview`, {
         method: "POST",
@@ -229,17 +250,20 @@ export function createUsersStore({ api, onToast, at }) {
       if (res?.ok) onToast(at("message_preview_sent", {}, "Превью отправлено в Telegram"));
       else onToast(res?.error || at("message_preview_failed", {}, "Ошибка отправки превью"));
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   async function extendUser() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
     const days = Number(s.userExtendDays);
     if (!days || days <= 0) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const res = await api(`/admin/users/${s.openedUser.user_id}/extend`, {
         method: "POST",
@@ -250,34 +274,41 @@ export function createUsersStore({ api, onToast, at }) {
         await openUser(s.openedUser, { skipPush: true });
       } else onToast(res?.error || at("error", {}, "Ошибка"));
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   async function resetTrialUser() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const res = await api(`/admin/users/${s.openedUser.user_id}/reset-trial`, { method: "POST" });
       if (res?.ok) onToast(at("trial_reset", {}, "Триал сброшен"));
       else onToast(res?.error || at("error", {}, "Ошибка"));
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   async function savePremiumTrafficOverride() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const bonusGbRaw = s.premiumBonusGbDraft;
-      const bonusGb = bonusGbRaw === "" || bonusGbRaw === null || bonusGbRaw === undefined
-        ? 0
-        : Number(bonusGbRaw);
+      const bonusGb =
+        bonusGbRaw === "" || bonusGbRaw === null || bonusGbRaw === undefined
+          ? 0
+          : Number(bonusGbRaw);
       if (Number.isNaN(bonusGb) || bonusGb < 0) {
         onToast(at("premium_override_invalid_bonus", {}, "Некорректное значение GB"));
         return;
@@ -296,22 +327,26 @@ export function createUsersStore({ api, onToast, at }) {
         onToast(res?.error || at("error", {}, "Ошибка"));
       }
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   async function saveRegularTrafficOverride() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const regGbRaw = s.regularBonusGbDraft;
-      const regularGb = regGbRaw === "" || regGbRaw === null || regGbRaw === undefined
-        ? 0
-        : Number(regGbRaw);
+      const regularGb =
+        regGbRaw === "" || regGbRaw === null || regGbRaw === undefined ? 0 : Number(regGbRaw);
       if (Number.isNaN(regularGb) || regularGb < 0) {
-        onToast(at("regular_override_invalid_bonus", {}, "Некорректное значение GB для основного трафика"));
+        onToast(
+          at("regular_override_invalid_bonus", {}, "Некорректное значение GB для основного трафика")
+        );
         return;
       }
       const res = await api(`/admin/users/${s.openedUser.user_id}/regular-traffic-override`, {
@@ -328,13 +363,16 @@ export function createUsersStore({ api, onToast, at }) {
         onToast(res?.error || at("error", {}, "Ошибка"));
       }
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   async function grantTraffic() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
     const gbRaw = s.grantTrafficGbDraft;
     const gb = Number(gbRaw);
@@ -343,7 +381,7 @@ export function createUsersStore({ api, onToast, at }) {
       return;
     }
     const kind = s.grantTrafficKindDraft === "premium" ? "premium" : "regular";
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const res = await api(`/admin/users/${s.openedUser.user_id}/traffic-grant`, {
         method: "POST",
@@ -355,38 +393,41 @@ export function createUsersStore({ api, onToast, at }) {
             ? at("traffic_grant_premium_done", { gb }, `+${gb} ГБ премиум-трафика`)
             : at("traffic_grant_regular_done", { gb }, `+${gb} ГБ трафика`)
         );
-        state.update(st => ({ ...st, grantTrafficGbDraft: "" }));
+        state.update((st) => ({ ...st, grantTrafficGbDraft: "" }));
         await openUser(s.openedUser, { skipPush: true });
       } else {
         onToast(res?.error || at("error", {}, "Ошибка"));
       }
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   async function deleteUser() {
     let s;
-    state.update(st => { s = st; return st; });
+    state.update((st) => {
+      s = st;
+      return st;
+    });
     if (!s.openedUser) return;
-    state.update(st => ({ ...st, userActionBusy: true }));
+    state.update((st) => ({ ...st, userActionBusy: true }));
     try {
       const res = await api(`/admin/users/${s.openedUser.user_id}`, { method: "DELETE" });
       if (res?.ok) {
         onToast(at("user_deleted", {}, "Удален"));
-        state.update(st => ({
+        state.update((st) => ({
           ...st,
-          users: st.users.filter((u) => u.user_id !== st.openedUser.user_id)
+          users: st.users.filter((u) => u.user_id !== st.openedUser.user_id),
         }));
         closeUser();
       } else onToast(res?.error || at("error", {}, "Ошибка"));
     } finally {
-      state.update(st => ({ ...st, userActionBusy: false }));
+      state.update((st) => ({ ...st, userActionBusy: false }));
     }
   }
 
   function updateState(updates) {
-    state.update(s => ({ ...s, ...updates }));
+    state.update((s) => ({ ...s, ...updates }));
   }
 
   return {

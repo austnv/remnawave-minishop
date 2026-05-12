@@ -14,8 +14,8 @@ from bot.middlewares.i18n import JsonI18n
 from bot.services.panel_api_service import PanelApiService
 from bot.services.subscription_service import SubscriptionService
 from bot.utils.date_utils import month_start
-from config.settings import Settings
 from bot.utils.mini_app_url import subscription_mini_app_topup_url
+from config.settings import Settings
 from db.dal import subscription_dal, tariff_dal, user_dal
 from db.models import Subscription
 
@@ -68,7 +68,9 @@ class TariffTrafficWorker:
     def _traffic_topup_markup(self, user_lang: str, kind: str) -> Optional[InlineKeyboardMarkup]:
         if not self.bot:
             return None
-        _ = lambda k, **kw: self.i18n.gettext(user_lang, k, **kw) if self.i18n else (lambda key, **_: key)
+        _ = lambda k, **kw: (
+            self.i18n.gettext(user_lang, k, **kw) if self.i18n else (lambda key, **_: key)
+        )
         normalized = "premium" if str(kind or "").lower() == "premium" else "regular"
         url = subscription_mini_app_topup_url(self.settings, normalized)
         if normalized == "premium":
@@ -120,8 +122,13 @@ class TariffTrafficWorker:
                 tariff = self.settings.tariffs_config.require(sub.tariff_key)
             except Exception:
                 continue
-            panel_data = await self.panel_service.get_user_by_uuid(sub.panel_user_uuid, log_response=False) or {}
-            used, limit, panel_strategy = self.subscription_service._extract_panel_traffic_details(panel_data)
+            panel_data = (
+                await self.panel_service.get_user_by_uuid(sub.panel_user_uuid, log_response=False)
+                or {}
+            )
+            used, limit, panel_strategy = self.subscription_service._extract_panel_traffic_details(
+                panel_data
+            )
             panel_status = str(panel_data.get("status") or "").upper()
             panel_username = panel_data.get("username") if isinstance(panel_data, dict) else None
             if used is not None and used != sub.traffic_used_bytes:
@@ -139,10 +146,14 @@ class TariffTrafficWorker:
                 tariff,
                 used,
                 limit,
-                warning_period_start=warning_period_start if tariff.billing_model == "period" else None,
+                warning_period_start=warning_period_start
+                if tariff.billing_model == "period"
+                else None,
             )
 
-            await self._sync_premium_squad_limit(session, sub, tariff, now, panel_username=panel_username)
+            await self._sync_premium_squad_limit(
+                session, sub, tariff, now, panel_username=panel_username
+            )
 
     async def _ensure_period_reset_strategy(
         self,
@@ -179,7 +190,9 @@ class TariffTrafficWorker:
             tariff,
             include_premium=not bool(getattr(sub, "premium_is_limited", False)),
         )
-        await self.panel_service.update_user_details_on_panel(sub.panel_user_uuid, payload, log_response=False)
+        await self.panel_service.update_user_details_on_panel(
+            sub.panel_user_uuid, payload, log_response=False
+        )
 
     async def _maybe_warn_or_throttle(
         self,
@@ -270,14 +283,17 @@ class TariffTrafficWorker:
         panel_username: Optional[str] = None,
     ) -> None:
         if not getattr(tariff, "premium_squad_uuids", None):
-            if any(
-                int(value or 0) > 0
-                for value in (
-                    sub.premium_baseline_bytes,
-                    sub.premium_topup_balance_bytes,
-                    sub.premium_used_bytes,
+            if (
+                any(
+                    int(value or 0) > 0
+                    for value in (
+                        sub.premium_baseline_bytes,
+                        sub.premium_topup_balance_bytes,
+                        sub.premium_used_bytes,
+                    )
                 )
-            ) or sub.premium_is_limited:
+                or sub.premium_is_limited
+            ):
                 sub.premium_baseline_bytes = 0
                 sub.premium_topup_balance_bytes = 0
                 sub.premium_used_bytes = 0
@@ -288,11 +304,15 @@ class TariffTrafficWorker:
         same_period = bool(getattr(sub, "premium_period_start_at", None) == premium_period_start)
         premium_baseline = int(tariff.premium_monthly_bytes or 0)
         premium_topup_balance = int(sub.premium_topup_balance_bytes or 0)
-        premium_topup_used = int(getattr(sub, "premium_topup_used_bytes", 0) or 0) if same_period else 0
+        premium_topup_used = (
+            int(getattr(sub, "premium_topup_used_bytes", 0) or 0) if same_period else 0
+        )
         # Admin-side overrides for free gifted premium traffic.
         premium_unlimited_override = bool(getattr(sub, "premium_unlimited_override", False))
         premium_bonus = max(0, int(getattr(sub, "premium_bonus_bytes", 0) or 0))
-        premium_limit = premium_baseline + premium_topup_balance + premium_topup_used + premium_bonus
+        premium_limit = (
+            premium_baseline + premium_topup_balance + premium_topup_used + premium_bonus
+        )
         if premium_limit <= 0 and not premium_unlimited_override:
             return
 
@@ -323,7 +343,9 @@ class TariffTrafficWorker:
         if consume_from_topup > 0:
             premium_topup_balance -= consume_from_topup
             premium_topup_used += consume_from_topup
-            premium_limit = premium_baseline + premium_topup_balance + premium_topup_used + premium_bonus
+            premium_limit = (
+                premium_baseline + premium_topup_balance + premium_topup_used + premium_bonus
+            )
 
         if premium_unlimited_override:
             should_limit = False
@@ -448,7 +470,9 @@ class TariffTrafficWorker:
                         parse_mode="HTML",
                     )
                 except Exception:
-                    logging.exception("Failed to send premium traffic depleted warning to user %s", sub.user_id)
+                    logging.exception(
+                        "Failed to send premium traffic depleted warning to user %s", sub.user_id
+                    )
             return
 
         for level in levels:
@@ -519,7 +543,9 @@ class TariffTrafficWorker:
 
         nodes: list[str] = []
         for squad_uuid in tariff.premium_squad_uuids or []:
-            accessible = await self.panel_service.get_internal_squad_accessible_nodes(squad_uuid) or []
+            accessible = (
+                await self.panel_service.get_internal_squad_accessible_nodes(squad_uuid) or []
+            )
             for node in accessible:
                 if not isinstance(node, dict):
                     continue
@@ -564,9 +590,7 @@ class TariffTrafficWorker:
                     or entry.get("user_uuid")
                 )
                 entry_username = (
-                    user_obj.get("username")
-                    or entry.get("username")
-                    or entry.get("userUsername")
+                    user_obj.get("username") or entry.get("username") or entry.get("userUsername")
                 )
                 # Remnawave's /bandwidth-stats/nodes/{uuid}/users response
                 # currently exposes only {color, username, total}; match by
@@ -609,7 +633,9 @@ class TariffTrafficWorker:
             if int(sub.traffic_limit_bytes or 0) <= int(sub.traffic_used_bytes or 0):
                 continue
             for squad_uuid in tariff.squad_uuids:
-                await self.panel_service.add_users_to_internal_squad(squad_uuid, [sub.panel_user_uuid])
+                await self.panel_service.add_users_to_internal_squad(
+                    squad_uuid, [sub.panel_user_uuid]
+                )
             await subscription_dal.update_subscription(
                 session,
                 sub.subscription_id,

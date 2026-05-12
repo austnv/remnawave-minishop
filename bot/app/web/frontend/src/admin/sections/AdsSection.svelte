@@ -16,13 +16,7 @@
 
   const adsStore = getContext("adsStore");
 
-  $: ({
-    ads,
-    adsTotals,
-    adsLoading,
-    adCreateOpen,
-    adDraft,
-  } = $adsStore);
+  $: ({ ads, adsTotals, adsLoading, adCreateOpen, adDraft } = $adsStore);
   $: adHeaders = [
     at("id", {}, "ID"),
     at("ads_col_source", {}, "Источник"),
@@ -41,9 +35,16 @@
 
 <div class="admin-table-wrap">
   {#if adsLoading}
-    <AdminTableSkeleton headers={adHeaders} rows={6} actionColumn widths={["44px", "96px", "110px", "70px", "54px", "54px", "72px", "92px"]} />
+    <AdminTableSkeleton
+      headers={adHeaders}
+      rows={6}
+      actionColumn
+      widths={["44px", "96px", "110px", "70px", "54px", "54px", "72px", "92px"]}
+    />
   {:else if !ads.length}
-    <AdminEmptyState tone="card"><span class="admin-muted">{at("ads_empty", {}, "Кампаний нет")}</span></AdminEmptyState>
+    <AdminEmptyState tone="card"
+      ><span class="admin-muted">{at("ads_empty", {}, "Кампаний нет")}</span></AdminEmptyState
+    >
   {:else}
     <AdminTable>
       <thead>
@@ -63,10 +64,16 @@
           <tr>
             <td class="admin-cell-id" data-label={at("id", {}, "ID")}>#{ad.id}</td>
             <td data-label={at("ads_col_source", {}, "Источник")}>{ad.source}</td>
-            <td class="admin-cell-mono" data-label={at("ads_col_param", {}, "Параметр")}>{ad.start_param}</td>
+            <td class="admin-cell-mono" data-label={at("ads_col_param", {}, "Параметр")}
+              >{ad.start_param}</td
+            >
             <td data-label={at("ads_col_cost", {}, "Стоимость")}>{fmtMoney(ad.cost)}</td>
-            <td data-label={at("ads_col_registrations", {}, "Регистрации")}>{ad.stats?.registrations ?? 0}</td>
-            <td data-label={at("ads_col_conversions", {}, "Конверсии")}>{ad.stats?.conversions ?? 0}</td>
+            <td data-label={at("ads_col_registrations", {}, "Регистрации")}
+              >{ad.stats?.registrations ?? 0}</td
+            >
+            <td data-label={at("ads_col_conversions", {}, "Конверсии")}
+              >{ad.stats?.conversions ?? 0}</td
+            >
             <td data-label={at("ads_col_status", {}, "Статус")}>
               {#if ad.is_active}
                 <AdminBadge variant="success">{at("status_active", {}, "Активна")}</AdminBadge>
@@ -99,23 +106,48 @@
   <div class="admin-form" data-dialog-content>
     <div class="admin-dialog-form-section">
       <AdminField label={at("ad_label_source", {}, "Источник")}>
-        <input class="input" type="text" placeholder="telegram_ads" value={adDraft.source} on:input={(e) => adsStore.updateDraft({ source: e.target.value })} />
+        <input
+          class="input"
+          type="text"
+          placeholder="telegram_ads"
+          value={adDraft.source}
+          on:input={(e) => adsStore.updateDraft({ source: e.target.value })}
+        />
       </AdminField>
       <AdminField
         label={at("ad_label_param", {}, "start-параметр")}
         hint={at("ad_hint_param", {}, "Передаётся в /start, должен быть уникален")}
       >
-        <input class="input" type="text" placeholder="ads_summer25" value={adDraft.start_param} on:input={(e) => adsStore.updateDraft({ start_param: e.target.value })} />
+        <input
+          class="input"
+          type="text"
+          placeholder="ads_summer25"
+          value={adDraft.start_param}
+          on:input={(e) => adsStore.updateDraft({ start_param: e.target.value })}
+        />
       </AdminField>
     </div>
     <div class="admin-dialog-form-section">
       <AdminField label={at("ad_label_cost", {}, "Стоимость, RUB")}>
-        <input class="input" type="number" step="0.01" min="0" value={adDraft.cost} on:input={(e) => adsStore.updateDraft({ cost: Number(e.target.value) })} />
+        <input
+          class="input"
+          type="number"
+          step="0.01"
+          min="0"
+          value={adDraft.cost}
+          on:input={(e) => adsStore.updateDraft({ cost: Number(e.target.value) })}
+        />
       </AdminField>
     </div>
     <div class="admin-dialog-actions">
-      <AdminButton onclick={() => adsStore.setCreateOpen(false)}>{at("btn_cancel", {}, "Отмена")}</AdminButton>
-      <AdminButton variant="primary" onclick={adsStore.createAd} disabled={!adDraft.source.trim() || !adDraft.start_param.trim()}>
+      <AdminButton onclick={() => adsStore.setCreateOpen(false)}
+        >{at("btn_cancel", {}, "Отмена")}</AdminButton
+      >
+      <AdminButton
+        variant="primary"
+        onclick={adsStore.createAd}
+        disabled={!adDraft.source.trim() || !adDraft.start_param.trim()}
+      >
         {at("btn_create", {}, "Создать")}
       </AdminButton>
     </div>

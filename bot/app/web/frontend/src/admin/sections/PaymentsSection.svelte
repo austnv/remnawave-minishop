@@ -18,12 +18,7 @@
 
   const paymentsStore = getContext("paymentsStore");
 
-  $: ({
-    payments,
-    paymentsTotal,
-    paymentsPage,
-    paymentsLoading,
-  } = $paymentsStore);
+  $: ({ payments, paymentsTotal, paymentsPage, paymentsLoading } = $paymentsStore);
 
   $: paymentsHasMore = payments.length > 0 && paymentsTotal > (paymentsPage + 1) * 25; // 25 is PAYMENTS_PAGE_SIZE
 
@@ -59,7 +54,7 @@
       return at(
         "payments_desc_traffic_package_regular",
         { gb },
-        `Пакет трафика ${gb} ГБ (обычный)`,
+        `Пакет трафика ${gb} ГБ (обычный)`
       );
     }
     if (pr != null && r == null) {
@@ -67,7 +62,7 @@
       return at(
         "payments_desc_traffic_package_premium",
         { gb },
-        `Пакет трафика ${gb} ГБ (премиум)`,
+        `Пакет трафика ${gb} ГБ (премиум)`
       );
     }
     const raw = p.description && String(p.description).trim();
@@ -100,7 +95,9 @@
       widths={["48px", "148px", "88px", "72px", "72px", "78px", "82px", "140px", "72px", "96px"]}
     />
   {:else if !payments.length}
-    <AdminEmptyState tone="card"><span class="admin-muted">{at("payments_empty", {}, "Нет платежей")}</span></AdminEmptyState>
+    <AdminEmptyState tone="card"
+      ><span class="admin-muted">{at("payments_empty", {}, "Нет платежей")}</span></AdminEmptyState
+    >
   {:else}
     <AdminTable>
       <thead>
@@ -136,18 +133,29 @@
                 <span class="admin-payments-user-name">{p.user_label || p.user_id}</span>
               </span>
             </td>
-            <td class="admin-cell-mono" data-label={at("payments_col_telegram_id", {}, "Telegram ID")}>
+            <td
+              class="admin-cell-mono"
+              data-label={at("payments_col_telegram_id", {}, "Telegram ID")}
+            >
               {p.telegram_id != null ? p.telegram_id : "—"}
             </td>
-            <td class="admin-cell-traffic-gb" data-label={at("payments_col_traffic_regular", {}, "Основной трафик")}>
+            <td
+              class="admin-cell-traffic-gb"
+              data-label={at("payments_col_traffic_regular", {}, "Основной трафик")}
+            >
               {formatTrafficGbCell(p.traffic_regular_gb)}
             </td>
-            <td class="admin-cell-traffic-gb" data-label={at("payments_col_traffic_premium", {}, "Премиум")}>
+            <td
+              class="admin-cell-traffic-gb"
+              data-label={at("payments_col_traffic_premium", {}, "Премиум")}
+            >
               {formatTrafficGbCell(p.traffic_premium_gb)}
             </td>
             <td data-label={at("amount", {}, "Сумма")}>{fmtMoney(p.amount, p.currency)}</td>
             <td data-label={at("provider", {}, "Провайдер")}>{p.provider}</td>
-            <td class="admin-cell-wrap" data-label={at("description", {}, "Описание")}>{paymentDescriptionDisplay(p)}</td>
+            <td class="admin-cell-wrap" data-label={at("description", {}, "Описание")}
+              >{paymentDescriptionDisplay(p)}</td
+            >
             <td data-label={at("status", {}, "Статус")}>
               <AdminBadge variant={paymentStatusVariant(p.status)}>{p.status}</AdminBadge>
             </td>

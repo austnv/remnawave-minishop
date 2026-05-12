@@ -4,7 +4,9 @@ import { unitPluralBucket } from "./plurals.js";
 
 export function createI18n({ messages = {}, defaultLang = "ru", getLang = null } = {}) {
   function normalizeLangCode(lang) {
-    const key = String(lang || "").trim().toLowerCase();
+    const key = String(lang || "")
+      .trim()
+      .toLowerCase();
     if (!key) return defaultLang;
     const base = key.split("-")[0];
     if (LANGUAGE_LABELS[base]) return base;
@@ -31,7 +33,9 @@ export function createI18n({ messages = {}, defaultLang = "ru", getLang = null }
   }
 
   function languageName(code) {
-    const key = String(code || "").trim().toLowerCase();
+    const key = String(code || "")
+      .trim()
+      .toLowerCase();
     if (!key) return t("wa_language_default");
     return LANGUAGE_LABELS[key] || key.toUpperCase();
   }

@@ -79,7 +79,9 @@
         disabled={authBusy || authResendCooldown > 0}
       >
         <RefreshCw size={15} />
-        {authResendCooldown > 0 ? t("wa_auth_resend_wait", { seconds: authResendCooldown }) : t("wa_resend_code")}
+        {authResendCooldown > 0
+          ? t("wa_auth_resend_wait", { seconds: authResendCooldown })
+          : t("wa_resend_code")}
       </button>
     </div>
   {:else}
@@ -105,12 +107,16 @@
                   />
                   {#if loginEmailFieldError}
                     <Tooltip.Trigger class="field-error-trigger" aria-label={loginEmailFieldError}>
-                      <span class="field-error-icon" aria-hidden="true"><TriangleAlert size={18} /></span>
+                      <span class="field-error-icon" aria-hidden="true"
+                        ><TriangleAlert size={18} /></span
+                      >
                     </Tooltip.Trigger>
                   {/if}
                   {#if loginEmailFieldError}
                     <Tooltip.Portal>
-                      <Tooltip.Content class="field-error-tooltip">{loginEmailFieldError}</Tooltip.Content>
+                      <Tooltip.Content class="field-error-tooltip"
+                        >{loginEmailFieldError}</Tooltip.Content
+                      >
                     </Tooltip.Portal>
                   {/if}
                 </Tooltip.Root>
@@ -161,7 +167,10 @@
                 href={privacyPolicyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onclick={(e) => { e.preventDefault(); openExternalLink(privacyPolicyUrl); }}
+                onclick={(e) => {
+                  e.preventDefault();
+                  openExternalLink(privacyPolicyUrl);
+                }}
               >
                 {t("wa_auth_legal_privacy")}
               </a>
@@ -174,7 +183,10 @@
                 href={userAgreementUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onclick={(e) => { e.preventDefault(); openExternalLink(userAgreementUrl); }}
+                onclick={(e) => {
+                  e.preventDefault();
+                  openExternalLink(userAgreementUrl);
+                }}
               >
                 {t("wa_auth_legal_agreement")}
               </a>

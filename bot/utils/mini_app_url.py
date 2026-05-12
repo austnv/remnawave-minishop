@@ -1,4 +1,5 @@
 """Helpers for Telegram Mini App URLs (subscription webapp)."""
+
 from __future__ import annotations
 
 from typing import Optional

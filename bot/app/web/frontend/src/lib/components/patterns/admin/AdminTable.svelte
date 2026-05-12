@@ -7,7 +7,11 @@
 </script>
 
 <div class="admin-table-wrap">
-  <table class={cn("admin-table", skeleton && "admin-table-skeleton", className)} aria-hidden={skeleton ? "true" : undefined} {...$$restProps}>
+  <table
+    class={cn("admin-table", skeleton && "admin-table-skeleton", className)}
+    aria-hidden={skeleton ? "true" : undefined}
+    {...$$restProps}
+  >
     <slot />
   </table>
 </div>

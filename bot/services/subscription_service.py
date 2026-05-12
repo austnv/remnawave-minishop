@@ -1,25 +1,32 @@
 import logging
 import math
-from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 from aiogram import Bot
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from bot.middlewares.i18n import JsonI18n
-
-from db.dal import user_dal, subscription_dal, promo_code_dal, payment_dal, user_billing_dal, tariff_dal
-from config.tariffs_config import Tariff
-from bot.utils.date_utils import add_months, month_start
 from bot.utils.config_link import prepare_config_links
-from db.models import User, Subscription
-
+from bot.utils.date_utils import add_months, month_start
 from config.settings import Settings
-from .panel_api_service import PanelApiService
+from config.tariffs_config import Tariff
+from db.dal import (
+    payment_dal,
+    promo_code_dal,
+    subscription_dal,
+    tariff_dal,
+    user_billing_dal,
+    user_dal,
+)
+from db.models import Subscription, User
+
 from .email_auth_service import EmailAuthService
 from .email_templates import render_payment_success
+from .panel_api_service import PanelApiService
 
 
 class SubscriptionService:
-
     def __init__(
         self,
         settings: Settings,
@@ -63,13 +70,17 @@ class SubscriptionService:
         config = self._tariffs_config()
         return config.default if config else None
 
-    def _resolve_tariff(self, tariff_key: Optional[str], billing_model: Optional[str] = None) -> Optional[Tariff]:
+    def _resolve_tariff(
+        self, tariff_key: Optional[str], billing_model: Optional[str] = None
+    ) -> Optional[Tariff]:
         config = self._tariffs_config()
         if not config:
             return None
         tariff = config.require(tariff_key or config.default_tariff)
         if billing_model and tariff.billing_model != billing_model:
-            raise ValueError(f"Tariff {tariff.key} is {tariff.billing_model}, expected {billing_model}")
+            raise ValueError(
+                f"Tariff {tariff.key} is {tariff.billing_model}, expected {billing_model}"
+            )
         return tariff
 
     def _panel_squads_for_tariff(
@@ -105,7 +116,9 @@ class SubscriptionService:
             traffic_used_bytes=traffic_used_bytes,
         )
 
-    def _premium_limit_for_tariff(self, tariff: Optional[Tariff], topup_balance_bytes: int = 0) -> int:
+    def _premium_limit_for_tariff(
+        self, tariff: Optional[Tariff], topup_balance_bytes: int = 0
+    ) -> int:
         if not tariff:
             return 0
         return int(tariff.premium_monthly_bytes + max(0, topup_balance_bytes))
@@ -141,7 +154,7 @@ class SubscriptionService:
         )
         if regular_unlimited_override:
             used = max(0, int(traffic_used_bytes or 0))
-            return max(floor, used + 512 * (1024 ** 3), 1024 ** 5)
+            return max(floor, used + 512 * (1024**3), 1024**5)
         return floor
 
     async def premium_access_for_tariff(self, tariff: Optional[Tariff]) -> Dict[str, Any]:
@@ -188,7 +201,9 @@ class SubscriptionService:
                 squad_uuid = str(squad.get("uuid") or squad.get("id") or "")
                 if not squad_uuid:
                     continue
-                squad_name_map[squad_uuid] = str(squad.get("name") or squad.get("title") or squad_uuid)
+                squad_name_map[squad_uuid] = str(
+                    squad.get("name") or squad.get("title") or squad_uuid
+                )
                 squad_inbound_map[squad_uuid] = _extract_inbound_uuids(squad)
         except Exception:
             logging.debug("Failed to load internal squad names for premium display", exc_info=True)
@@ -200,7 +215,9 @@ class SubscriptionService:
             try:
                 detail = await self.panel_service.get_internal_squad(squad_uuid_str)
             except Exception:
-                logging.debug("Failed to load internal squad detail for %s", squad_uuid_str, exc_info=True)
+                logging.debug(
+                    "Failed to load internal squad detail for %s", squad_uuid_str, exc_info=True
+                )
                 detail = None
             if isinstance(detail, dict):
                 squad_inbound_map[squad_uuid_str] = _extract_inbound_uuids(detail)
@@ -264,16 +281,33 @@ class SubscriptionService:
                 continue
 
             try:
-                nodes = await self.panel_service.get_internal_squad_accessible_nodes(squad_uuid) or []
+                nodes = (
+                    await self.panel_service.get_internal_squad_accessible_nodes(squad_uuid) or []
+                )
             except Exception:
-                logging.debug("Failed to load accessible nodes for premium squad %s", squad_uuid, exc_info=True)
+                logging.debug(
+                    "Failed to load accessible nodes for premium squad %s",
+                    squad_uuid,
+                    exc_info=True,
+                )
                 nodes = []
             for node in nodes:
                 if not isinstance(node, dict):
                     continue
-                node_uuid = str(node.get("uuid") or node.get("nodeUuid") or node.get("node_uuid") or "")
+                node_uuid = str(
+                    node.get("uuid") or node.get("nodeUuid") or node.get("node_uuid") or ""
+                )
                 node_name = ""
-                for key in ("nodeName", "name", "nodeRemark", "remark", "label", "title", "address", "host"):
+                for key in (
+                    "nodeName",
+                    "name",
+                    "nodeRemark",
+                    "remark",
+                    "label",
+                    "title",
+                    "address",
+                    "host",
+                ):
                     value = node.get(key)
                     if value is None:
                         continue
@@ -363,6 +397,7 @@ class SubscriptionService:
             if not active_sub or not active_sub.end_date:
                 return False
             from datetime import datetime, timezone
+
             return active_sub.is_active and active_sub.end_date > datetime.now(timezone.utc)
         except Exception:
             return False
@@ -380,9 +415,7 @@ class SubscriptionService:
             strategy = traffic_stats.get("trafficLimitStrategy")
         return used, limit, strategy
 
-    def _extract_lifetime_used_traffic(
-        self, panel_user_data: Dict[str, Any]
-    ) -> Optional[int]:
+    def _extract_lifetime_used_traffic(self, panel_user_data: Dict[str, Any]) -> Optional[int]:
         traffic_stats = panel_user_data.get("userTraffic") or {}
         lifetime = traffic_stats.get("lifetimeUsedTrafficBytes")
         if lifetime is None:
@@ -415,9 +448,7 @@ class SubscriptionService:
             return int(db_user.user_id)
         return None
 
-    async def _panel_username_for_user(
-        self, session: AsyncSession, db_user: User
-    ) -> str:
+    async def _panel_username_for_user(self, session: AsyncSession, db_user: User) -> str:
         telegram_id = self._telegram_id_for_panel(db_user)
         if telegram_id and int(db_user.user_id) == telegram_id:
             return f"tg_{telegram_id}"
@@ -457,9 +488,7 @@ class SubscriptionService:
             return None, None, None, False
 
         current_local_panel_uuid = db_user.panel_user_uuid
-        panel_username_on_panel_standard = await self._panel_username_for_user(
-            session, db_user
-        )
+        panel_username_on_panel_standard = await self._panel_username_for_user(session, db_user)
         telegram_id_for_panel = self._telegram_id_for_panel(db_user)
 
         panel_user_obj_from_api = None
@@ -498,7 +527,6 @@ class SubscriptionService:
 
         if not panel_user_obj_from_api:
             if current_local_panel_uuid:
-
                 logging.info(
                     f"User {user_id} (local panel_uuid: {current_local_panel_uuid}) not found on panel by TG ID. Fetching by panel_uuid."
                 )
@@ -534,7 +562,6 @@ class SubscriptionService:
                         return None, None, None, False
 
             else:
-
                 logging.info(
                     f"No panel user by TG ID & no local panel_uuid for TG user {user_id}. Creating new panel user '{panel_username_on_panel_standard}'."
                 )
@@ -560,10 +587,8 @@ class SubscriptionService:
                     logging.warning(
                         f"Panel user '{panel_username_on_panel_standard}' already exists (errorCode A019). Fetching by username."
                     )
-                    fetched_by_username_list = (
-                        await self.panel_service.get_users_by_filter(
-                            username=panel_username_on_panel_standard
-                        )
+                    fetched_by_username_list = await self.panel_service.get_users_by_filter(
+                        username=panel_username_on_panel_standard
                     )
                     if fetched_by_username_list and len(fetched_by_username_list) == 1:
                         panel_user_obj_from_api = fetched_by_username_list[0]
@@ -616,7 +641,6 @@ class SubscriptionService:
             needs_local_panel_uuid_update = True
 
         if needs_local_panel_uuid_update:
-
             conflicting_user_record = await user_dal.get_user_by_panel_uuid(
                 session, actual_panel_uuid_from_api
             )
@@ -629,10 +653,7 @@ class SubscriptionService:
 
                 return None, None, None, False
             else:
-
-                update_data_for_local_user = {
-                    "panel_user_uuid": actual_panel_uuid_from_api
-                }
+                update_data_for_local_user = {"panel_user_uuid": actual_panel_uuid_from_api}
 
                 # Do not overwrite Telegram username with panel username.
                 # Only update the local linkage to panel UUID here.
@@ -641,7 +662,6 @@ class SubscriptionService:
                 panel_user_created_or_linked_now = True
                 current_local_panel_uuid = actual_panel_uuid_from_api
         else:
-
             pass
 
         panel_telegram_id_int = None
@@ -708,9 +728,12 @@ class SubscriptionService:
                 "message_key": "trial_already_had_subscription_or_trial",
             }
 
-        panel_user_uuid, panel_sub_link_id, panel_short_uuid, panel_user_created_now = (
-            await self._get_or_create_panel_user_link_details(session, user_id, db_user)
-        )
+        (
+            panel_user_uuid,
+            panel_sub_link_id,
+            panel_short_uuid,
+            panel_user_created_now,
+        ) = await self._get_or_create_panel_user_link_details(session, user_id, db_user)
 
         if not panel_user_uuid or not panel_sub_link_id:
             logging.error(f"Failed to get panel link details for trial user {user_id}.")
@@ -819,12 +842,17 @@ class SubscriptionService:
             logging.error("User %s not found for traffic package activation", user_id)
             return None
 
-        panel_user_uuid, panel_sub_link_id, panel_short_uuid, _ = (
-            await self._get_or_create_panel_user_link_details(session, user_id, db_user)
-        )
+        (
+            panel_user_uuid,
+            panel_sub_link_id,
+            panel_short_uuid,
+            _,
+        ) = await self._get_or_create_panel_user_link_details(session, user_id, db_user)
 
         if not panel_user_uuid or not panel_sub_link_id:
-            logging.error("Failed to ensure panel linkage for user %s during traffic activation", user_id)
+            logging.error(
+                "Failed to ensure panel linkage for user %s during traffic activation", user_id
+            )
             return None
 
         panel_user_data = await self.panel_service.get_user_by_uuid(panel_user_uuid) or {}
@@ -890,7 +918,9 @@ class SubscriptionService:
         try:
             new_or_updated_sub = await subscription_dal.upsert_subscription(session, sub_payload)
         except Exception as exc:
-            logging.error("Failed to upsert traffic subscription for user %s: %s", user_id, exc, exc_info=True)
+            logging.error(
+                "Failed to upsert traffic subscription for user %s: %s", user_id, exc, exc_info=True
+            )
             return None
 
         panel_update_payload = self._build_panel_update_payload(
@@ -982,7 +1012,9 @@ class SubscriptionService:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or not db_user.panel_user_uuid:
             return None
-        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        sub = await subscription_dal.get_active_subscription_by_user_id(
+            session, user_id, db_user.panel_user_uuid
+        )
         if not sub:
             return None
 
@@ -1031,7 +1063,9 @@ class SubscriptionService:
             include_premium=not bool(getattr(updated_sub, "premium_is_limited", False)),
         )
         panel_payload.update(self._panel_identity_payload_for_user(db_user))
-        await self.panel_service.update_user_details_on_panel(db_user.panel_user_uuid, panel_payload)
+        await self.panel_service.update_user_details_on_panel(
+            db_user.panel_user_uuid, panel_payload
+        )
         await tariff_dal.create_traffic_topup(
             session,
             subscription_id=sub.subscription_id,
@@ -1058,7 +1092,9 @@ class SubscriptionService:
     ) -> Optional[Dict[str, Any]]:
         tariff = self._resolve_tariff(tariff_key)
         if not tariff or not tariff.premium_squad_uuids:
-            logging.error("Premium top-up requires a tariff with premium squads for user %s", user_id)
+            logging.error(
+                "Premium top-up requires a tariff with premium squads for user %s", user_id
+            )
             return None
 
         await self._record_payment_context(
@@ -1071,7 +1107,9 @@ class SubscriptionService:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or not db_user.panel_user_uuid:
             return None
-        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        sub = await subscription_dal.get_active_subscription_by_user_id(
+            session, user_id, db_user.panel_user_uuid
+        )
         if not sub:
             return None
 
@@ -1116,7 +1154,9 @@ class SubscriptionService:
                 include_premium=not premium_is_limited,
             ),
         }
-        await self.panel_service.update_user_details_on_panel(db_user.panel_user_uuid, panel_payload)
+        await self.panel_service.update_user_details_on_panel(
+            db_user.panel_user_uuid, panel_payload
+        )
         await tariff_dal.create_traffic_topup(
             session,
             subscription_id=sub.subscription_id,
@@ -1166,7 +1206,9 @@ class SubscriptionService:
 
         tariff = self._resolve_tariff(sub.tariff_key) if sub.tariff_key else None
         purchase_bytes = self.gb_to_bytes(gb_value)
-        baseline_bytes = int(sub.tier_baseline_bytes or (tariff.monthly_bytes if tariff else 0) or 0)
+        baseline_bytes = int(
+            sub.tier_baseline_bytes or (tariff.monthly_bytes if tariff else 0) or 0
+        )
         new_topup_balance = int(sub.topup_balance_bytes or 0) + purchase_bytes
         rb = int(getattr(sub, "regular_bonus_bytes", 0) or 0)
         runl = bool(getattr(sub, "regular_unlimited_override", False))
@@ -1215,9 +1257,7 @@ class SubscriptionService:
                 db_user.panel_user_uuid, panel_payload
             )
         except Exception:
-            logging.exception(
-                "admin_grant_topup: failed to push panel update for user %s", user_id
-            )
+            logging.exception("admin_grant_topup: failed to push panel update for user %s", user_id)
         await tariff_dal.create_traffic_topup(
             session,
             subscription_id=sub.subscription_id,
@@ -1288,9 +1328,7 @@ class SubscriptionService:
                 db_user.panel_user_uuid, panel_payload
             )
         except Exception:
-            logging.exception(
-                "sync_main_traffic_limit_to_panel failed for user %s", user_id
-            )
+            logging.exception("sync_main_traffic_limit_to_panel failed for user %s", user_id)
 
     async def admin_grant_premium_topup(
         self,
@@ -1453,7 +1491,9 @@ class SubscriptionService:
             else self._base_hwid_limit_for_tariff(tariff)
         )
         if base_hwid_limit == 0:
-            logging.info("Skipping HWID top-up for user %s because current limit is unlimited", user_id)
+            logging.info(
+                "Skipping HWID top-up for user %s because current limit is unlimited", user_id
+            )
             return {
                 "subscription_id": sub.subscription_id,
                 "hwid_device_limit": 0,
@@ -1515,18 +1555,35 @@ class SubscriptionService:
             "tariff_key": tariff.key if tariff else sub.tariff_key,
         }
 
-    def calculate_tariff_switch_options(self, sub: Subscription, target_tariff: Tariff) -> Dict[str, Any]:
-        current_tariff = self._resolve_tariff(sub.tariff_key) if sub.tariff_key else self._default_tariff()
+    def calculate_tariff_switch_options(
+        self, sub: Subscription, target_tariff: Tariff
+    ) -> Dict[str, Any]:
+        current_tariff = (
+            self._resolve_tariff(sub.tariff_key) if sub.tariff_key else self._default_tariff()
+        )
         now = datetime.now(timezone.utc)
         remaining_days = max(0, (sub.end_date - now).days) if sub.end_date else 0
         effective = float(sub.effective_monthly_price_rub or 0)
         current_model = current_tariff.billing_model if current_tariff else "period"
 
         if current_model == "period" and target_tariff.billing_model == "period":
-            target_monthly = target_tariff.period_price(1, "rub") or target_tariff.min_period_price_rub() or effective or 1
+            target_monthly = (
+                target_tariff.period_price(1, "rub")
+                or target_tariff.min_period_price_rub()
+                or effective
+                or 1
+            )
             remaining_value = remaining_days * (effective / 30) if effective else 0
-            days_after = math.floor((remaining_value / float(target_monthly)) * 30) if target_monthly else remaining_days
-            paid_diff = max(0, math.ceil((float(target_monthly) - effective) * remaining_days / 30)) if effective else 0
+            days_after = (
+                math.floor((remaining_value / float(target_monthly)) * 30)
+                if target_monthly
+                else remaining_days
+            )
+            paid_diff = (
+                max(0, math.ceil((float(target_monthly) - effective) * remaining_days / 30))
+                if effective
+                else 0
+            )
             return {
                 "mode": "period_to_period",
                 "remaining_days": remaining_days,
@@ -1562,7 +1619,9 @@ class SubscriptionService:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or not db_user.panel_user_uuid:
             return None
-        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        sub = await subscription_dal.get_active_subscription_by_user_id(
+            session, user_id, db_user.panel_user_uuid
+        )
         if not sub:
             return None
         before_tariff_key = sub.tariff_key
@@ -1603,7 +1662,9 @@ class SubscriptionService:
                 traffic_used_bytes=used_sub,
             )
             update_data["period_start_at"] = None
-            update_data["effective_monthly_price_rub"] = target.period_price(1, "rub") or target.min_period_price_rub()
+            update_data["effective_monthly_price_rub"] = (
+                target.period_price(1, "rub") or target.min_period_price_rub()
+            )
             if mode == "recalc_days" and options.get("recalc_days") is not None:
                 update_data["end_date"] = now + timedelta(days=int(options["recalc_days"]))
         else:
@@ -1613,7 +1674,12 @@ class SubscriptionService:
             new_balance = old_topup + converted_bytes
             rb = int(getattr(sub, "regular_bonus_bytes", 0) or 0)
             runl = bool(getattr(sub, "regular_unlimited_override", False))
-            panel_user = await self.panel_service.get_user_by_uuid(db_user.panel_user_uuid, log_response=False) or {}
+            panel_user = (
+                await self.panel_service.get_user_by_uuid(
+                    db_user.panel_user_uuid, log_response=False
+                )
+                or {}
+            )
             current_used, _, _ = self._extract_panel_traffic_details(panel_user)
             cur_used_int = int(current_used or 0)
             update_data.update(
@@ -1636,7 +1702,9 @@ class SubscriptionService:
                 }
             )
 
-        updated = await subscription_dal.update_subscription(session, sub.subscription_id, update_data)
+        updated = await subscription_dal.update_subscription(
+            session, sub.subscription_id, update_data
+        )
         if not updated:
             return None
         panel_payload = self._build_panel_update_payload(
@@ -1652,7 +1720,9 @@ class SubscriptionService:
             include_premium=not bool(updated.premium_is_limited),
         )
         panel_payload.update(self._panel_identity_payload_for_user(db_user))
-        await self.panel_service.update_user_details_on_panel(db_user.panel_user_uuid, panel_payload)
+        await self.panel_service.update_user_details_on_panel(
+            db_user.panel_user_uuid, panel_payload
+        )
         if converted_bytes:
             await tariff_dal.create_traffic_topup(
                 session,
@@ -1670,7 +1740,9 @@ class SubscriptionService:
                 "mode": mode,
                 "payment_id": None,
                 "days_before": options.get("remaining_days"),
-                "days_after": (updated.end_date - now).days if updated.end_date and target.billing_model == "period" else None,
+                "days_after": (updated.end_date - now).days
+                if updated.end_date and target.billing_model == "period"
+                else None,
                 "converted_bytes": converted_bytes,
                 "eff_price_before": sub.effective_monthly_price_rub,
                 "eff_price_after": updated.effective_monthly_price_rub,
@@ -1794,7 +1866,9 @@ class SubscriptionService:
                             "mode": "paid_diff",
                             "payment_id": payment_db_id,
                             "days_before": None,
-                            "days_after": (sub.end_date - datetime.now(timezone.utc)).days if sub.end_date else None,
+                            "days_after": (sub.end_date - datetime.now(timezone.utc)).days
+                            if sub.end_date
+                            else None,
                             "converted_bytes": None,
                             "eff_price_before": None,
                             "eff_price_after": sub.effective_monthly_price_rub,
@@ -1815,19 +1889,18 @@ class SubscriptionService:
 
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user:
-            logging.error(
-                f"User {user_id} not found in DB for paid subscription activation."
-            )
+            logging.error(f"User {user_id} not found in DB for paid subscription activation.")
             return None
 
-        panel_user_uuid, panel_sub_link_id, panel_short_uuid, panel_user_created_now = (
-            await self._get_or_create_panel_user_link_details(session, user_id, db_user)
-        )
+        (
+            panel_user_uuid,
+            panel_sub_link_id,
+            panel_short_uuid,
+            panel_user_created_now,
+        ) = await self._get_or_create_panel_user_link_details(session, user_id, db_user)
 
         if not panel_user_uuid or not panel_sub_link_id:
-            logging.error(
-                f"Failed to ensure panel user for TG {user_id} during paid subscription."
-            )
+            logging.error(f"Failed to ensure panel user for TG {user_id} during paid subscription.")
             return None
 
         try:
@@ -1901,11 +1974,17 @@ class SubscriptionService:
 
         topup_balance_bytes = int(getattr(current_active_sub, "topup_balance_bytes", 0) or 0)
         extra_hwid_devices = int(getattr(current_active_sub, "extra_hwid_devices", 0) or 0)
-        premium_topup_balance_bytes = int(getattr(current_active_sub, "premium_topup_balance_bytes", 0) or 0)
-        premium_topup_used_bytes = int(getattr(current_active_sub, "premium_topup_used_bytes", 0) or 0)
+        premium_topup_balance_bytes = int(
+            getattr(current_active_sub, "premium_topup_balance_bytes", 0) or 0
+        )
+        premium_topup_used_bytes = int(
+            getattr(current_active_sub, "premium_topup_used_bytes", 0) or 0
+        )
         premium_used_bytes = int(getattr(current_active_sub, "premium_used_bytes", 0) or 0)
         premium_period_start_at = getattr(current_active_sub, "premium_period_start_at", None)
-        tier_baseline_bytes = tariff.monthly_bytes if tariff else self.settings.user_traffic_limit_bytes
+        tier_baseline_bytes = (
+            tariff.monthly_bytes if tariff else self.settings.user_traffic_limit_bytes
+        )
         premium_baseline_bytes = tariff.premium_monthly_bytes if tariff else 0
         premium_limit_bytes = self._premium_effective_limit_bytes(
             premium_baseline_bytes,
@@ -1924,7 +2003,9 @@ class SubscriptionService:
         )
         base_hwid_limit = self._base_hwid_limit_for_tariff(tariff)
         effective_hwid_limit = self._effective_hwid_limit(base_hwid_limit, extra_hwid_devices)
-        premium_is_limited = bool(premium_limit_bytes > 0 and premium_used_bytes >= premium_limit_bytes)
+        premium_is_limited = bool(
+            premium_limit_bytes > 0 and premium_used_bytes >= premium_limit_bytes
+        )
         sub_payload = {
             "user_id": user_id,
             "panel_user_uuid": panel_user_uuid,
@@ -1956,9 +2037,7 @@ class SubscriptionService:
             "extra_hwid_devices": extra_hwid_devices,
         }
         try:
-            new_or_updated_sub = await subscription_dal.upsert_subscription(
-                session, sub_payload
-            )
+            new_or_updated_sub = await subscription_dal.upsert_subscription(session, sub_payload)
         except Exception as e_upsert_sub:
             logging.error(
                 f"Failed to upsert paid subscription for user {user_id}: {e_upsert_sub}",
@@ -2029,9 +2108,7 @@ class SubscriptionService:
 
         user = await user_dal.get_user_by_id(session, user_id)
         if not user:
-            logging.warning(
-                f"Cannot extend subscription for user {user_id}: user not found."
-            )
+            logging.warning(f"Cannot extend subscription for user {user_id}: user not found.")
             return None
 
         panel_uuid, panel_sub_uuid, _, _ = await self._get_or_create_panel_user_link_details(
@@ -2081,9 +2158,7 @@ class SubscriptionService:
         else:
             current_end_date = active_sub.end_date
             now_utc = datetime.now(timezone.utc)
-            start_point_for_bonus = (
-                current_end_date if current_end_date > now_utc else now_utc
-            )
+            start_point_for_bonus = current_end_date if current_end_date > now_utc else now_utc
             new_end_date_obj = start_point_for_bonus + timedelta(days=bonus_days)
 
             updated_sub_model = await subscription_dal.update_subscription_end_date(
@@ -2112,11 +2187,9 @@ class SubscriptionService:
                 include_default_squads=False,
             )
 
-            panel_update_success = (
-                await self.panel_service.update_user_details_on_panel(
-                    panel_uuid,
-                    panel_update_payload,
-                )
+            panel_update_success = await self.panel_service.update_user_details_on_panel(
+                panel_uuid,
+                panel_update_payload,
             )
             if not panel_update_success:
                 logging.warning(
@@ -2128,9 +2201,7 @@ class SubscriptionService:
             )
             return new_end_date_obj
         else:
-            logging.error(
-                f"Failed to update subscription end date locally for user {user_id}."
-            )
+            logging.error(f"Failed to update subscription end date locally for user {user_id}.")
             return None
 
     async def get_active_subscription_details(
@@ -2172,7 +2243,9 @@ class SubscriptionService:
             update_payload_local = {}
             panel_status = panel_user_data.get("status", "UNKNOWN").upper()
             panel_expire_at_str = panel_user_data.get("expireAt")
-            panel_traffic_used, panel_traffic_limit, _ = self._extract_panel_traffic_details(panel_user_data)
+            panel_traffic_used, panel_traffic_limit, _ = self._extract_panel_traffic_details(
+                panel_user_data
+            )
             panel_sub_uuid_from_panel = panel_user_data.get(
                 "subscriptionUuid"
             ) or panel_user_data.get("shortUuid")
@@ -2180,12 +2253,10 @@ class SubscriptionService:
             if local_active_sub.status_from_panel != panel_status:
                 update_payload_local["status_from_panel"] = panel_status
             if panel_expire_at_str:
-                panel_expire_dt = datetime.fromisoformat(
-                    panel_expire_at_str.replace("Z", "+00:00")
-                )
-                if local_active_sub.end_date.replace(
+                panel_expire_dt = datetime.fromisoformat(panel_expire_at_str.replace("Z", "+00:00"))
+                if local_active_sub.end_date.replace(microsecond=0) != panel_expire_dt.replace(
                     microsecond=0
-                ) != panel_expire_dt.replace(microsecond=0):
+                ):
                     update_payload_local["end_date"] = panel_expire_dt
                     update_payload_local["last_notification_sent"] = None
             if (
@@ -2200,17 +2271,12 @@ class SubscriptionService:
                 update_payload_local["traffic_limit_bytes"] = panel_traffic_limit
             if (
                 panel_sub_uuid_from_panel
-                and local_active_sub.panel_subscription_uuid
-                != panel_sub_uuid_from_panel
+                and local_active_sub.panel_subscription_uuid != panel_sub_uuid_from_panel
             ):
-                update_payload_local["panel_subscription_uuid"] = (
-                    panel_sub_uuid_from_panel
-                )
+                update_payload_local["panel_subscription_uuid"] = panel_sub_uuid_from_panel
 
             is_active_based_on_panel = panel_status == "ACTIVE" and (
-                panel_expire_dt > datetime.now(timezone.utc)
-                if panel_expire_dt
-                else False
+                panel_expire_dt > datetime.now(timezone.utc) if panel_expire_dt else False
             )
             if local_active_sub.is_active != is_active_based_on_panel:
                 update_payload_local["is_active"] = is_active_based_on_panel
@@ -2225,9 +2291,13 @@ class SubscriptionService:
             if panel_user_data.get("expireAt")
             else None
         )
-        panel_traffic_used, panel_traffic_limit, panel_traffic_strategy = self._extract_panel_traffic_details(panel_user_data)
+        panel_traffic_used, panel_traffic_limit, panel_traffic_strategy = (
+            self._extract_panel_traffic_details(panel_user_data)
+        )
         config_link_raw = panel_user_data.get("subscriptionUrl")
-        display_link, connect_button_url = await prepare_config_links(self.settings, config_link_raw)
+        display_link, connect_button_url = await prepare_config_links(
+            self.settings, config_link_raw
+        )
         hwid_limit = panel_user_data.get("hwidDeviceLimit")
         if hwid_limit is None:
             if local_active_sub and local_active_sub.hwid_device_limit is not None:
@@ -2243,20 +2313,48 @@ class SubscriptionService:
                 tariff = self._resolve_tariff(local_active_sub.tariff_key)
             except Exception:
                 tariff = None
-        billing_model_display = tariff.billing_model if tariff else ("traffic" if getattr(self.settings, "traffic_sale_mode", False) else "period")
+        billing_model_display = (
+            tariff.billing_model
+            if tariff
+            else ("traffic" if getattr(self.settings, "traffic_sale_mode", False) else "period")
+        )
         traffic_limit_strategy = panel_traffic_strategy
-        premium_access = await self.premium_access_for_tariff(tariff) if tariff else {
-            "squad_uuids": [],
-            "squad_labels": [],
-            "node_labels": [],
-        }
-        premium_baseline = int(local_active_sub.premium_baseline_bytes or 0) if local_active_sub else 0
-        premium_topup_balance = int(local_active_sub.premium_topup_balance_bytes or 0) if local_active_sub else 0
-        premium_topup_used = int(getattr(local_active_sub, "premium_topup_used_bytes", 0) or 0) if local_active_sub else 0
-        premium_bonus_bytes = int(getattr(local_active_sub, "premium_bonus_bytes", 0) or 0) if local_active_sub else 0
-        premium_unlimited_override = bool(getattr(local_active_sub, "premium_unlimited_override", False)) if local_active_sub else False
-        regular_bonus_bytes = int(getattr(local_active_sub, "regular_bonus_bytes", 0) or 0) if local_active_sub else 0
-        regular_unlimited_override = bool(getattr(local_active_sub, "regular_unlimited_override", False)) if local_active_sub else False
+        premium_access = (
+            await self.premium_access_for_tariff(tariff)
+            if tariff
+            else {
+                "squad_uuids": [],
+                "squad_labels": [],
+                "node_labels": [],
+            }
+        )
+        premium_baseline = (
+            int(local_active_sub.premium_baseline_bytes or 0) if local_active_sub else 0
+        )
+        premium_topup_balance = (
+            int(local_active_sub.premium_topup_balance_bytes or 0) if local_active_sub else 0
+        )
+        premium_topup_used = (
+            int(getattr(local_active_sub, "premium_topup_used_bytes", 0) or 0)
+            if local_active_sub
+            else 0
+        )
+        premium_bonus_bytes = (
+            int(getattr(local_active_sub, "premium_bonus_bytes", 0) or 0) if local_active_sub else 0
+        )
+        premium_unlimited_override = (
+            bool(getattr(local_active_sub, "premium_unlimited_override", False))
+            if local_active_sub
+            else False
+        )
+        regular_bonus_bytes = (
+            int(getattr(local_active_sub, "regular_bonus_bytes", 0) or 0) if local_active_sub else 0
+        )
+        regular_unlimited_override = (
+            bool(getattr(local_active_sub, "regular_unlimited_override", False))
+            if local_active_sub
+            else False
+        )
 
         return {
             "user_id": panel_user_data.get("uuid"),
@@ -2268,11 +2366,23 @@ class SubscriptionService:
             "traffic_used_bytes": panel_traffic_used,
             "traffic_limit_strategy": traffic_limit_strategy,
             "tariff_key": local_active_sub.tariff_key if local_active_sub else None,
-            "tariff_name": tariff.name(db_user.language_code or self.settings.DEFAULT_LANGUAGE) if tariff else None,
-            "tariff_description": tariff.description(db_user.language_code or self.settings.DEFAULT_LANGUAGE) if tariff else None,
-            "premium_title": tariff.premium_name(db_user.language_code or self.settings.DEFAULT_LANGUAGE) if tariff else None,
+            "tariff_name": tariff.name(db_user.language_code or self.settings.DEFAULT_LANGUAGE)
+            if tariff
+            else None,
+            "tariff_description": tariff.description(
+                db_user.language_code or self.settings.DEFAULT_LANGUAGE
+            )
+            if tariff
+            else None,
+            "premium_title": tariff.premium_name(
+                db_user.language_code or self.settings.DEFAULT_LANGUAGE
+            )
+            if tariff
+            else None,
             "billing_model": billing_model_display,
-            "tier_baseline_bytes": local_active_sub.tier_baseline_bytes if local_active_sub else None,
+            "tier_baseline_bytes": local_active_sub.tier_baseline_bytes
+            if local_active_sub
+            else None,
             "topup_balance_bytes": local_active_sub.topup_balance_bytes if local_active_sub else 0,
             "regular_bonus_bytes": regular_bonus_bytes,
             "regular_unlimited_override": regular_unlimited_override,
@@ -2288,14 +2398,22 @@ class SubscriptionService:
                 premium_topup_used,
                 premium_bonus_bytes,
             ),
-            "premium_is_limited": bool(local_active_sub.premium_is_limited) if local_active_sub else False,
-            "premium_period_start_at": getattr(local_active_sub, "premium_period_start_at", None) if local_active_sub else None,
+            "premium_is_limited": bool(local_active_sub.premium_is_limited)
+            if local_active_sub
+            else False,
+            "premium_period_start_at": getattr(local_active_sub, "premium_period_start_at", None)
+            if local_active_sub
+            else None,
             "premium_squad_labels": premium_access.get("squad_labels") or [],
             "premium_node_labels": premium_access.get("node_labels") or [],
             "period_start_at": local_active_sub.period_start_at if local_active_sub else None,
             "is_throttled": bool(local_active_sub.is_throttled) if local_active_sub else False,
-            "base_hwid_device_limit": local_active_sub.hwid_device_limit if local_active_sub else None,
-            "extra_hwid_devices": int(local_active_sub.extra_hwid_devices or 0) if local_active_sub else 0,
+            "base_hwid_device_limit": local_active_sub.hwid_device_limit
+            if local_active_sub
+            else None,
+            "extra_hwid_devices": int(local_active_sub.extra_hwid_devices or 0)
+            if local_active_sub
+            else 0,
             "user_bot_username": db_user.username,
             "is_panel_data": True,
             "max_devices": hwid_limit,
@@ -2304,26 +2422,19 @@ class SubscriptionService:
     async def get_subscriptions_ending_soon(
         self, session: AsyncSession, days_threshold: int
     ) -> List[Dict[str, Any]]:
-        subs_models_with_users = (
-            await subscription_dal.get_subscriptions_near_expiration(
-                session, days_threshold
-            )
+        subs_models_with_users = await subscription_dal.get_subscriptions_near_expiration(
+            session, days_threshold
         )
         results = []
         for sub_model in subs_models_with_users:
-            if (
-                sub_model.user
-                and sub_model.end_date
-                and not sub_model.skip_notifications
-            ):
-                days_left = (
-                    sub_model.end_date - datetime.now(timezone.utc)
-                ).total_seconds() / (24 * 3600)
+            if sub_model.user and sub_model.end_date and not sub_model.skip_notifications:
+                days_left = (sub_model.end_date - datetime.now(timezone.utc)).total_seconds() / (
+                    24 * 3600
+                )
                 results.append(
                     {
                         "user_id": sub_model.user_id,
-                        "first_name": sub_model.user.first_name
-                        or f"User {sub_model.user_id}",
+                        "first_name": sub_model.user.first_name or f"User {sub_model.user_id}",
                         "language_code": sub_model.user.language_code
                         or self.settings.DEFAULT_LANGUAGE,
                         "end_date_str": sub_model.end_date.strftime("%Y-%m-%d"),
@@ -2348,10 +2459,13 @@ class SubscriptionService:
         if not self.settings.yookassa_autopayments_active:
             return True
         if sub.provider != "yookassa":
-            logging.info("Auto-renew skipped: provider %s does not support auto-renew", sub.provider)
+            logging.info(
+                "Auto-renew skipped: provider %s does not support auto-renew", sub.provider
+            )
             return True
 
         from db.dal.user_billing_dal import get_user_default_payment_method
+
         default_pm = await get_user_default_payment_method(session, sub.user_id)
         if not default_pm:
             logging.info(f"Auto-renew skipped: no saved payment method for user {sub.user_id}")
@@ -2359,10 +2473,11 @@ class SubscriptionService:
 
         try:
             from .yookassa_service import YooKassaService  # local import to avoid cycles
+
             yk: YooKassaService = self.yookassa_service  # type: ignore[attr-defined]
         except Exception:
             yk = None  # type: ignore
-        if not yk or not getattr(yk, 'configured', False):
+        if not yk or not getattr(yk, "configured", False):
             logging.warning("YooKassa unavailable for auto-renew")
             return False
 
@@ -2443,17 +2558,13 @@ class SubscriptionService:
             email_service = EmailAuthService(self.settings)
             await email_service.send_rendered_email(email=recipient, content=content)
         except Exception:
-            logging.exception(
-                "Failed to send payment success email to user %s", db_user.user_id
-            )
+            logging.exception("Failed to send payment success email to user %s", db_user.user_id)
 
     async def update_last_notification_sent(
         self, session: AsyncSession, user_id: int, subscription_end_date: datetime
     ):
-        sub_to_update = (
-            await subscription_dal.find_subscription_for_notification_update(
-                session, user_id, subscription_end_date
-            )
+        sub_to_update = await subscription_dal.find_subscription_for_notification_update(
+            session, user_id, subscription_end_date
         )
         if sub_to_update:
             await subscription_dal.update_subscription_notification_time(
@@ -2484,12 +2595,16 @@ class SubscriptionService:
         if include_uuid and panel_user_uuid:
             payload["uuid"] = panel_user_uuid
         if expire_at is not None:
-            payload["expireAt"] = expire_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            payload["expireAt"] = expire_at.isoformat(timespec="milliseconds").replace(
+                "+00:00", "Z"
+            )
         if status is not None:
             payload["status"] = status
         if traffic_limit_bytes is not None:
             payload["trafficLimitBytes"] = traffic_limit_bytes
-            payload["trafficLimitStrategy"] = traffic_limit_strategy or self.settings.USER_TRAFFIC_STRATEGY
+            payload["trafficLimitStrategy"] = (
+                traffic_limit_strategy or self.settings.USER_TRAFFIC_STRATEGY
+            )
         if hwid_device_limit is not None:
             try:
                 hwid_limit_int = int(hwid_device_limit)

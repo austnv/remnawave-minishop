@@ -139,7 +139,9 @@ export const DEV_MOCK = {
 };
 
 export function applyPreviewMock(kind) {
-  const mode = String(kind || "").trim().toLowerCase();
+  const mode = String(kind || "")
+    .trim()
+    .toLowerCase();
   if (mode === "traffic") {
     DEV_MOCK.data.settings.traffic_mode = true;
     DEV_MOCK.data.settings.trial_available = false;
@@ -157,10 +159,38 @@ export function applyPreviewMock(kind) {
       traffic_limit_strategy: "NO_RESET",
     };
     DEV_MOCK.data.plans = [
-      { months: 10, traffic_gb: 10, price: 199, currency: "RUB", title: "10 GB", sale_mode: "traffic" },
-      { months: 50, traffic_gb: 50, price: 799, currency: "RUB", title: "50 GB", sale_mode: "traffic" },
-      { months: 100, traffic_gb: 100, price: 1390, currency: "RUB", title: "100 GB", sale_mode: "traffic" },
-      { months: 300, traffic_gb: 300, price: 3490, currency: "RUB", title: "300 GB", sale_mode: "traffic" },
+      {
+        months: 10,
+        traffic_gb: 10,
+        price: 199,
+        currency: "RUB",
+        title: "10 GB",
+        sale_mode: "traffic",
+      },
+      {
+        months: 50,
+        traffic_gb: 50,
+        price: 799,
+        currency: "RUB",
+        title: "50 GB",
+        sale_mode: "traffic",
+      },
+      {
+        months: 100,
+        traffic_gb: 100,
+        price: 1390,
+        currency: "RUB",
+        title: "100 GB",
+        sale_mode: "traffic",
+      },
+      {
+        months: 300,
+        traffic_gb: 300,
+        price: 3490,
+        currency: "RUB",
+        title: "300 GB",
+        sale_mode: "traffic",
+      },
     ];
   } else if (mode === "tariffs") {
     DEV_MOCK.data.settings.traffic_mode = false;
@@ -246,7 +276,13 @@ export function applyPreviewMock(kind) {
           billing_model: "period",
           monthly_gb: 300,
           actions: [
-            { mode: "recalc_days", kind: "free", title: "recalc_days", days_after: 10, remaining_days: 25 },
+            {
+              mode: "recalc_days",
+              kind: "free",
+              title: "recalc_days",
+              days_after: 10,
+              remaining_days: 25,
+            },
             { mode: "paid_diff", kind: "payment", title: "paid_diff", price: 190, currency: "RUB" },
           ],
         },
@@ -256,8 +292,21 @@ export function applyPreviewMock(kind) {
           description: "Пакеты без срока действия",
           billing_model: "traffic",
           actions: [
-            { mode: "convert_days_to_gb", kind: "free", title: "convert_days_to_gb", converted_gb: 18, remaining_days: 25 },
-            { mode: "buy_package", kind: "payment", title: "+50 GB", traffic_gb: 50, price: 799, currency: "RUB" },
+            {
+              mode: "convert_days_to_gb",
+              kind: "free",
+              title: "convert_days_to_gb",
+              converted_gb: 18,
+              remaining_days: 25,
+            },
+            {
+              mode: "buy_package",
+              kind: "payment",
+              title: "+50 GB",
+              traffic_gb: 50,
+              price: 799,
+              currency: "RUB",
+            },
           ],
         },
       ],
@@ -269,9 +318,42 @@ export function applyPreviewMock(kind) {
       traffic_percent: 86,
       warning_levels: [85, 90, 95],
       plans: [
-        { id: "standard:topup:10", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "topup", traffic_gb: 10, months: 10, price: 99, currency: "RUB", title: "10 GB", subtitle: "Стандарт" },
-        { id: "standard:topup:50", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "topup", traffic_gb: 50, months: 50, price: 399, currency: "RUB", title: "50 GB", subtitle: "Стандарт" },
-        { id: "standard:topup:200", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "topup", traffic_gb: 200, months: 200, price: 1299, currency: "RUB", title: "200 GB", subtitle: "Стандарт" },
+        {
+          id: "standard:topup:10",
+          tariff_key: "standard",
+          tariff_name: "Стандарт",
+          sale_mode: "topup",
+          traffic_gb: 10,
+          months: 10,
+          price: 99,
+          currency: "RUB",
+          title: "10 GB",
+          subtitle: "Стандарт",
+        },
+        {
+          id: "standard:topup:50",
+          tariff_key: "standard",
+          tariff_name: "Стандарт",
+          sale_mode: "topup",
+          traffic_gb: 50,
+          months: 50,
+          price: 399,
+          currency: "RUB",
+          title: "50 GB",
+          subtitle: "Стандарт",
+        },
+        {
+          id: "standard:topup:200",
+          tariff_key: "standard",
+          tariff_name: "Стандарт",
+          sale_mode: "topup",
+          traffic_gb: 200,
+          months: 200,
+          price: 1299,
+          currency: "RUB",
+          title: "200 GB",
+          subtitle: "Стандарт",
+        },
       ],
     };
     DEV_MOCK.data.device_topup_options = {
@@ -280,8 +362,30 @@ export function applyPreviewMock(kind) {
       tariff_name: "Стандарт",
       current_limit: 5,
       plans: [
-        { id: "standard:hwid:1", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "hwid_devices", device_count: 1, months: 1, price: 99, currency: "RUB", title: "+1", subtitle: "Стандарт" },
-        { id: "standard:hwid:3", tariff_key: "standard", tariff_name: "Стандарт", sale_mode: "hwid_devices", device_count: 3, months: 3, price: 249, currency: "RUB", title: "+3", subtitle: "Стандарт" },
+        {
+          id: "standard:hwid:1",
+          tariff_key: "standard",
+          tariff_name: "Стандарт",
+          sale_mode: "hwid_devices",
+          device_count: 1,
+          months: 1,
+          price: 99,
+          currency: "RUB",
+          title: "+1",
+          subtitle: "Стандарт",
+        },
+        {
+          id: "standard:hwid:3",
+          tariff_key: "standard",
+          tariff_name: "Стандарт",
+          sale_mode: "hwid_devices",
+          device_count: 3,
+          months: 3,
+          price: 249,
+          currency: "RUB",
+          title: "+3",
+          subtitle: "Стандарт",
+        },
       ],
     };
   } else if (mode === "devices") {

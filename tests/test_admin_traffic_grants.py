@@ -86,10 +86,24 @@ class AdminGrantTopupTests(unittest.IsolatedAsyncioTestCase):
             updated_sub.traffic_limit_bytes = 155 * (1024**3)
             updated_sub.is_throttled = False
 
-            with patch("bot.services.subscription_service.user_dal.get_user_by_id", new=AsyncMock(return_value=db_user)), \
-                 patch("bot.services.subscription_service.subscription_dal.get_active_subscription_by_user_id", new=AsyncMock(return_value=sub)), \
-                 patch("bot.services.subscription_service.subscription_dal.update_subscription", new=AsyncMock(return_value=updated_sub)) as upd, \
-                 patch("bot.services.subscription_service.tariff_dal.create_traffic_topup", new=AsyncMock()) as topup_log:
+            with (
+                patch(
+                    "bot.services.subscription_service.user_dal.get_user_by_id",
+                    new=AsyncMock(return_value=db_user),
+                ),
+                patch(
+                    "bot.services.subscription_service.subscription_dal.get_active_subscription_by_user_id",
+                    new=AsyncMock(return_value=sub),
+                ),
+                patch(
+                    "bot.services.subscription_service.subscription_dal.update_subscription",
+                    new=AsyncMock(return_value=updated_sub),
+                ) as upd,
+                patch(
+                    "bot.services.subscription_service.tariff_dal.create_traffic_topup",
+                    new=AsyncMock(),
+                ) as topup_log,
+            ):
                 result = await service.admin_grant_topup(AsyncMock(), 42, 50.0)
 
             self.assertIsNotNone(result)
@@ -156,10 +170,24 @@ class AdminGrantTopupTests(unittest.IsolatedAsyncioTestCase):
             )
             updated_sub = SimpleNamespace(**vars(sub))
 
-            with patch("bot.services.subscription_service.user_dal.get_user_by_id", new=AsyncMock(return_value=db_user)), \
-                 patch("bot.services.subscription_service.subscription_dal.get_active_subscription_by_user_id", new=AsyncMock(return_value=sub)), \
-                 patch("bot.services.subscription_service.subscription_dal.update_subscription", new=AsyncMock(return_value=updated_sub)) as upd, \
-                 patch("bot.services.subscription_service.tariff_dal.create_traffic_topup", new=AsyncMock()) as topup_log:
+            with (
+                patch(
+                    "bot.services.subscription_service.user_dal.get_user_by_id",
+                    new=AsyncMock(return_value=db_user),
+                ),
+                patch(
+                    "bot.services.subscription_service.subscription_dal.get_active_subscription_by_user_id",
+                    new=AsyncMock(return_value=sub),
+                ),
+                patch(
+                    "bot.services.subscription_service.subscription_dal.update_subscription",
+                    new=AsyncMock(return_value=updated_sub),
+                ) as upd,
+                patch(
+                    "bot.services.subscription_service.tariff_dal.create_traffic_topup",
+                    new=AsyncMock(),
+                ) as topup_log,
+            ):
                 result = await service.admin_grant_premium_topup(AsyncMock(), 77, 20.0)
 
             self.assertIsNotNone(result)
@@ -187,12 +215,23 @@ class AdminGrantTopupTests(unittest.IsolatedAsyncioTestCase):
             service = SubscriptionService(settings, AsyncMock(spec=PanelApiService))
 
             db_user = SimpleNamespace(
-                user_id=11, panel_user_uuid="panel-uuid",
+                user_id=11,
+                panel_user_uuid="panel-uuid",
             )
-            sub = SimpleNamespace(subscription_id=1, user_id=11, panel_user_uuid="panel-uuid", tariff_key="standard")
+            sub = SimpleNamespace(
+                subscription_id=1, user_id=11, panel_user_uuid="panel-uuid", tariff_key="standard"
+            )
 
-            with patch("bot.services.subscription_service.user_dal.get_user_by_id", new=AsyncMock(return_value=db_user)), \
-                 patch("bot.services.subscription_service.subscription_dal.get_active_subscription_by_user_id", new=AsyncMock(return_value=sub)):
+            with (
+                patch(
+                    "bot.services.subscription_service.user_dal.get_user_by_id",
+                    new=AsyncMock(return_value=db_user),
+                ),
+                patch(
+                    "bot.services.subscription_service.subscription_dal.get_active_subscription_by_user_id",
+                    new=AsyncMock(return_value=sub),
+                ),
+            ):
                 self.assertIsNone(await service.admin_grant_premium_topup(AsyncMock(), 11, 10.0))
 
 

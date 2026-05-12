@@ -13,7 +13,7 @@
     variant === "danger" && "admin-badge-danger",
     variant === "warning" && "admin-badge-warning",
     variant === "muted" && "admin-badge-muted",
-    className,
+    className
   )}
   {...$$restProps}
 >

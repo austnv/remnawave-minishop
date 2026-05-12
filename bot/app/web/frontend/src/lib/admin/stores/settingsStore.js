@@ -40,10 +40,13 @@ export function createSettingsStore({ api, onToast, at }) {
 
   async function saveSettings(onSettingsSaved) {
     let dirty = {};
-    state.update(s => { dirty = s.settingsDirty; return s; });
+    state.update((s) => {
+      dirty = s.settingsDirty;
+      return s;
+    });
     if (!Object.keys(dirty).length) return;
-    
-    state.update(s => ({ ...s, settingsSaving: true }));
+
+    state.update((s) => ({ ...s, settingsSaving: true }));
     try {
       const updates = {};
       const deletes = [];
@@ -57,17 +60,19 @@ export function createSettingsStore({ api, onToast, at }) {
       });
       if (res?.ok) {
         onToast(at("settings_saved", {}, "Настройки сохранены"));
-        state.update(s => ({ ...s, settingsDirty: {} }));
+        state.update((s) => ({ ...s, settingsDirty: {} }));
         if (onSettingsSaved) await onSettingsSaved({ updates, deletes });
         await loadSettings();
       } else if (res?.errors) {
-        const summary = Object.entries(res.errors).map(([k, v]) => `${k}: ${v}`).join("; ");
+        const summary = Object.entries(res.errors)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("; ");
         onToast(`Ошибки: ${summary}`);
       } else {
         onToast(res?.error || "Ошибка");
       }
     } finally {
-      state.update(s => ({ ...s, settingsSaving: false }));
+      state.update((s) => ({ ...s, settingsSaving: false }));
     }
   }
 

@@ -16,14 +16,8 @@
 
   const promosStore = getContext("promosStore");
 
-  $: ({
-    promos,
-    promosTotal,
-    promosPage,
-    promosLoading,
-    promoCreateOpen,
-    promoDraft,
-  } = $promosStore);
+  $: ({ promos, promosTotal, promosPage, promosLoading, promoCreateOpen, promoDraft } =
+    $promosStore);
 
   $: promosHasMore = promos.length < promosTotal;
   $: promoHeaders = [
@@ -42,9 +36,16 @@
 
 <div class="admin-table-wrap">
   {#if promosLoading}
-    <AdminTableSkeleton headers={promoHeaders} rows={6} actionColumn widths={["92px", "52px", "64px", "96px", "72px", "92px"]} />
+    <AdminTableSkeleton
+      headers={promoHeaders}
+      rows={6}
+      actionColumn
+      widths={["92px", "52px", "64px", "96px", "72px", "92px"]}
+    />
   {:else if !promos.length}
-    <AdminEmptyState tone="card"><span class="admin-muted">{at("promos_empty", {}, "Промокодов нет")}</span></AdminEmptyState>
+    <AdminEmptyState tone="card"
+      ><span class="admin-muted">{at("promos_empty", {}, "Промокодов нет")}</span></AdminEmptyState
+    >
   {:else}
     <AdminTable>
       <thead>
@@ -61,9 +62,15 @@
         {#each promos as p}
           <tr>
             <td class="admin-cell-mono" data-label={at("promo_col_code", {}, "Код")}>{p.code}</td>
-            <td data-label={at("promo_col_bonus", {}, "Бонус")}>+{p.bonus_days} {at("days_short", {}, "дн.")}</td>
-            <td data-label={at("promo_col_activations", {}, "Активаций")}>{p.current_activations}/{p.max_activations}</td>
-            <td data-label={at("promo_col_valid_until", {}, "Действует до")}>{p.valid_until ? fmtDateShort(p.valid_until) : "∞"}</td>
+            <td data-label={at("promo_col_bonus", {}, "Бонус")}
+              >+{p.bonus_days} {at("days_short", {}, "дн.")}</td
+            >
+            <td data-label={at("promo_col_activations", {}, "Активаций")}
+              >{p.current_activations}/{p.max_activations}</td
+            >
+            <td data-label={at("promo_col_valid_until", {}, "Действует до")}
+              >{p.valid_until ? fmtDateShort(p.valid_until) : "∞"}</td
+            >
             <td data-label={at("promo_col_status", {}, "Статус")}>
               {#if p.is_active}
                 <AdminBadge variant="success">{at("status_active", {}, "Активен")}</AdminBadge>
@@ -86,7 +93,9 @@
   {/if}
   {#if promosHasMore}
     <div style="padding: 12px; text-align: center;">
-      <AdminButton onclick={() => promosStore.setPage(promosPage + 1)}>{at("btn_show_more", {}, "Показать еще")}</AdminButton>
+      <AdminButton onclick={() => promosStore.setPage(promosPage + 1)}
+        >{at("btn_show_more", {}, "Показать еще")}</AdminButton
+      >
     </div>
   {/if}
 </div>
@@ -101,25 +110,55 @@
   <div class="admin-form" data-dialog-content>
     <div class="admin-dialog-form-section">
       <AdminField label={at("promo_label_code", {}, "Код")}>
-        <input type="text" class="input" value={promoDraft.code} on:input={(e) => promosStore.updateDraft({ code: e.target.value })} placeholder="FREE-7-DAYS" />
+        <input
+          type="text"
+          class="input"
+          value={promoDraft.code}
+          on:input={(e) => promosStore.updateDraft({ code: e.target.value })}
+          placeholder="FREE-7-DAYS"
+        />
       </AdminField>
     </div>
     <div class="admin-dialog-form-section">
       <div class="admin-form-row-2">
         <AdminField label={at("promo_label_bonus_days", {}, "Бонус (дней)")}>
-          <input type="number" class="input" min="1" value={promoDraft.bonus_days} on:input={(e) => promosStore.updateDraft({ bonus_days: Number(e.target.value) })} />
+          <input
+            type="number"
+            class="input"
+            min="1"
+            value={promoDraft.bonus_days}
+            on:input={(e) => promosStore.updateDraft({ bonus_days: Number(e.target.value) })}
+          />
         </AdminField>
         <AdminField label={at("promo_label_max_activations", {}, "Макс. активаций")}>
-          <input type="number" class="input" min="1" value={promoDraft.max_activations} on:input={(e) => promosStore.updateDraft({ max_activations: Number(e.target.value) })} />
+          <input
+            type="number"
+            class="input"
+            min="1"
+            value={promoDraft.max_activations}
+            on:input={(e) => promosStore.updateDraft({ max_activations: Number(e.target.value) })}
+          />
         </AdminField>
       </div>
       <AdminField label={at("promo_label_valid_days", {}, "Срок действия (дней от текущего)")}>
-        <input type="number" class="input" min="1" value={promoDraft.valid_days} on:input={(e) => promosStore.updateDraft({ valid_days: Number(e.target.value) })} />
+        <input
+          type="number"
+          class="input"
+          min="1"
+          value={promoDraft.valid_days}
+          on:input={(e) => promosStore.updateDraft({ valid_days: Number(e.target.value) })}
+        />
       </AdminField>
     </div>
     <div class="admin-dialog-actions">
-      <AdminButton onclick={() => promosStore.setCreateOpen(false)}>{at("btn_cancel", {}, "Отмена")}</AdminButton>
-      <AdminButton variant="primary" onclick={promosStore.createPromo} disabled={!promoDraft.code.trim()}>
+      <AdminButton onclick={() => promosStore.setCreateOpen(false)}
+        >{at("btn_cancel", {}, "Отмена")}</AdminButton
+      >
+      <AdminButton
+        variant="primary"
+        onclick={promosStore.createPromo}
+        disabled={!promoDraft.code.trim()}
+      >
         {at("btn_create", {}, "Создать")}
       </AdminButton>
     </div>

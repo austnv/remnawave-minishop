@@ -176,7 +176,9 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
     def test_resolve_webapp_js_asset_name_prefers_latest_minified_build(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             asset_dir = Path(tmpdir)
-            (asset_dir / "subscription_webapp.js").write_text("console.log('fallback');", encoding="utf-8")
+            (asset_dir / "subscription_webapp.js").write_text(
+                "console.log('fallback');", encoding="utf-8"
+            )
             old_asset = asset_dir / "subscription_webapp.min.11111111.js"
             new_asset = asset_dir / "subscription_webapp.min.22222222.js"
             old_asset.write_text("console.log('old');", encoding="utf-8")
@@ -204,5 +206,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(subscription_webapp, "ASSET_DIR", asset_dir):
                 response = await subscription_webapp.js_asset_route(request)
 
-            self.assertEqual(response.headers["Cache-Control"], "public, max-age=31536000, immutable")
+            self.assertEqual(
+                response.headers["Cache-Control"], "public, max-age=31536000, immutable"
+            )
             self.assertEqual(response.text, "console.log('minified');")

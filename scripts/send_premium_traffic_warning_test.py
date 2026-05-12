@@ -7,6 +7,7 @@ Target chat (first match):
 
 No default Telegram ID is embedded in this script.
 """
+
 import asyncio
 import os
 import sys
@@ -19,7 +20,9 @@ from bot.utils.mini_app_url import subscription_mini_app_topup_url
 from config.settings import Settings
 
 
-def _premium_topup_markup(settings: Settings, i18n: JsonI18n, user_lang: str) -> InlineKeyboardMarkup:
+def _premium_topup_markup(
+    settings: Settings, i18n: JsonI18n, user_lang: str
+) -> InlineKeyboardMarkup:
     _ = lambda k, **kw: i18n.gettext(user_lang, k, **kw)
     url = subscription_mini_app_topup_url(settings, "premium")
     if url:

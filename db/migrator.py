@@ -32,17 +32,13 @@ def _migration_0001_add_channel_subscription_fields(connection: Connection) -> N
     statements: List[str] = []
 
     if "channel_subscription_verified" not in columns:
-        statements.append(
-            "ALTER TABLE users ADD COLUMN channel_subscription_verified BOOLEAN"
-        )
+        statements.append("ALTER TABLE users ADD COLUMN channel_subscription_verified BOOLEAN")
     if "channel_subscription_checked_at" not in columns:
         statements.append(
             "ALTER TABLE users ADD COLUMN channel_subscription_checked_at TIMESTAMPTZ"
         )
     if "channel_subscription_verified_for" not in columns:
-        statements.append(
-            "ALTER TABLE users ADD COLUMN channel_subscription_verified_for BIGINT"
-        )
+        statements.append("ALTER TABLE users ADD COLUMN channel_subscription_verified_for BIGINT")
 
     for stmt in statements:
         connection.execute(text(stmt))
@@ -53,9 +49,7 @@ def _migration_0002_add_referral_code(connection: Connection) -> None:
     columns: Set[str] = {col["name"] for col in inspector.get_columns("users")}
 
     if "referral_code" not in columns:
-        connection.execute(
-            text("ALTER TABLE users ADD COLUMN referral_code VARCHAR(16)")
-        )
+        connection.execute(text("ALTER TABLE users ADD COLUMN referral_code VARCHAR(16)"))
 
     connection.execute(
         text(
@@ -119,11 +113,7 @@ def _migration_0004_add_lifetime_used_traffic(connection: Connection) -> None:
     if "lifetime_used_traffic_bytes" in columns:
         return
 
-    connection.execute(
-        text(
-            "ALTER TABLE users ADD COLUMN lifetime_used_traffic_bytes BIGINT"
-        )
-    )
+    connection.execute(text("ALTER TABLE users ADD COLUMN lifetime_used_traffic_bytes BIGINT"))
 
 
 def _migration_0005_add_email_auth_fields(connection: Connection) -> None:
@@ -133,9 +123,7 @@ def _migration_0005_add_email_auth_fields(connection: Connection) -> None:
     if "email" not in columns:
         connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR"))
     if "email_verified_at" not in columns:
-        connection.execute(
-            text("ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMPTZ")
-        )
+        connection.execute(text("ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMPTZ"))
     if "telegram_id" not in columns:
         connection.execute(text("ALTER TABLE users ADD COLUMN telegram_id BIGINT"))
 
@@ -246,9 +234,7 @@ def _migration_0007_add_telegram_photo_url(connection: Connection) -> None:
     if "telegram_photo_url" in columns:
         return
 
-    connection.execute(
-        text("ALTER TABLE users ADD COLUMN telegram_photo_url TEXT")
-    )
+    connection.execute(text("ALTER TABLE users ADD COLUMN telegram_photo_url TEXT"))
 
 
 def _migration_0008_add_email_verification_code_status(connection: Connection) -> None:
@@ -288,9 +274,7 @@ def _migration_0010_add_email_magic_token_hash(connection: Connection) -> None:
 
     if "magic_token_hash" not in columns:
         connection.execute(
-            text(
-                "ALTER TABLE email_verification_codes ADD COLUMN magic_token_hash VARCHAR"
-            )
+            text("ALTER TABLE email_verification_codes ADD COLUMN magic_token_hash VARCHAR")
         )
 
     connection.execute(
@@ -338,29 +322,49 @@ def _migration_0012_add_tariffs_schema(connection: Connection) -> None:
     if "tier_baseline_bytes" not in sub_columns:
         sub_statements.append("ALTER TABLE subscriptions ADD COLUMN tier_baseline_bytes BIGINT")
     if "topup_balance_bytes" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN topup_balance_bytes BIGINT NOT NULL DEFAULT 0")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN topup_balance_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_baseline_bytes" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_baseline_bytes BIGINT NOT NULL DEFAULT 0")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_baseline_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_topup_balance_bytes" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_topup_balance_bytes BIGINT NOT NULL DEFAULT 0")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_topup_balance_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_topup_used_bytes" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_used_bytes" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_used_bytes BIGINT NOT NULL DEFAULT 0")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_used_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_is_limited" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_is_limited BOOLEAN NOT NULL DEFAULT FALSE")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_is_limited BOOLEAN NOT NULL DEFAULT FALSE"
+        )
     if "premium_period_start_at" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_period_start_at TIMESTAMPTZ")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_period_start_at TIMESTAMPTZ"
+        )
     if "period_start_at" not in sub_columns:
         sub_statements.append("ALTER TABLE subscriptions ADD COLUMN period_start_at TIMESTAMPTZ")
     if "is_throttled" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN is_throttled BOOLEAN NOT NULL DEFAULT FALSE")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN is_throttled BOOLEAN NOT NULL DEFAULT FALSE"
+        )
     if "effective_monthly_price_rub" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN effective_monthly_price_rub NUMERIC")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN effective_monthly_price_rub NUMERIC"
+        )
     if "hwid_device_limit" not in sub_columns:
         sub_statements.append("ALTER TABLE subscriptions ADD COLUMN hwid_device_limit INTEGER")
     if "extra_hwid_devices" not in sub_columns:
-        sub_statements.append("ALTER TABLE subscriptions ADD COLUMN extra_hwid_devices INTEGER NOT NULL DEFAULT 0")
+        sub_statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN extra_hwid_devices INTEGER NOT NULL DEFAULT 0"
+        )
     for stmt in sub_statements:
         connection.execute(text(stmt))
 
@@ -488,17 +492,29 @@ def _migration_0014_add_premium_squad_traffic_fields(connection: Connection) -> 
     sub_columns: Set[str] = {col["name"] for col in inspector.get_columns("subscriptions")}
     statements: List[str] = []
     if "premium_baseline_bytes" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_baseline_bytes BIGINT NOT NULL DEFAULT 0")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_baseline_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_topup_balance_bytes" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_topup_balance_bytes BIGINT NOT NULL DEFAULT 0")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_topup_balance_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_topup_used_bytes" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_used_bytes" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_used_bytes BIGINT NOT NULL DEFAULT 0")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_used_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_is_limited" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_is_limited BOOLEAN NOT NULL DEFAULT FALSE")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_is_limited BOOLEAN NOT NULL DEFAULT FALSE"
+        )
     if "premium_period_start_at" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_period_start_at TIMESTAMPTZ")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_period_start_at TIMESTAMPTZ"
+        )
     for stmt in statements:
         connection.execute(text(stmt))
     connection.execute(
@@ -513,9 +529,13 @@ def _migration_0015_add_premium_topup_carryover_fields(connection: Connection) -
     sub_columns: Set[str] = {col["name"] for col in inspector.get_columns("subscriptions")}
     statements: List[str] = []
     if "premium_topup_used_bytes" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0"
+        )
     if "premium_period_start_at" not in sub_columns:
-        statements.append("ALTER TABLE subscriptions ADD COLUMN premium_period_start_at TIMESTAMPTZ")
+        statements.append(
+            "ALTER TABLE subscriptions ADD COLUMN premium_period_start_at TIMESTAMPTZ"
+        )
     for stmt in statements:
         connection.execute(text(stmt))
 
@@ -596,7 +616,9 @@ def _migration_0020_add_regular_bonus_bytes(connection: Connection) -> None:
         )
 
 
-def _migration_0019_clear_subscription_months_for_non_subscription_payments(connection: Connection) -> None:
+def _migration_0019_clear_subscription_months_for_non_subscription_payments(
+    connection: Connection,
+) -> None:
     """Null out subscription_duration_months for legacy non-subscription payments.
 
     Older builds stored the raw `months` callback value into
@@ -643,19 +665,33 @@ def _migration_0017_reconcile_legacy_admin_api_schema(connection: Connection) ->
         if "tier_baseline_bytes" not in sub_columns:
             sub_statements.append("ALTER TABLE subscriptions ADD COLUMN tier_baseline_bytes BIGINT")
         if "topup_balance_bytes" not in sub_columns:
-            sub_statements.append("ALTER TABLE subscriptions ADD COLUMN topup_balance_bytes BIGINT NOT NULL DEFAULT 0")
+            sub_statements.append(
+                "ALTER TABLE subscriptions ADD COLUMN topup_balance_bytes BIGINT NOT NULL DEFAULT 0"
+            )
         if "premium_baseline_bytes" not in sub_columns:
-            sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_baseline_bytes BIGINT NOT NULL DEFAULT 0")
+            sub_statements.append(
+                "ALTER TABLE subscriptions ADD COLUMN premium_baseline_bytes BIGINT NOT NULL DEFAULT 0"
+            )
         if "premium_topup_balance_bytes" not in sub_columns:
-            sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_topup_balance_bytes BIGINT NOT NULL DEFAULT 0")
+            sub_statements.append(
+                "ALTER TABLE subscriptions ADD COLUMN premium_topup_balance_bytes BIGINT NOT NULL DEFAULT 0"
+            )
         if "premium_topup_used_bytes" not in sub_columns:
-            sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0")
+            sub_statements.append(
+                "ALTER TABLE subscriptions ADD COLUMN premium_topup_used_bytes BIGINT NOT NULL DEFAULT 0"
+            )
         if "premium_used_bytes" not in sub_columns:
-            sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_used_bytes BIGINT NOT NULL DEFAULT 0")
+            sub_statements.append(
+                "ALTER TABLE subscriptions ADD COLUMN premium_used_bytes BIGINT NOT NULL DEFAULT 0"
+            )
         if "premium_is_limited" not in sub_columns:
-            sub_statements.append("ALTER TABLE subscriptions ADD COLUMN premium_is_limited BOOLEAN NOT NULL DEFAULT FALSE")
+            sub_statements.append(
+                "ALTER TABLE subscriptions ADD COLUMN premium_is_limited BOOLEAN NOT NULL DEFAULT FALSE"
+            )
         if "is_throttled" not in sub_columns:
-            sub_statements.append("ALTER TABLE subscriptions ADD COLUMN is_throttled BOOLEAN NOT NULL DEFAULT FALSE")
+            sub_statements.append(
+                "ALTER TABLE subscriptions ADD COLUMN is_throttled BOOLEAN NOT NULL DEFAULT FALSE"
+            )
         for stmt in sub_statements:
             connection.execute(text(stmt))
 
@@ -677,9 +713,13 @@ def _migration_0017_reconcile_legacy_admin_api_schema(connection: Connection) ->
         msg_columns: Set[str] = {col["name"] for col in inspector.get_columns("message_logs")}
         msg_statements: List[str] = []
         if "is_admin_event" not in msg_columns:
-            msg_statements.append("ALTER TABLE message_logs ADD COLUMN is_admin_event BOOLEAN NOT NULL DEFAULT FALSE")
+            msg_statements.append(
+                "ALTER TABLE message_logs ADD COLUMN is_admin_event BOOLEAN NOT NULL DEFAULT FALSE"
+            )
         if "target_user_id" not in msg_columns:
-            msg_statements.append("ALTER TABLE message_logs ADD COLUMN target_user_id BIGINT REFERENCES users(user_id)")
+            msg_statements.append(
+                "ALTER TABLE message_logs ADD COLUMN target_user_id BIGINT REFERENCES users(user_id)"
+            )
         for stmt in msg_statements:
             connection.execute(text(stmt))
         connection.execute(
@@ -816,26 +856,19 @@ def run_database_migrations(connection: Connection) -> None:
     _ensure_migrations_table(connection)
 
     applied_revisions: Set[str] = {
-        row[0]
-        for row in connection.execute(
-            text("SELECT id FROM schema_migrations")
-        )
+        row[0] for row in connection.execute(text("SELECT id FROM schema_migrations"))
     }
 
     for migration in MIGRATIONS:
         if migration.id in applied_revisions:
             continue
 
-        logging.info(
-            "Migrator: applying %s – %s", migration.id, migration.description
-        )
+        logging.info("Migrator: applying %s – %s", migration.id, migration.description)
         try:
             with connection.begin_nested():
                 migration.upgrade(connection)
                 connection.execute(
-                    text(
-                        "INSERT INTO schema_migrations (id) VALUES (:revision)"
-                    ),
+                    text("INSERT INTO schema_migrations (id) VALUES (:revision)"),
                     {"revision": migration.id},
                 )
         except Exception as exc:

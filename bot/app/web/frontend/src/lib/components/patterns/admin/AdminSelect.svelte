@@ -21,7 +21,10 @@
 </script>
 
 <Select.Root type="single" {value} {items} {disabled} onValueChange={handleValueChange}>
-  <Select.Trigger class={`admin-select-trigger ${className}`.trim()} aria-label={ariaLabel || placeholder}>
+  <Select.Trigger
+    class={`admin-select-trigger ${className}`.trim()}
+    aria-label={ariaLabel || placeholder}
+  >
     <span>{selected?.label || placeholder}</span>
     <ChevronDown size={14} class="admin-select-icon" />
   </Select.Trigger>

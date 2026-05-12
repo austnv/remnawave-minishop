@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from typing import Optional
 
 from aiogram import F, Router, types
@@ -64,7 +64,11 @@ async def pay_severpay_callback_handler(
     payment_description = (
         get_text("payment_description_traffic", traffic_gb=human_value)
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
-        else (get_text("payment_description_hwid_devices", count=int(months)) if sale_base in {"hwid_device", "hwid_devices"} else get_text("payment_description_subscription", months=int(months)))
+        else (
+            get_text("payment_description_hwid_devices", count=int(months))
+            if sale_base in {"hwid_device", "hwid_devices"}
+            else get_text("payment_description_subscription", months=int(months))
+        )
     )
     currency_code = settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
 
@@ -78,8 +82,12 @@ async def pay_severpay_callback_handler(
         "provider": "severpay",
         "sale_mode": sale_mode,
         "tariff_key": sale_mode.split("@", 1)[1] if "@" in sale_mode else None,
-        "purchased_gb": float(months) if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"} else None,
-        "purchased_hwid_devices": int(months) if sale_base in {"hwid_device", "hwid_devices"} else None,
+        "purchased_gb": float(months)
+        if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+        else None,
+        "purchased_hwid_devices": int(months)
+        if sale_base in {"hwid_device", "hwid_devices"}
+        else None,
     }
 
     try:
@@ -138,7 +146,9 @@ async def pay_severpay_callback_handler(
             try:
                 await callback.message.edit_text(
                     get_text(
-                        key="payment_link_message_traffic" if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"} else "payment_link_message",
+                        key="payment_link_message_traffic"
+                        if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+                        else "payment_link_message",
                         months=int(months),
                         traffic_gb=human_value,
                     ),
@@ -152,11 +162,15 @@ async def pay_severpay_callback_handler(
                     disable_web_page_preview=False,
                 )
             except Exception as e_edit:
-                logging.warning(f"SeverPay: failed to display payment link ({e_edit}), sending new message.")
+                logging.warning(
+                    f"SeverPay: failed to display payment link ({e_edit}), sending new message."
+                )
                 try:
                     await callback.message.answer(
                         get_text(
-                            key="payment_link_message_traffic" if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"} else "payment_link_message",
+                            key="payment_link_message_traffic"
+                            if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+                            else "payment_link_message",
                             months=int(months),
                             traffic_gb=human_value,
                         ),
@@ -192,7 +206,10 @@ async def pay_severpay_callback_handler(
         await session.commit()
     except Exception as e_status:
         await session.rollback()
-        logging.error(f"SeverPay: failed to mark payment {payment_record.payment_id} as failed_creation: {e_status}", exc_info=True)
+        logging.error(
+            f"SeverPay: failed to mark payment {payment_record.payment_id} as failed_creation: {e_status}",
+            exc_info=True,
+        )
 
     try:
         await callback.message.edit_text(get_text("error_payment_gateway"))

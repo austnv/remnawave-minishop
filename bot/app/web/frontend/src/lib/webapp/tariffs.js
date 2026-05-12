@@ -46,7 +46,12 @@ export function activeTariffName(sub, planList) {
 }
 
 export function priceLabel(plan, methodId = "") {
-  if (String(methodId || "").toLowerCase().includes("stars") && Number(plan?.stars_price || 0) > 0) {
+  if (
+    String(methodId || "")
+      .toLowerCase()
+      .includes("stars") &&
+    Number(plan?.stars_price || 0) > 0
+  ) {
     return `${Number(plan.stars_price)} ⭐`;
   }
   return formatMoney(plan?.price || 0, plan?.currency);
@@ -74,7 +79,10 @@ export function actionKey(action) {
 function formatMonthsForClient(value, { t, termUnitLabel }) {
   const months = Number(value || 0);
   if (months === 12) return t("wa_plan_one_year");
-  return t("wa_sub_term_value_unit", { value: String(months), unit: termUnitLabel(months, "month") });
+  return t("wa_sub_term_value_unit", {
+    value: String(months),
+    unit: termUnitLabel(months, "month"),
+  });
 }
 
 export function planDisplayTitle(plan, { trafficMode, t }) {
@@ -113,14 +121,24 @@ export function planUnitHint(plan, { trafficMode, selectedMethod, t }) {
   ) {
     const gb = Number(plan?.traffic_gb || plan?.months || 0);
     if (!gb) return "";
-    if (String(selectedMethod || "").toLowerCase().includes("stars") && Number(plan?.stars_price || 0) > 0) {
+    if (
+      String(selectedMethod || "")
+        .toLowerCase()
+        .includes("stars") &&
+      Number(plan?.stars_price || 0) > 0
+    ) {
       return `${Number(plan.stars_price / gb).toFixed(0)} ⭐${t("wa_per_gb_short")}`;
     }
     return `${formatMoney(Number(plan?.price || 0) / gb, plan?.currency)}${t("wa_per_gb_short")}`;
   }
   const months = Number(plan?.months || 0);
   if (!months || months <= 1) return "";
-  if (String(selectedMethod || "").toLowerCase().includes("stars") && Number(plan?.stars_price || 0) > 0) {
+  if (
+    String(selectedMethod || "")
+      .toLowerCase()
+      .includes("stars") &&
+    Number(plan?.stars_price || 0) > 0
+  ) {
     return `${Number(plan.stars_price / months).toFixed(0)} ⭐${t("wa_per_month_short")}`;
   }
   return `${formatMoney(Number(plan?.price || 0) / months, plan?.currency)}${t("wa_per_month_short")}`;

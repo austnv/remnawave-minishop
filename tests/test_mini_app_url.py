@@ -18,7 +18,13 @@ class MiniAppUrlTests(unittest.TestCase):
         )
 
     def test_subscription_mini_app_topup_url_none_when_unset(self):
-        s = Settings(_env_file=None, BOT_TOKEN="x", POSTGRES_USER="u", POSTGRES_PASSWORD="p", SUBSCRIPTION_MINI_APP_URL=None)
+        s = Settings(
+            _env_file=None,
+            BOT_TOKEN="x",
+            POSTGRES_USER="u",
+            POSTGRES_PASSWORD="p",
+            SUBSCRIPTION_MINI_APP_URL=None,
+        )
         self.assertIsNone(subscription_mini_app_topup_url(s, "regular"))
 
     def test_subscription_mini_app_topup_url(self):

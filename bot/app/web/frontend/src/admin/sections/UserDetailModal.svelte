@@ -1,14 +1,39 @@
 <script>
   import { Label, Select, Separator, Tabs } from "$components/ui/primitives.js";
   import Dialog from "$components/ui/dialog.svelte";
-  import { AdminBadge, AdminButton, AdminSectionHeader, AdminSelect, AdminTrafficCard } from "$components/patterns/admin/index.js";
   import {
-    CalendarDays, Copy, CreditCard, ExternalLink, Eye, Info, Key,
-    Mail, Map, MessageSquare, MousePointerClick, QrCode, RefreshCw, Send,
-    Plus, Settings, Shield, Trash2, User, UserMinus, UserPlus, Users
+    AdminBadge,
+    AdminButton,
+    AdminSectionHeader,
+    AdminSelect,
+    AdminTrafficCard,
+  } from "$components/patterns/admin/index.js";
+  import {
+    CalendarDays,
+    Copy,
+    CreditCard,
+    ExternalLink,
+    Eye,
+    Info,
+    Key,
+    Mail,
+    Map,
+    MessageSquare,
+    MousePointerClick,
+    QrCode,
+    RefreshCw,
+    Send,
+    Plus,
+    Settings,
+    Shield,
+    Trash2,
+    User,
+    UserMinus,
+    UserPlus,
+    Users,
   } from "$components/ui/icons.js";
   import { getContext } from "svelte";
-  
+
   export let at;
   export let fmtDate;
   export let fmtMoney;
@@ -21,7 +46,7 @@
   export let trafficOfLabel;
   export let userInitials = () => "";
   export let fmtDateShort = (v) => v;
-  
+
   function pretty(val) {
     if (val === true) return at("yes", {}, "Да");
     if (val === false) return at("no", {}, "Нет");
@@ -29,7 +54,7 @@
   }
 
   const usersStore = getContext("usersStore");
-  
+
   $: ({
     openedUser,
     openedUserDetail,
@@ -44,12 +69,13 @@
     premiumUnlimitedDraft,
     premiumBonusGbDraft,
   } = $usersStore);
-
 </script>
 
 <Dialog
   open={Boolean(openedUser)}
-  title={openedUser ? at("user_detail_title", { id: openedUser.user_id }, `Пользователь #${openedUser.user_id}`) : ""}
+  title={openedUser
+    ? at("user_detail_title", { id: openedUser.user_id }, `Пользователь #${openedUser.user_id}`)
+    : ""}
   description={openedUser?.username ? "@" + openedUser.username : ""}
   closeLabel={at("close", {}, "Закрыть")}
   onclose={usersStore.closeUser}
@@ -64,7 +90,12 @@
           <div class="admin-user-summary">
             <span class="admin-avatar admin-avatar-lg">
               {#if resolvedAvatarUrl(openedUser)}
-                <img src={resolvedAvatarUrl(openedUser)} alt="" loading="lazy" referrerpolicy="no-referrer" />
+                <img
+                  src={resolvedAvatarUrl(openedUser)}
+                  alt=""
+                  loading="lazy"
+                  referrerpolicy="no-referrer"
+                />
               {:else}
                 <span>{userInitials(openedUser)}</span>
               {/if}
@@ -79,9 +110,13 @@
                   <AdminBadge variant="success">{at("badge_active", {}, "Активен")}</AdminBadge>
                 {/if}
                 {#if openedUserDetail.active_subscription}
-                  <AdminBadge variant="success">{at("badge_subscription", {}, "Подписка")}</AdminBadge>
+                  <AdminBadge variant="success"
+                    >{at("badge_subscription", {}, "Подписка")}</AdminBadge
+                  >
                 {:else}
-                  <AdminBadge variant="muted">{at("badge_no_subscription", {}, "Без подписки")}</AdminBadge>
+                  <AdminBadge variant="muted"
+                    >{at("badge_no_subscription", {}, "Без подписки")}</AdminBadge
+                  >
                 {/if}
               </div>
             </div>
@@ -102,10 +137,28 @@
           <ul class="admin-meta-list">
             <li><span>ID</span><strong>{openedUser.user_id}</strong></li>
             <li><span>Telegram ID</span><strong>{openedUser.telegram_id || "—"}</strong></li>
-            <li><span>Username</span><strong>{openedUser.username ? "@" + openedUser.username : "—"}</strong></li>
-            <li><span>Email</span><strong class="admin-meta-truncate">{openedUser.email || "—"}</strong></li>
-            <li><span>{at("user_label_registration", {}, "Регистрация")}</span><strong>{fmtDate(openedUser.registration_date)}</strong></li>
-            <li><span>{at("user_label_ref_code", {}, "Реф. код")}</span><strong>{openedUserDetail.referral?.code || openedUserDetail.user?.referral_code || "—"}</strong></li>
+            <li>
+              <span>Username</span><strong
+                >{openedUser.username ? "@" + openedUser.username : "—"}</strong
+              >
+            </li>
+            <li>
+              <span>Email</span><strong class="admin-meta-truncate"
+                >{openedUser.email || "—"}</strong
+              >
+            </li>
+            <li>
+              <span>{at("user_label_registration", {}, "Регистрация")}</span><strong
+                >{fmtDate(openedUser.registration_date)}</strong
+              >
+            </li>
+            <li>
+              <span>{at("user_label_ref_code", {}, "Реф. код")}</span><strong
+                >{openedUserDetail.referral?.code ||
+                  openedUserDetail.user?.referral_code ||
+                  "—"}</strong
+              >
+            </li>
           </ul>
 
           {#if openedUserDetail.subscription_url || openedUserDetail.referral?.bot_link || openedUserDetail.referral?.webapp_link}
@@ -114,12 +167,28 @@
               {#if openedUserDetail.subscription_url}
                 <div class="admin-link-row">
                   <div class="admin-link-row-meta">
-                    <span class="admin-link-row-label">{at("status_subscription", {}, "Подписка")}</span>
-                    <a class="admin-link-row-url" href={openedUserDetail.subscription_url} target="_blank" rel="noopener">
+                    <span class="admin-link-row-label"
+                      >{at("status_subscription", {}, "Подписка")}</span
+                    >
+                    <a
+                      class="admin-link-row-url"
+                      href={openedUserDetail.subscription_url}
+                      target="_blank"
+                      rel="noopener"
+                    >
                       {openedUserDetail.subscription_url}
                     </a>
                   </div>
-                  <AdminButton size="icon" variant="icon" title={at("user_copy_tooltip", {}, "Скопировать")} onclick={() => usersStore.copyToClipboard(openedUserDetail.subscription_url, at("user_sub_link_copied", {}, "Ссылка на подписку скопирована"))}>
+                  <AdminButton
+                    size="icon"
+                    variant="icon"
+                    title={at("user_copy_tooltip", {}, "Скопировать")}
+                    onclick={() =>
+                      usersStore.copyToClipboard(
+                        openedUserDetail.subscription_url,
+                        at("user_sub_link_copied", {}, "Ссылка на подписку скопирована")
+                      )}
+                  >
                     <Copy size={14} />
                   </AdminButton>
                 </div>
@@ -127,12 +196,28 @@
               {#if openedUserDetail.referral?.bot_link}
                 <div class="admin-link-row">
                   <div class="admin-link-row-meta">
-                    <span class="admin-link-row-label">{at("user_label_ref_bot", {}, "Реф. ссылка (бот)")}</span>
-                    <a class="admin-link-row-url" href={openedUserDetail.referral.bot_link} target="_blank" rel="noopener">
+                    <span class="admin-link-row-label"
+                      >{at("user_label_ref_bot", {}, "Реф. ссылка (бот)")}</span
+                    >
+                    <a
+                      class="admin-link-row-url"
+                      href={openedUserDetail.referral.bot_link}
+                      target="_blank"
+                      rel="noopener"
+                    >
                       {openedUserDetail.referral.bot_link}
                     </a>
                   </div>
-                  <AdminButton size="icon" variant="icon" title={at("user_copy_tooltip", {}, "Скопировать")} onclick={() => usersStore.copyToClipboard(openedUserDetail.referral.bot_link, at("user_ref_link_copied", {}, "Реф. ссылка скопирована"))}>
+                  <AdminButton
+                    size="icon"
+                    variant="icon"
+                    title={at("user_copy_tooltip", {}, "Скопировать")}
+                    onclick={() =>
+                      usersStore.copyToClipboard(
+                        openedUserDetail.referral.bot_link,
+                        at("user_ref_link_copied", {}, "Реф. ссылка скопирована")
+                      )}
+                  >
                     <Copy size={14} />
                   </AdminButton>
                 </div>
@@ -140,12 +225,28 @@
               {#if openedUserDetail.referral?.webapp_link}
                 <div class="admin-link-row">
                   <div class="admin-link-row-meta">
-                    <span class="admin-link-row-label">{at("user_label_ref_web", {}, "Реф. ссылка (веб)")}</span>
-                    <a class="admin-link-row-url" href={openedUserDetail.referral.webapp_link} target="_blank" rel="noopener">
+                    <span class="admin-link-row-label"
+                      >{at("user_label_ref_web", {}, "Реф. ссылка (веб)")}</span
+                    >
+                    <a
+                      class="admin-link-row-url"
+                      href={openedUserDetail.referral.webapp_link}
+                      target="_blank"
+                      rel="noopener"
+                    >
                       {openedUserDetail.referral.webapp_link}
                     </a>
                   </div>
-                  <AdminButton size="icon" variant="icon" title={at("user_copy_tooltip", {}, "Скопировать")} onclick={() => usersStore.copyToClipboard(openedUserDetail.referral.webapp_link, at("user_ref_link_copied", {}, "Реф. ссылка скопирована"))}>
+                  <AdminButton
+                    size="icon"
+                    variant="icon"
+                    title={at("user_copy_tooltip", {}, "Скопировать")}
+                    onclick={() =>
+                      usersStore.copyToClipboard(
+                        openedUserDetail.referral.webapp_link,
+                        at("user_ref_link_copied", {}, "Реф. ссылка скопирована")
+                      )}
+                  >
                     <Copy size={14} />
                   </AdminButton>
                 </div>
@@ -155,290 +256,522 @@
         </aside>
 
         <main class="admin-user-main">
-          <Tabs.Root bind:value={$usersStore.userDetailTab} class="admin-tabs-root admin-user-tabs-root">
+          <Tabs.Root
+            bind:value={$usersStore.userDetailTab}
+            class="admin-tabs-root admin-user-tabs-root"
+          >
             <Tabs.List class="admin-tabs-list">
-              <Tabs.Trigger value="subscription" class="admin-tabs-trigger">{at("user_tab_subscription", {}, "Подписка")}</Tabs.Trigger>
-              <Tabs.Trigger value="activity" class="admin-tabs-trigger">{at("user_tab_activity", {}, "Активность")}</Tabs.Trigger>
-              <Tabs.Trigger value="actions" class="admin-tabs-trigger">{at("user_tab_actions", {}, "Действия")}</Tabs.Trigger>
+              <Tabs.Trigger value="subscription" class="admin-tabs-trigger"
+                >{at("user_tab_subscription", {}, "Подписка")}</Tabs.Trigger
+              >
+              <Tabs.Trigger value="activity" class="admin-tabs-trigger"
+                >{at("user_tab_activity", {}, "Активность")}</Tabs.Trigger
+              >
+              <Tabs.Trigger value="actions" class="admin-tabs-trigger"
+                >{at("user_tab_actions", {}, "Действия")}</Tabs.Trigger
+              >
             </Tabs.List>
 
             <Tabs.Content value="subscription" class="admin-tabs-content">
-          {#if openedUserDetail.active_subscription}
-            <ul class="admin-meta-list">
-              <li><span>{at("user_label_active_until", {}, "Активна до")}</span><strong>{fmtDate(openedUserDetail.active_subscription.end_date)}</strong></li>
-              <li><span>{at("user_label_tariff", {}, "Тариф")}</span><strong>{openedUserDetail.active_subscription.tariff_key || "—"}</strong></li>
-              <li><span>{at("user_label_auto_renew", {}, "Авто-продление")}</span><strong>{pretty(openedUserDetail.active_subscription.auto_renew_enabled)}</strong></li>
-              <li><span>{at("user_label_provider", {}, "Провайдер")}</span><strong>{openedUserDetail.active_subscription.provider || "—"}</strong></li>
-            </ul>
-            <div class="admin-traffic-summary">
-              <AdminTrafficCard
-                title={at("user_label_main_traffic", {}, "Основной трафик")}
-                value={trafficOfLabel(openedUserDetail.active_subscription.traffic_used_bytes, openedUserDetail.active_subscription.traffic_limit_bytes)}
-                left={at("user_traffic_left", { left: trafficLeftLabel(openedUserDetail.active_subscription.traffic_used_bytes, openedUserDetail.active_subscription.traffic_limit_bytes) }, "Осталось: " + trafficLeftLabel(openedUserDetail.active_subscription.traffic_used_bytes, openedUserDetail.active_subscription.traffic_limit_bytes))}
-                percent={trafficPercentValue(openedUserDetail.active_subscription.traffic_used_bytes, openedUserDetail.active_subscription.traffic_limit_bytes)}
-                warning={openedUserDetail.active_subscription.is_throttled}
-                label={at("aria_label_main_traffic", {}, "Использование основного трафика")}
-              />
-              {#if openedUserDetail.active_subscription.premium_unlimited_override}
-                <AdminTrafficCard
-                  premium
-                  title={at("user_label_premium_squads", {}, "Premium-сквады")}
-                  value={at("user_premium_unlimited_value", { used: trafficLeftLabel(0, openedUserDetail.active_subscription.premium_used_bytes) }, "∞ (использовано " + trafficLeftLabel(0, openedUserDetail.active_subscription.premium_used_bytes) + ")")}
-                  left={at("user_premium_unlimited_hint", {}, "Безлимит (админ-оверрайд)")}
-                  percent={0}
-                  warning={false}
-                  label={at("aria_label_premium_traffic", {}, "Использование premium-трафика")}
-                />
-              {:else if Number(openedUserDetail.active_subscription.premium_limit_bytes || 0) > 0}
-                <AdminTrafficCard
-                  premium
-                  title={at("user_label_premium_squads", {}, "Premium-сквады")}
-                  value={trafficOfLabel(openedUserDetail.active_subscription.premium_used_bytes, openedUserDetail.active_subscription.premium_limit_bytes)}
-                  left={at("user_traffic_left", { left: trafficLeftLabel(openedUserDetail.active_subscription.premium_used_bytes, openedUserDetail.active_subscription.premium_limit_bytes) }, "Осталось: " + trafficLeftLabel(openedUserDetail.active_subscription.premium_used_bytes, openedUserDetail.active_subscription.premium_limit_bytes))}
-                  percent={trafficPercentValue(openedUserDetail.active_subscription.premium_used_bytes, openedUserDetail.active_subscription.premium_limit_bytes)}
-                  warning={openedUserDetail.active_subscription.premium_is_limited}
-                  label={at("aria_label_premium_traffic", {}, "Использование premium-трафика")}
-                />
-              {/if}
-            </div>
-          {:else}
-            <p class="admin-muted">{at("user_no_active_subscription", {}, "Активной подписки нет")}</p>
-          {/if}
-
-          {#if (openedUserDetail.subscriptions || []).length}
-            <Separator.Root class="admin-separator" />
-            <div class="admin-subsection-title">{at("user_history_title", { count: openedUserDetail.subscriptions.length }, `История подписок · ${openedUserDetail.subscriptions.length}`)}</div>
-            <div class="admin-mini-list">
-              {#each openedUserDetail.subscriptions.slice(0, 8) as sub}
-                <div class="admin-mini-list-row">
-                  <div>
-                    <strong>{sub.tariff_key || at("user_history_no_tariff", {}, "Без тарифа")}</strong>
-                    <small>{at("user_history_until", { date: fmtDate(sub.end_date) }, `до ${fmtDate(sub.end_date)}`)}</small>
-                  </div>
-                  {#if sub.is_active}
-                    <AdminBadge variant="success">{at("user_history_active", {}, "Активна")}</AdminBadge>
-                  {:else}
-                    <AdminBadge variant="muted">{sub.status_from_panel || at("user_history_status_panel", {}, "История")}</AdminBadge>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </Tabs.Content>
-
-        <Tabs.Content value="activity" class="admin-tabs-content">
-          <div class="admin-subsection-title">{at("user_recent_payments_title", { count: (openedUserDetail.recent_payments || []).length }, `Последние платежи · ${(openedUserDetail.recent_payments || []).length}`)}</div>
-          {#if (openedUserDetail.recent_payments || []).length}
-            <div class="admin-mini-list">
-              {#each openedUserDetail.recent_payments.slice(0, 8) as payment}
-                <div class="admin-mini-list-row">
-                  <div>
-                    <strong>{fmtMoney(payment.amount, payment.currency)}</strong>
-                    <small>{payment.provider} · {fmtDateShort(payment.created_at)}</small>
-                  </div>
-                  <AdminBadge variant={paymentStatusVariant(payment.status)}>{payment.status}</AdminBadge>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <p class="admin-muted">{at("user_no_payments", {}, "Платежей нет")}</p>
-          {/if}
-        </Tabs.Content>
-
-        <Tabs.Content value="actions" class="admin-tabs-content admin-actions-tab">
-          <div class="admin-user-quick-actions">
-            <AdminButton class="admin-reset-trial-btn" onclick={usersStore.resetTrialUser} disabled={userActionBusy}>
-              <RefreshCw size={14} /> {at("user_btn_reset_trial", {}, "Сбросить триал")}
-            </AdminButton>
-            <Label.Root class="admin-field-label admin-extend-field">
-              <span>{at("user_label_extend", {}, "Продлить подписку")}</span>
-              <div class="admin-extend-control">
-                <input class="input" type="number" min="1" bind:value={$usersStore.userExtendDays} aria-label={at("user_label_extend_days", {}, "Дней")} />
-                <AdminButton onclick={usersStore.extendUser} disabled={userActionBusy}>
-                  <Plus size={14} /> {at("user_btn_extend", {}, "Продлить")}
-                </AdminButton>
-              </div>
-            </Label.Root>
-          </div>
-
-          {#if openedUserDetail?.active_subscription}
-            <section class="admin-user-action-sheet admin-user-action-sheet--premium-override">
-              <AdminSectionHeader
-                title={at("user_premium_override_card_title", {}, "Премиум-трафик")}
-                description={at("user_premium_override_card_hint", {}, "Безлимит и дополнительный объём для премиум-сквадов поверх тарифа.")}
-              />
-              <div class="admin-user-action-sheet-body admin-user-override-stack">
-                <Label.Root class="admin-field-label admin-extend-field">
-                  <span>{at("user_premium_override_bonus", {}, "Доп. премиум-трафик, GB")}</span>
-                  <small>{at("user_premium_override_bonus_hint", {}, "")}</small>
-                  <input
-                    class="input"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="0"
-                    disabled={premiumUnlimitedDraft}
-                    aria-label={at("user_premium_override_bonus", {}, "Доп. премиум-трафик, GB")}
-                    bind:value={$usersStore.premiumBonusGbDraft}
+              {#if openedUserDetail.active_subscription}
+                <ul class="admin-meta-list">
+                  <li>
+                    <span>{at("user_label_active_until", {}, "Активна до")}</span><strong
+                      >{fmtDate(openedUserDetail.active_subscription.end_date)}</strong
+                    >
+                  </li>
+                  <li>
+                    <span>{at("user_label_tariff", {}, "Тариф")}</span><strong
+                      >{openedUserDetail.active_subscription.tariff_key || "—"}</strong
+                    >
+                  </li>
+                  <li>
+                    <span>{at("user_label_auto_renew", {}, "Авто-продление")}</span><strong
+                      >{pretty(openedUserDetail.active_subscription.auto_renew_enabled)}</strong
+                    >
+                  </li>
+                  <li>
+                    <span>{at("user_label_provider", {}, "Провайдер")}</span><strong
+                      >{openedUserDetail.active_subscription.provider || "—"}</strong
+                    >
+                  </li>
+                </ul>
+                <div class="admin-traffic-summary">
+                  <AdminTrafficCard
+                    title={at("user_label_main_traffic", {}, "Основной трафик")}
+                    value={trafficOfLabel(
+                      openedUserDetail.active_subscription.traffic_used_bytes,
+                      openedUserDetail.active_subscription.traffic_limit_bytes
+                    )}
+                    left={at(
+                      "user_traffic_left",
+                      {
+                        left: trafficLeftLabel(
+                          openedUserDetail.active_subscription.traffic_used_bytes,
+                          openedUserDetail.active_subscription.traffic_limit_bytes
+                        ),
+                      },
+                      "Осталось: " +
+                        trafficLeftLabel(
+                          openedUserDetail.active_subscription.traffic_used_bytes,
+                          openedUserDetail.active_subscription.traffic_limit_bytes
+                        )
+                    )}
+                    percent={trafficPercentValue(
+                      openedUserDetail.active_subscription.traffic_used_bytes,
+                      openedUserDetail.active_subscription.traffic_limit_bytes
+                    )}
+                    warning={openedUserDetail.active_subscription.is_throttled}
+                    label={at("aria_label_main_traffic", {}, "Использование основного трафика")}
                   />
-                </Label.Root>
-              </div>
-              <div class="admin-user-action-sheet-footer admin-override-card-footer">
-                <div class="admin-override-card-toolbar">
-                  <label class="admin-override-unlimited-label">
-                    <input type="checkbox" bind:checked={$usersStore.premiumUnlimitedDraft} aria-label={at("user_override_unlimited_short", {}, "Безлимит")} />
-                    <span>{at("user_override_unlimited_short", {}, "Безлимит")}</span>
-                  </label>
-                  <AdminButton variant="primary" onclick={usersStore.savePremiumTrafficOverride} disabled={userActionBusy}>
-                    {at("user_premium_override_save", {}, "Сохранить")}
-                  </AdminButton>
-                </div>
-                <div class="admin-override-status-lines">
                   {#if openedUserDetail.active_subscription.premium_unlimited_override}
-                    <span class="admin-meta-truncate">
-                      {at("user_premium_override_status_unlimited", {}, "Сейчас: безлимит")}
-                    </span>
-                  {:else if Number(openedUserDetail.active_subscription.premium_bonus_bytes || 0) > 0}
-                    <span class="admin-meta-truncate">
-                      {at(
-                        "user_premium_override_status_bonus",
-                        { gb: +(Number(openedUserDetail.active_subscription.premium_bonus_bytes) / (1024 ** 3)).toFixed(2) },
-                        `Премиум сейчас: +${+(Number(openedUserDetail.active_subscription.premium_bonus_bytes) / (1024 ** 3)).toFixed(2)} GB`,
+                    <AdminTrafficCard
+                      premium
+                      title={at("user_label_premium_squads", {}, "Premium-сквады")}
+                      value={at(
+                        "user_premium_unlimited_value",
+                        {
+                          used: trafficLeftLabel(
+                            0,
+                            openedUserDetail.active_subscription.premium_used_bytes
+                          ),
+                        },
+                        "∞ (использовано " +
+                          trafficLeftLabel(
+                            0,
+                            openedUserDetail.active_subscription.premium_used_bytes
+                          ) +
+                          ")"
                       )}
-                    </span>
-                  {:else}
-                    <span class="admin-muted">{at("user_premium_override_status_none", {}, "Премиум-оверрайд не задан")}</span>
+                      left={at("user_premium_unlimited_hint", {}, "Безлимит (админ-оверрайд)")}
+                      percent={0}
+                      warning={false}
+                      label={at("aria_label_premium_traffic", {}, "Использование premium-трафика")}
+                    />
+                  {:else if Number(openedUserDetail.active_subscription.premium_limit_bytes || 0) > 0}
+                    <AdminTrafficCard
+                      premium
+                      title={at("user_label_premium_squads", {}, "Premium-сквады")}
+                      value={trafficOfLabel(
+                        openedUserDetail.active_subscription.premium_used_bytes,
+                        openedUserDetail.active_subscription.premium_limit_bytes
+                      )}
+                      left={at(
+                        "user_traffic_left",
+                        {
+                          left: trafficLeftLabel(
+                            openedUserDetail.active_subscription.premium_used_bytes,
+                            openedUserDetail.active_subscription.premium_limit_bytes
+                          ),
+                        },
+                        "Осталось: " +
+                          trafficLeftLabel(
+                            openedUserDetail.active_subscription.premium_used_bytes,
+                            openedUserDetail.active_subscription.premium_limit_bytes
+                          )
+                      )}
+                      percent={trafficPercentValue(
+                        openedUserDetail.active_subscription.premium_used_bytes,
+                        openedUserDetail.active_subscription.premium_limit_bytes
+                      )}
+                      warning={openedUserDetail.active_subscription.premium_is_limited}
+                      label={at("aria_label_premium_traffic", {}, "Использование premium-трафика")}
+                    />
                   {/if}
                 </div>
-              </div>
-            </section>
+              {:else}
+                <p class="admin-muted">
+                  {at("user_no_active_subscription", {}, "Активной подписки нет")}
+                </p>
+              {/if}
 
-            <section class="admin-user-action-sheet admin-user-action-sheet--regular-override">
-              <AdminSectionHeader
-                title={at("user_regular_override_card_title", {}, "Основной трафик")}
-                description={at("user_regular_override_card_hint", {}, "Безлимит и постоянный бонус к лимиту основного трафика.")}
-              />
-              <div class="admin-user-action-sheet-body admin-user-override-stack">
-                <Label.Root class="admin-field-label admin-extend-field">
-                  <span>{at("user_regular_override_bonus", {}, "Доп. основной трафик, GB")}</span>
-                  <small>{at("user_regular_override_bonus_hint", {}, "")}</small>
-                  <input
-                    class="input"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="0"
-                    disabled={$usersStore.regularUnlimitedDraft}
-                    aria-label={at("user_regular_override_bonus", {}, "Доп. основной трафик, GB")}
-                    bind:value={$usersStore.regularBonusGbDraft}
-                  />
-                </Label.Root>
-              </div>
-              <div class="admin-user-action-sheet-footer admin-override-card-footer">
-                <div class="admin-override-card-toolbar">
-                  <label class="admin-override-unlimited-label">
-                    <input type="checkbox" bind:checked={$usersStore.regularUnlimitedDraft} aria-label={at("user_override_unlimited_short", {}, "Безлимит")} />
-                    <span>{at("user_override_unlimited_short", {}, "Безлимит")}</span>
-                  </label>
-                  <AdminButton variant="primary" onclick={usersStore.saveRegularTrafficOverride} disabled={userActionBusy}>
-                    {at("user_regular_override_save", {}, "Сохранить")}
-                  </AdminButton>
+              {#if (openedUserDetail.subscriptions || []).length}
+                <Separator.Root class="admin-separator" />
+                <div class="admin-subsection-title">
+                  {at(
+                    "user_history_title",
+                    { count: openedUserDetail.subscriptions.length },
+                    `История подписок · ${openedUserDetail.subscriptions.length}`
+                  )}
                 </div>
-                <div class="admin-override-status-lines">
-                  {#if openedUserDetail.active_subscription.regular_unlimited_override}
-                    <span class="admin-meta-truncate">
-                      {at("user_regular_override_status_unlimited", {}, "Сейчас: безлимит")}
-                    </span>
-                  {:else if Number(openedUserDetail.active_subscription.regular_bonus_bytes || 0) > 0}
-                    <span class="admin-meta-truncate">
-                      {at(
-                        "user_regular_override_status_bonus",
-                        { gb: +(Number(openedUserDetail.active_subscription.regular_bonus_bytes) / (1024 ** 3)).toFixed(2) },
-                        `Основной сейчас: +${+(Number(openedUserDetail.active_subscription.regular_bonus_bytes) / (1024 ** 3)).toFixed(2)} GB`,
-                      )}
-                    </span>
-                  {:else}
-                    <span class="admin-muted">{at("user_regular_override_status_none", {}, "Бонус основного трафика не задан")}</span>
-                  {/if}
+                <div class="admin-mini-list">
+                  {#each openedUserDetail.subscriptions.slice(0, 8) as sub}
+                    <div class="admin-mini-list-row">
+                      <div>
+                        <strong
+                          >{sub.tariff_key ||
+                            at("user_history_no_tariff", {}, "Без тарифа")}</strong
+                        >
+                        <small
+                          >{at(
+                            "user_history_until",
+                            { date: fmtDate(sub.end_date) },
+                            `до ${fmtDate(sub.end_date)}`
+                          )}</small
+                        >
+                      </div>
+                      {#if sub.is_active}
+                        <AdminBadge variant="success"
+                          >{at("user_history_active", {}, "Активна")}</AdminBadge
+                        >
+                      {:else}
+                        <AdminBadge variant="muted"
+                          >{sub.status_from_panel ||
+                            at("user_history_status_panel", {}, "История")}</AdminBadge
+                        >
+                      {/if}
+                    </div>
+                  {/each}
                 </div>
-              </div>
-            </section>
+              {/if}
+            </Tabs.Content>
 
-            <section class="admin-user-action-sheet admin-user-action-sheet--traffic-grant">
-              <AdminSectionHeader
-                title={at("user_traffic_grant_title", {}, "Выдать трафик")}
-                description={at("user_traffic_grant_hint", {}, "Зачисление ГБ на баланс пользователя — как при докупке, но без оплаты. Лимит и сквады в панели обновятся сразу.")}
-              />
-              <div class="admin-user-action-sheet-body admin-user-grant-stack">
+            <Tabs.Content value="activity" class="admin-tabs-content">
+              <div class="admin-subsection-title">
+                {at(
+                  "user_recent_payments_title",
+                  { count: (openedUserDetail.recent_payments || []).length },
+                  `Последние платежи · ${(openedUserDetail.recent_payments || []).length}`
+                )}
+              </div>
+              {#if (openedUserDetail.recent_payments || []).length}
+                <div class="admin-mini-list">
+                  {#each openedUserDetail.recent_payments.slice(0, 8) as payment}
+                    <div class="admin-mini-list-row">
+                      <div>
+                        <strong>{fmtMoney(payment.amount, payment.currency)}</strong>
+                        <small>{payment.provider} · {fmtDateShort(payment.created_at)}</small>
+                      </div>
+                      <AdminBadge variant={paymentStatusVariant(payment.status)}
+                        >{payment.status}</AdminBadge
+                      >
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="admin-muted">{at("user_no_payments", {}, "Платежей нет")}</p>
+              {/if}
+            </Tabs.Content>
+
+            <Tabs.Content value="actions" class="admin-tabs-content admin-actions-tab">
+              <div class="admin-user-quick-actions">
+                <AdminButton
+                  class="admin-reset-trial-btn"
+                  onclick={usersStore.resetTrialUser}
+                  disabled={userActionBusy}
+                >
+                  <RefreshCw size={14} />
+                  {at("user_btn_reset_trial", {}, "Сбросить триал")}
+                </AdminButton>
                 <Label.Root class="admin-field-label admin-extend-field">
-                  <span>{at("user_traffic_grant_kind", {}, "Тип трафика")}</span>
-                  <AdminSelect
-                    class="admin-grant-kind-select"
-                    value={$usersStore.grantTrafficKindDraft}
-                    items={[
-                      { value: "regular", label: at("user_traffic_grant_kind_regular", {}, "Обычный") },
-                      { value: "premium", label: at("user_traffic_grant_kind_premium", {}, "Премиум") },
-                    ]}
-                    onValueChange={(v) => usersStore.updateState({ grantTrafficKindDraft: v })}
-                    ariaLabel={at("user_traffic_grant_kind", {}, "Тип трафика")}
-                  />
-                </Label.Root>
-                <Label.Root class="admin-field-label admin-extend-field">
-                  <span>{at("user_traffic_grant_gb", {}, "ГБ к выдаче")}</span>
+                  <span>{at("user_label_extend", {}, "Продлить подписку")}</span>
                   <div class="admin-extend-control">
                     <input
                       class="input"
                       type="number"
-                      min="0"
-                      step="1"
-                      placeholder="0"
-                      aria-label={at("user_traffic_grant_gb", {}, "ГБ к выдаче")}
-                      bind:value={$usersStore.grantTrafficGbDraft}
+                      min="1"
+                      bind:value={$usersStore.userExtendDays}
+                      aria-label={at("user_label_extend_days", {}, "Дней")}
                     />
-                    <AdminButton variant="primary" onclick={usersStore.grantTraffic} disabled={userActionBusy}>
-                      <Plus size={14} /> {at("user_traffic_grant_submit", {}, "Выдать")}
+                    <AdminButton onclick={usersStore.extendUser} disabled={userActionBusy}>
+                      <Plus size={14} />
+                      {at("user_btn_extend", {}, "Продлить")}
                     </AdminButton>
                   </div>
                 </Label.Root>
               </div>
-            </section>
-          {/if}
 
-          <Label.Root class="admin-field-label">
-            <span>{at("user_label_telegram_msg", {}, "Сообщение в Telegram")}</span>
-            <small>{at("user_hint_telegram_msg", {}, "Поддерживается HTML-разметка Telegram")}</small>
-            <textarea class="admin-textarea" rows="3" placeholder={at("user_placeholder_msg", {}, "Текст сообщения")} bind:value={$usersStore.userMessageDraft}></textarea>
-          </Label.Root>
-          <div class="admin-message-actions">
-            <AdminButton onclick={usersStore.previewUserMessage} disabled={userActionBusy || !userMessageDraft.trim()}>
-              <Eye size={14} /> {at("btn_preview_tg", {}, "Превью в Telegram")}
-            </AdminButton>
-            <AdminButton variant="primary" onclick={usersStore.requestSendUserMessage} disabled={userActionBusy || !userMessageDraft.trim()}>
-              <Send size={14} /> {at("btn_send_msg", {}, "Отправить сообщение")}
-            </AdminButton>
-          </div>
+              {#if openedUserDetail?.active_subscription}
+                <section class="admin-user-action-sheet admin-user-action-sheet--premium-override">
+                  <AdminSectionHeader
+                    title={at("user_premium_override_card_title", {}, "Премиум-трафик")}
+                    description={at(
+                      "user_premium_override_card_hint",
+                      {},
+                      "Безлимит и дополнительный объём для премиум-сквадов поверх тарифа."
+                    )}
+                  />
+                  <div class="admin-user-action-sheet-body admin-user-override-stack">
+                    <Label.Root class="admin-field-label admin-extend-field">
+                      <span>{at("user_premium_override_bonus", {}, "Доп. премиум-трафик, GB")}</span
+                      >
+                      <small>{at("user_premium_override_bonus_hint", {}, "")}</small>
+                      <input
+                        class="input"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        disabled={premiumUnlimitedDraft}
+                        aria-label={at(
+                          "user_premium_override_bonus",
+                          {},
+                          "Доп. премиум-трафик, GB"
+                        )}
+                        bind:value={$usersStore.premiumBonusGbDraft}
+                      />
+                    </Label.Root>
+                  </div>
+                  <div class="admin-user-action-sheet-footer admin-override-card-footer">
+                    <div class="admin-override-card-toolbar">
+                      <label class="admin-override-unlimited-label">
+                        <input
+                          type="checkbox"
+                          bind:checked={$usersStore.premiumUnlimitedDraft}
+                          aria-label={at("user_override_unlimited_short", {}, "Безлимит")}
+                        />
+                        <span>{at("user_override_unlimited_short", {}, "Безлимит")}</span>
+                      </label>
+                      <AdminButton
+                        variant="primary"
+                        onclick={usersStore.savePremiumTrafficOverride}
+                        disabled={userActionBusy}
+                      >
+                        {at("user_premium_override_save", {}, "Сохранить")}
+                      </AdminButton>
+                    </div>
+                    <div class="admin-override-status-lines">
+                      {#if openedUserDetail.active_subscription.premium_unlimited_override}
+                        <span class="admin-meta-truncate">
+                          {at("user_premium_override_status_unlimited", {}, "Сейчас: безлимит")}
+                        </span>
+                      {:else if Number(openedUserDetail.active_subscription.premium_bonus_bytes || 0) > 0}
+                        <span class="admin-meta-truncate">
+                          {at(
+                            "user_premium_override_status_bonus",
+                            {
+                              gb: +(
+                                Number(openedUserDetail.active_subscription.premium_bonus_bytes) /
+                                1024 ** 3
+                              ).toFixed(2),
+                            },
+                            `Премиум сейчас: +${+(Number(openedUserDetail.active_subscription.premium_bonus_bytes) / 1024 ** 3).toFixed(2)} GB`
+                          )}
+                        </span>
+                      {:else}
+                        <span class="admin-muted"
+                          >{at(
+                            "user_premium_override_status_none",
+                            {},
+                            "Премиум-оверрайд не задан"
+                          )}</span
+                        >
+                      {/if}
+                    </div>
+                  </div>
+                </section>
 
-          <section class="admin-danger-zone">
-            <header class="admin-danger-zone-head">
-              <strong>{at("user_danger_zone_title", {}, "Опасные действия")}</strong>
-              <small>{at("user_danger_zone_subtitle", {}, "Эти действия требуют подтверждения и (для удаления) необратимы")}</small>
-            </header>
-            <div class="admin-action-grid">
-              {#if openedUser.is_banned}
-                <AdminButton variant="dangerSoft" onclick={usersStore.requestBanToggle} disabled={userActionBusy}>
-                  <UserPlus size={14} /> {at("btn_unban", {}, "Разбанить пользователя")}
-                </AdminButton>
-              {:else}
-                <AdminButton variant="danger" onclick={usersStore.requestBanToggle} disabled={userActionBusy}>
-                  <UserMinus size={14} /> {at("btn_ban", {}, "Заблокировать")}
-                </AdminButton>
+                <section class="admin-user-action-sheet admin-user-action-sheet--regular-override">
+                  <AdminSectionHeader
+                    title={at("user_regular_override_card_title", {}, "Основной трафик")}
+                    description={at(
+                      "user_regular_override_card_hint",
+                      {},
+                      "Безлимит и постоянный бонус к лимиту основного трафика."
+                    )}
+                  />
+                  <div class="admin-user-action-sheet-body admin-user-override-stack">
+                    <Label.Root class="admin-field-label admin-extend-field">
+                      <span
+                        >{at("user_regular_override_bonus", {}, "Доп. основной трафик, GB")}</span
+                      >
+                      <small>{at("user_regular_override_bonus_hint", {}, "")}</small>
+                      <input
+                        class="input"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        disabled={$usersStore.regularUnlimitedDraft}
+                        aria-label={at(
+                          "user_regular_override_bonus",
+                          {},
+                          "Доп. основной трафик, GB"
+                        )}
+                        bind:value={$usersStore.regularBonusGbDraft}
+                      />
+                    </Label.Root>
+                  </div>
+                  <div class="admin-user-action-sheet-footer admin-override-card-footer">
+                    <div class="admin-override-card-toolbar">
+                      <label class="admin-override-unlimited-label">
+                        <input
+                          type="checkbox"
+                          bind:checked={$usersStore.regularUnlimitedDraft}
+                          aria-label={at("user_override_unlimited_short", {}, "Безлимит")}
+                        />
+                        <span>{at("user_override_unlimited_short", {}, "Безлимит")}</span>
+                      </label>
+                      <AdminButton
+                        variant="primary"
+                        onclick={usersStore.saveRegularTrafficOverride}
+                        disabled={userActionBusy}
+                      >
+                        {at("user_regular_override_save", {}, "Сохранить")}
+                      </AdminButton>
+                    </div>
+                    <div class="admin-override-status-lines">
+                      {#if openedUserDetail.active_subscription.regular_unlimited_override}
+                        <span class="admin-meta-truncate">
+                          {at("user_regular_override_status_unlimited", {}, "Сейчас: безлимит")}
+                        </span>
+                      {:else if Number(openedUserDetail.active_subscription.regular_bonus_bytes || 0) > 0}
+                        <span class="admin-meta-truncate">
+                          {at(
+                            "user_regular_override_status_bonus",
+                            {
+                              gb: +(
+                                Number(openedUserDetail.active_subscription.regular_bonus_bytes) /
+                                1024 ** 3
+                              ).toFixed(2),
+                            },
+                            `Основной сейчас: +${+(Number(openedUserDetail.active_subscription.regular_bonus_bytes) / 1024 ** 3).toFixed(2)} GB`
+                          )}
+                        </span>
+                      {:else}
+                        <span class="admin-muted"
+                          >{at(
+                            "user_regular_override_status_none",
+                            {},
+                            "Бонус основного трафика не задан"
+                          )}</span
+                        >
+                      {/if}
+                    </div>
+                  </div>
+                </section>
+
+                <section class="admin-user-action-sheet admin-user-action-sheet--traffic-grant">
+                  <AdminSectionHeader
+                    title={at("user_traffic_grant_title", {}, "Выдать трафик")}
+                    description={at(
+                      "user_traffic_grant_hint",
+                      {},
+                      "Зачисление ГБ на баланс пользователя — как при докупке, но без оплаты. Лимит и сквады в панели обновятся сразу."
+                    )}
+                  />
+                  <div class="admin-user-action-sheet-body admin-user-grant-stack">
+                    <Label.Root class="admin-field-label admin-extend-field">
+                      <span>{at("user_traffic_grant_kind", {}, "Тип трафика")}</span>
+                      <AdminSelect
+                        class="admin-grant-kind-select"
+                        value={$usersStore.grantTrafficKindDraft}
+                        items={[
+                          {
+                            value: "regular",
+                            label: at("user_traffic_grant_kind_regular", {}, "Обычный"),
+                          },
+                          {
+                            value: "premium",
+                            label: at("user_traffic_grant_kind_premium", {}, "Премиум"),
+                          },
+                        ]}
+                        onValueChange={(v) => usersStore.updateState({ grantTrafficKindDraft: v })}
+                        ariaLabel={at("user_traffic_grant_kind", {}, "Тип трафика")}
+                      />
+                    </Label.Root>
+                    <Label.Root class="admin-field-label admin-extend-field">
+                      <span>{at("user_traffic_grant_gb", {}, "ГБ к выдаче")}</span>
+                      <div class="admin-extend-control">
+                        <input
+                          class="input"
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="0"
+                          aria-label={at("user_traffic_grant_gb", {}, "ГБ к выдаче")}
+                          bind:value={$usersStore.grantTrafficGbDraft}
+                        />
+                        <AdminButton
+                          variant="primary"
+                          onclick={usersStore.grantTraffic}
+                          disabled={userActionBusy}
+                        >
+                          <Plus size={14} />
+                          {at("user_traffic_grant_submit", {}, "Выдать")}
+                        </AdminButton>
+                      </div>
+                    </Label.Root>
+                  </div>
+                </section>
               {/if}
-              <AdminButton variant="danger" onclick={() => usersStore.updateState({ userDeleteOpen: true })} disabled={userActionBusy}>
-                <Trash2 size={14} /> {at("btn_delete_account", {}, "Удалить аккаунт")}
-              </AdminButton>
-            </div>
-          </section>
-        </Tabs.Content>
+
+              <Label.Root class="admin-field-label">
+                <span>{at("user_label_telegram_msg", {}, "Сообщение в Telegram")}</span>
+                <small
+                  >{at(
+                    "user_hint_telegram_msg",
+                    {},
+                    "Поддерживается HTML-разметка Telegram"
+                  )}</small
+                >
+                <textarea
+                  class="admin-textarea"
+                  rows="3"
+                  placeholder={at("user_placeholder_msg", {}, "Текст сообщения")}
+                  bind:value={$usersStore.userMessageDraft}
+                ></textarea>
+              </Label.Root>
+              <div class="admin-message-actions">
+                <AdminButton
+                  onclick={usersStore.previewUserMessage}
+                  disabled={userActionBusy || !userMessageDraft.trim()}
+                >
+                  <Eye size={14} />
+                  {at("btn_preview_tg", {}, "Превью в Telegram")}
+                </AdminButton>
+                <AdminButton
+                  variant="primary"
+                  onclick={usersStore.requestSendUserMessage}
+                  disabled={userActionBusy || !userMessageDraft.trim()}
+                >
+                  <Send size={14} />
+                  {at("btn_send_msg", {}, "Отправить сообщение")}
+                </AdminButton>
+              </div>
+
+              <section class="admin-danger-zone">
+                <header class="admin-danger-zone-head">
+                  <strong>{at("user_danger_zone_title", {}, "Опасные действия")}</strong>
+                  <small
+                    >{at(
+                      "user_danger_zone_subtitle",
+                      {},
+                      "Эти действия требуют подтверждения и (для удаления) необратимы"
+                    )}</small
+                  >
+                </header>
+                <div class="admin-action-grid">
+                  {#if openedUser.is_banned}
+                    <AdminButton
+                      variant="dangerSoft"
+                      onclick={usersStore.requestBanToggle}
+                      disabled={userActionBusy}
+                    >
+                      <UserPlus size={14} />
+                      {at("btn_unban", {}, "Разбанить пользователя")}
+                    </AdminButton>
+                  {:else}
+                    <AdminButton
+                      variant="danger"
+                      onclick={usersStore.requestBanToggle}
+                      disabled={userActionBusy}
+                    >
+                      <UserMinus size={14} />
+                      {at("btn_ban", {}, "Заблокировать")}
+                    </AdminButton>
+                  {/if}
+                  <AdminButton
+                    variant="danger"
+                    onclick={() => usersStore.updateState({ userDeleteOpen: true })}
+                    disabled={userActionBusy}
+                  >
+                    <Trash2 size={14} />
+                    {at("btn_delete_account", {}, "Удалить аккаунт")}
+                  </AdminButton>
+                </div>
+              </section>
+            </Tabs.Content>
           </Tabs.Root>
         </main>
       </div>
@@ -449,16 +782,29 @@
 <Dialog
   open={userMessageConfirmOpen}
   title={at("user_msg_confirm_title", {}, "Отправить сообщение пользователю?")}
-  description={openedUser ? at("user_msg_confirm_recipient", { name: userDisplayName(openedUser) }, `Получатель: ${userDisplayName(openedUser)}`) : ""}
+  description={openedUser
+    ? at(
+        "user_msg_confirm_recipient",
+        { name: userDisplayName(openedUser) },
+        `Получатель: ${userDisplayName(openedUser)}`
+      )
+    : ""}
   closeLabel={at("close", {}, "Закрыть")}
   onclose={() => usersStore.updateState({ userMessageConfirmOpen: false })}
   class="admin-dialog"
 >
   <div class="admin-confirm-message-preview">{userMessageDraft}</div>
   <div class="admin-dialog-actions">
-    <AdminButton onclick={() => usersStore.updateState({ userMessageConfirmOpen: false })}>{at("btn_cancel", {}, "Отмена")}</AdminButton>
-    <AdminButton variant="primary" onclick={usersStore.sendUserMessage} disabled={userActionBusy || !userMessageDraft.trim()}>
-      <Send size={14} /> {at("btn_confirm_send", {}, "Подтвердить отправку")}
+    <AdminButton onclick={() => usersStore.updateState({ userMessageConfirmOpen: false })}
+      >{at("btn_cancel", {}, "Отмена")}</AdminButton
+    >
+    <AdminButton
+      variant="primary"
+      onclick={usersStore.sendUserMessage}
+      disabled={userActionBusy || !userMessageDraft.trim()}
+    >
+      <Send size={14} />
+      {at("btn_confirm_send", {}, "Подтвердить отправку")}
     </AdminButton>
   </div>
 </Dialog>
@@ -466,15 +812,28 @@
 <Dialog
   open={userBanConfirmOpen}
   title={at("user_ban_confirm_title", {}, "Заблокировать пользователя?")}
-  description={openedUser ? at("user_ban_confirm_subtitle", { name: userDisplayName(openedUser) }, `${userDisplayName(openedUser)} больше не сможет взаимодействовать с ботом. Действие можно отменить позже.`) : ""}
+  description={openedUser
+    ? at(
+        "user_ban_confirm_subtitle",
+        { name: userDisplayName(openedUser) },
+        `${userDisplayName(openedUser)} больше не сможет взаимодействовать с ботом. Действие можно отменить позже.`
+      )
+    : ""}
   closeLabel={at("close", {}, "Закрыть")}
   onclose={() => usersStore.updateState({ userBanConfirmOpen: false })}
   class="admin-dialog"
 >
   <div class="admin-dialog-actions">
-    <AdminButton onclick={() => usersStore.updateState({ userBanConfirmOpen: false })}>{at("btn_cancel", {}, "Отмена")}</AdminButton>
-    <AdminButton variant="danger" onclick={() => usersStore.applyBanToggle(true)} disabled={userActionBusy}>
-      <UserMinus size={14} /> {at("btn_ban", {}, "Заблокировать")}
+    <AdminButton onclick={() => usersStore.updateState({ userBanConfirmOpen: false })}
+      >{at("btn_cancel", {}, "Отмена")}</AdminButton
+    >
+    <AdminButton
+      variant="danger"
+      onclick={() => usersStore.applyBanToggle(true)}
+      disabled={userActionBusy}
+    >
+      <UserMinus size={14} />
+      {at("btn_ban", {}, "Заблокировать")}
     </AdminButton>
   </div>
 </Dialog>
@@ -482,15 +841,22 @@
 <Dialog
   open={userDeleteOpen}
   title={at("user_delete_confirm_title", {}, "Удалить пользователя?")}
-  description={at("user_delete_confirm_subtitle", {}, "Действие необратимо. Удалятся все платежи, подписки и логи.")}
+  description={at(
+    "user_delete_confirm_subtitle",
+    {},
+    "Действие необратимо. Удалятся все платежи, подписки и логи."
+  )}
   closeLabel={at("close", {}, "Закрыть")}
   onclose={() => usersStore.updateState({ userDeleteOpen: false })}
   class="admin-dialog"
 >
   <div class="admin-form-row">
-    <AdminButton onclick={() => usersStore.updateState({ userDeleteOpen: false })}>{at("btn_cancel", {}, "Отмена")}</AdminButton>
+    <AdminButton onclick={() => usersStore.updateState({ userDeleteOpen: false })}
+      >{at("btn_cancel", {}, "Отмена")}</AdminButton
+    >
     <AdminButton variant="danger" onclick={usersStore.deleteUser} disabled={userActionBusy}>
-      <Trash2 size={14} /> {at("btn_confirm_delete", {}, "Подтвердить удаление")}
+      <Trash2 size={14} />
+      {at("btn_confirm_delete", {}, "Подтвердить удаление")}
     </AdminButton>
   </div>
 </Dialog>

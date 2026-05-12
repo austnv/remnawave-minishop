@@ -53,8 +53,8 @@ export function createTelegramSdk({
     const detected = [queryText, hashText].some((text) => {
       if (!text) return false;
       const params = new URLSearchParams(text);
-      return ["tgWebAppData", "tgWebAppVersion", "tgWebAppPlatform", "tgWebAppThemeParams"].some((key) =>
-        params.has(key),
+      return ["tgWebAppData", "tgWebAppVersion", "tgWebAppPlatform", "tgWebAppThemeParams"].some(
+        (key) => params.has(key)
       );
     });
     if (detected) launchParamsDetected = true;
@@ -93,7 +93,7 @@ export function createTelegramSdk({
           setStatus("unavailable");
           resolveOnce(null);
         },
-        { once: true },
+        { once: true }
       );
 
       if (!existingScript) {

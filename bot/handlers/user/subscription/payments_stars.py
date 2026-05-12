@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from typing import Optional
 
 from aiogram import F, Router, types
@@ -22,7 +22,7 @@ async def pay_stars_callback_handler(
 ):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
-    get_text = (lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key)
+    get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
 
     if not i18n or not callback.message:
         try:
@@ -57,7 +57,11 @@ async def pay_stars_callback_handler(
     payment_description = (
         get_text("payment_description_traffic", traffic_gb=human_value)
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
-        else (get_text("payment_description_hwid_devices", count=int(months)) if sale_base in {"hwid_device", "hwid_devices"} else get_text("payment_description_subscription", months=int(months)))
+        else (
+            get_text("payment_description_hwid_devices", count=int(months))
+            if sale_base in {"hwid_device", "hwid_devices"}
+            else get_text("payment_description_subscription", months=int(months))
+        )
     )
 
     payment_db_id = await stars_service.create_invoice(
@@ -73,16 +77,22 @@ async def pay_stars_callback_handler(
         try:
             await callback.message.edit_text(
                 get_text(
-                    "payment_invoice_sent_message_traffic" if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"} else "payment_invoice_sent_message",
+                    "payment_invoice_sent_message_traffic"
+                    if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+                    else "payment_invoice_sent_message",
                     months=int(months),
                     traffic_gb=human_value,
                 ),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text=get_text("back_to_payment_methods_button"),
-                        callback_data=f"subscribe_period:{human_value}",
-                    )]
-                ]),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=get_text("back_to_payment_methods_button"),
+                                callback_data=f"subscribe_period:{human_value}",
+                            )
+                        ]
+                    ]
+                ),
             )
         except Exception as e_edit:
             logging.warning(f"Stars payment: failed to show invoice info message ({e_edit})")
@@ -115,8 +125,9 @@ async def handle_successful_stars_payment(
     session: AsyncSession,
     stars_service: StarsService,
 ):
-    payload = (message.successful_payment.invoice_payload
-               if message and message.successful_payment else "")
+    payload = (
+        message.successful_payment.invoice_payload if message and message.successful_payment else ""
+    )
     try:
         parts = (payload or "").split(":")
         payment_db_id = int(parts[0])

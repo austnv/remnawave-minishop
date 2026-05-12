@@ -8,12 +8,18 @@ export function trafficPercent(sub) {
 }
 
 export function trafficLabel(sub, t) {
-  if (!sub?.traffic_limit_bytes || Number(sub.traffic_limit_bytes) <= 0) return t("wa_unlimited_traffic");
-  return t("wa_traffic_of", { used: sub.traffic_used || "0 GB", limit: sub.traffic_limit || "0 GB" });
+  if (!sub?.traffic_limit_bytes || Number(sub.traffic_limit_bytes) <= 0)
+    return t("wa_unlimited_traffic");
+  return t("wa_traffic_of", {
+    used: sub.traffic_used || "0 GB",
+    limit: sub.traffic_limit || "0 GB",
+  });
 }
 
 export function trafficResetLabel(sub, t) {
-  const strategy = String(sub?.traffic_limit_strategy || "").trim().toUpperCase();
+  const strategy = String(sub?.traffic_limit_strategy || "")
+    .trim()
+    .toUpperCase();
   if (!strategy || strategy.includes("NO_RESET")) return t("wa_traffic_reset_none");
   if (strategy.includes("MONTH")) return t("wa_traffic_reset_monthly");
   if (strategy.includes("WEEK")) return t("wa_traffic_reset_weekly");
@@ -30,15 +36,23 @@ export function premiumTrafficPercent(sub) {
 }
 
 export function premiumTrafficLabel(sub, t) {
-  return t("wa_traffic_of", { used: sub?.premium_used || "0 GB", limit: sub?.premium_limit || "0 GB" });
+  return t("wa_traffic_of", {
+    used: sub?.premium_used || "0 GB",
+    limit: sub?.premium_limit || "0 GB",
+  });
 }
 
 export function premiumTitle(sub, t) {
-  return String(sub?.premium_title || "").trim() || t("wa_premium_traffic_title", {}, "Premium-серверы");
+  return (
+    String(sub?.premium_title || "").trim() || t("wa_premium_traffic_title", {}, "Premium-серверы")
+  );
 }
 
 export function premiumTrafficLeftLabel(sub) {
-  const left = Math.max(0, Number(sub?.premium_limit_bytes || 0) - Number(sub?.premium_used_bytes || 0));
+  const left = Math.max(
+    0,
+    Number(sub?.premium_limit_bytes || 0) - Number(sub?.premium_used_bytes || 0)
+  );
   return formatTrafficBytes(left);
 }
 

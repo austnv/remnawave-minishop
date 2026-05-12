@@ -41,7 +41,9 @@ export function formatFraction(value) {
 }
 
 export function normalizedEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 export function telegramName(profile, fallback) {

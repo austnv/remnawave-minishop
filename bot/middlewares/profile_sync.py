@@ -1,16 +1,16 @@
 import logging
-from typing import Callable, Dict, Any, Awaitable, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from aiogram import BaseMiddleware
-from aiogram.types import Update, User as TgUser
+from aiogram.types import Update
+from aiogram.types import User as TgUser
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.utils.text_sanitizer import sanitize_display_name, sanitize_username, username_for_display
 from db.dal import user_dal
-from bot.utils.text_sanitizer import sanitize_username, sanitize_display_name, username_for_display
 
 
 class ProfileSyncMiddleware(BaseMiddleware):
-
     async def __call__(
         self,
         handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
@@ -50,12 +50,16 @@ class ProfileSyncMiddleware(BaseMiddleware):
                         try:
                             panel_service = data.get("panel_service")
                             if panel_service and db_user.panel_user_uuid:
-                                description_text = "\n".join([
-                                    db_user.email or "",
-                                    username_for_display(tg_user.username, with_at=False) if sanitized_username is not None else "",
-                                    sanitized_first_name or "",
-                                    sanitized_last_name or "",
-                                ]).strip()
+                                description_text = "\n".join(
+                                    [
+                                        db_user.email or "",
+                                        username_for_display(tg_user.username, with_at=False)
+                                        if sanitized_username is not None
+                                        else "",
+                                        sanitized_first_name or "",
+                                        sanitized_last_name or "",
+                                    ]
+                                ).strip()
                                 panel_payload = {
                                     "description": description_text,
                                     "telegramId": tg_user.id,
@@ -77,4 +81,3 @@ class ProfileSyncMiddleware(BaseMiddleware):
                 )
 
         return await handler(event, data)
-

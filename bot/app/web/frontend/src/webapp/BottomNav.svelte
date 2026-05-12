@@ -1,5 +1,11 @@
 <script>
-  import { Gift, Home, Settings as SettingsIcon, Shield, Smartphone } from "$components/ui/icons.js";
+  import {
+    Gift,
+    Home,
+    Settings as SettingsIcon,
+    Shield,
+    Smartphone,
+  } from "$components/ui/icons.js";
 
   import BrandMark from "../BrandMark.svelte";
 
@@ -20,7 +26,7 @@
 
 <nav class:bottom-nav-devices={devicesEnabled} class="bottom-nav" aria-label={t("wa_navigation")}>
   <div class="rail-brand" aria-hidden="true">
-    <BrandMark logoUrl={logoUrl} emoji={logoEmoji} />
+    <BrandMark {logoUrl} emoji={logoEmoji} />
     <strong>{brandTitle}</strong>
   </div>
   <button class:active={activeTab === "home"} type="button" onclick={onHome}>
@@ -37,7 +43,12 @@
       <span>{t("wa_nav_devices")}</span>
     </button>
   {/if}
-  <button class:active={activeTab === "settings"} class="attention-wrap" type="button" onclick={onSettings}>
+  <button
+    class:active={activeTab === "settings"}
+    class="attention-wrap"
+    type="button"
+    onclick={onSettings}
+  >
     {#if hasUnlinkedIdentity}
       <span class="attention-dot nav-attention-dot" aria-hidden="true"></span>
     {/if}

@@ -1,6 +1,8 @@
 export function userDisplayName(user) {
   const full = [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim();
-  return full || (user?.username ? `@${user.username}` : user?.email || `User #${user?.user_id || "—"}`);
+  return (
+    full || (user?.username ? `@${user.username}` : user?.email || `User #${user?.user_id || "—"}`)
+  );
 }
 
 export function userSecondaryName(user) {
@@ -36,7 +38,9 @@ export function createGravatarCache(onResolved = () => {}) {
   }
 
   function gravatarUrl(email) {
-    const key = String(email || "").trim().toLowerCase();
+    const key = String(email || "")
+      .trim()
+      .toLowerCase();
     if (!key) return "";
     if (cache.has(key)) return cache.get(key);
     if (pending.has(key)) return "";
@@ -47,7 +51,7 @@ export function createGravatarCache(onResolved = () => {}) {
           cache.set(key, `https://gravatar.com/avatar/${h}?d=identicon&s=80`);
           onResolved();
         })
-        .catch(() => pending.delete(key)),
+        .catch(() => pending.delete(key))
     );
     return "";
   }

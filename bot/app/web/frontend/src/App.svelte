@@ -135,15 +135,32 @@
       clearToken();
       showLogin();
     },
-    mockApi: MOCK
-      ? (path, options, context) => runMockApi(path, options, context)
-      : null,
+    mockApi: MOCK ? (path, options, context) => runMockApi(path, options, context) : null,
     getMockContext: () => ({ currentLang, normalizeLangCode, clone: structuredCloneSafe }),
   });
-  const billing = createBillingActions({ api: (path, options) => apiClient.api(path, options), t: (...args) => t(...args) });
+  const billing = createBillingActions({
+    api: (path, options) => apiClient.api(path, options),
+    t: (...args) => t(...args),
+  });
 
-  const authStore = createAuthStore({ publicApi, setToken, loadData, telegramSdk, getTg: () => tg, t, currentLang: () => currentLang, clearManualLogoutFlag });
-  const billingStore = createBillingStore({ billing, loadData, t, showToast, openExternalLink, tg });
+  const authStore = createAuthStore({
+    publicApi,
+    setToken,
+    loadData,
+    telegramSdk,
+    getTg: () => tg,
+    t,
+    currentLang: () => currentLang,
+    clearManualLogoutFlag,
+  });
+  const billingStore = createBillingStore({
+    billing,
+    loadData,
+    t,
+    showToast,
+    openExternalLink,
+    tg,
+  });
   const devicesStore = createDevicesStore({ api, t, showToast });
   const accountStore = createAccountStore({
     api,
@@ -171,7 +188,18 @@
   setContext("devicesStore", devicesStore);
   setContext("accountStore", accountStore);
 
-  $: ({ authStatus, authIsError, authBusy, telegramLoginBusy, loginEmailFieldError, loginEmailTooltipOpen, authResendCooldown, email, pendingEmail, emailCode } = $authStore);
+  $: ({
+    authStatus,
+    authIsError,
+    authBusy,
+    telegramLoginBusy,
+    loginEmailFieldError,
+    loginEmailTooltipOpen,
+    authResendCooldown,
+    email,
+    pendingEmail,
+    emailCode,
+  } = $authStore);
   $: ({
     paymentModalOpen,
     selectedTariffKey,
@@ -187,8 +215,29 @@
     tariffActionBusy,
     payBusy,
   } = $billingStore);
-  $: ({ devicesData, devicesLoaded, devicesBusy, devicesStatus, devicesIsError, deviceConfirmOpen, deviceToDisconnect, deviceDisconnectBusy } = $devicesStore);
-  $: ({ linkEmailOpen, linkEmailBusy, linkTelegramBusy, linkEmailValue, linkEmailPending, linkEmailCode, linkEmailStatus, linkEmailIsError, linkEmailFieldError, linkEmailResendCooldown, languageBusy } = $accountStore);
+  $: ({
+    devicesData,
+    devicesLoaded,
+    devicesBusy,
+    devicesStatus,
+    devicesIsError,
+    deviceConfirmOpen,
+    deviceToDisconnect,
+    deviceDisconnectBusy,
+  } = $devicesStore);
+  $: ({
+    linkEmailOpen,
+    linkEmailBusy,
+    linkTelegramBusy,
+    linkEmailValue,
+    linkEmailPending,
+    linkEmailCode,
+    linkEmailStatus,
+    linkEmailIsError,
+    linkEmailFieldError,
+    linkEmailResendCooldown,
+    languageBusy,
+  } = $accountStore);
 
   $: brandTitle = CFG.title || "/minishop";
   $: brandEmoji = CFG.logoEmoji || "🫥";
@@ -202,42 +251,51 @@
   $: singleTariffMode = tariffMode && tariffCatalog.length === 1;
   $: hasMultipleTariffs = tariffCatalog.length > 1;
   $: selectedTariff = tariffCatalog.find((tariff) => tariff.key === selectedTariffKey) || null;
-  $: selectedTariffPlans = tariffMode ? (selectedTariffKey ? plans.filter((plan) => plan?.tariff_key === selectedTariffKey) : []) : plans;
+  $: selectedTariffPlans = tariffMode
+    ? selectedTariffKey
+      ? plans.filter((plan) => plan?.tariff_key === selectedTariffKey)
+      : []
+    : plans;
   $: devicesEnabled = Boolean(appSettings?.my_devices_enabled);
   $: subscription = data?.subscription || DEV_MOCK.data.subscription;
-  $: hasActiveTariffSubscription = Boolean(tariffMode && subscription?.active && subscription?.tariff_key);
+  $: hasActiveTariffSubscription = Boolean(
+    tariffMode && subscription?.active && subscription?.tariff_key
+  );
   $: canChangeTariff = Boolean(hasActiveTariffSubscription && hasMultipleTariffs);
   $: currentTariffName = activeTariffName(subscription, plans);
   $: canOpenRegularTopupModal = Boolean(
     hasActiveTariffSubscription &&
-      (subscription?.can_topup_regular_traffic ?? subscription?.can_topup_traffic) &&
-      Number(subscription?.traffic_limit_bytes || 0) > 0,
+    (subscription?.can_topup_regular_traffic ?? subscription?.can_topup_traffic) &&
+    Number(subscription?.traffic_limit_bytes || 0) > 0
   );
   $: canOpenPremiumTopupModal = Boolean(
     hasActiveTariffSubscription &&
-      (subscription?.can_topup_premium_traffic ?? subscription?.can_topup_traffic) &&
-      Number(subscription?.premium_limit_bytes || 0) > 0,
+    (subscription?.can_topup_premium_traffic ?? subscription?.can_topup_traffic) &&
+    Number(subscription?.premium_limit_bytes || 0) > 0
   );
   $: activeTariffCatalogEntry =
-    tariffCatalog.find((entry) => entry.key === String(subscription?.tariff_key || "").trim()) || null;
+    tariffCatalog.find((entry) => entry.key === String(subscription?.tariff_key || "").trim()) ||
+    null;
   $: subscriptionIsTrafficTariff = Boolean(
-    String(subscription?.billing_model || activeTariffCatalogEntry?.billing_model || "")
-      .toLowerCase() === "traffic",
+    String(
+      subscription?.billing_model || activeTariffCatalogEntry?.billing_model || ""
+    ).toLowerCase() === "traffic"
   );
   $: regularTrafficTopupUnlocked = Boolean(
-    canOpenRegularTopupModal && trafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT,
+    canOpenRegularTopupModal && trafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT
   );
   $: premiumTrafficTopupUnlocked = Boolean(
-    canOpenPremiumTopupModal && premiumTrafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT,
+    canOpenPremiumTopupModal && premiumTrafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT
   );
   /** Progress-bar card opens top-up immediately on traffic-only tariffs; period tariffs still need 80% usage */
   $: regularTrafficTopupBarClickable = Boolean(
     canOpenRegularTopupModal &&
-      (subscriptionIsTrafficTariff || trafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT),
+    (subscriptionIsTrafficTariff || trafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT)
   );
   $: premiumTrafficTopupBarClickable = Boolean(
     canOpenPremiumTopupModal &&
-      (subscriptionIsTrafficTariff || premiumTrafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT),
+    (subscriptionIsTrafficTariff ||
+      premiumTrafficPercent(subscription) >= TRAFFIC_TOPUP_UNLOCK_PERCENT)
   );
   $: user = data?.user || {};
   $: isAdmin = Boolean(user?.is_admin);
@@ -252,7 +310,8 @@
     label: LANGUAGE_LABELS[code] || code.toUpperCase(),
     flag: LANGUAGE_FLAGS[code] || "🏳️",
   }));
-  $: currentLanguageOption = languageOptions.find((option) => option.value === currentLang) || languageOptions[0];
+  $: currentLanguageOption =
+    languageOptions.find((option) => option.value === currentLang) || languageOptions[0];
   $: userLanguage = languageName(currentLang);
   $: emailLinkStatus = user?.email ? t("wa_settings_linked") : t("wa_settings_email_not_linked");
   $: hasUnlinkedIdentity = !user?.telegram_linked || !user?.email;
@@ -271,8 +330,9 @@
   $: telegramMiniAppInitData = tg?.initData || readTelegramMiniAppInitDataFromLocation();
   $: telegramMiniAppAuthAvailable = Boolean(telegramMiniAppInitData);
   $: telegramLoginUnavailable =
-    (!telegramMiniAppAuthAvailable && !telegramOAuthClientId && telegramSdkStatus !== "loading");
-  $: telegramLoginChecking = telegramLoginBusy || (authBusy && authStatus === t("wa_auth_checking_telegram"));
+    !telegramMiniAppAuthAvailable && !telegramOAuthClientId && telegramSdkStatus !== "loading";
+  $: telegramLoginChecking =
+    telegramLoginBusy || (authBusy && authStatus === t("wa_auth_checking_telegram"));
   $: telegramLoginLabel = telegramLoginUnavailable
     ? t("wa_login_telegram_unavailable_button")
     : telegramLoginChecking
@@ -280,12 +340,19 @@
       : t("wa_login_telegram_button");
   $: telegramLoginUnavailableMessage =
     telegramLoginUnavailable && telegramSdkStatus === "unavailable"
-        ? t("wa_auth_telegram_unavailable")
-        : telegramLoginUnavailable
-          ? t("wa_auth_telegram_not_configured")
-          : "";
+      ? t("wa_auth_telegram_unavailable")
+      : telegramLoginUnavailable
+        ? t("wa_auth_telegram_not_configured")
+        : "";
   $: applyFavicon(CFG.logoUrl, brandEmoji);
-  $: syncBodyScrollLock(paymentModalOpen || changeModalOpen || changeConfirmOpen || topupModalOpen || deviceTopupModalOpen || linkEmailOpen);
+  $: syncBodyScrollLock(
+    paymentModalOpen ||
+      changeModalOpen ||
+      changeConfirmOpen ||
+      topupModalOpen ||
+      deviceTopupModalOpen ||
+      linkEmailOpen
+  );
   $: if (!tariffMode && !$billingStore.selectedPlan && plans.length) {
     billingStore.update((s) => ({ ...s, selectedPlan: plans[Math.min(1, plans.length - 1)] }));
   }
@@ -298,7 +365,11 @@
       paymentStep: s.paymentStep === "tariff" ? "checkout" : s.paymentStep,
     }));
   }
-  $: if (tariffMode && selectedTariffKey && !tariffCatalog.some((tariff) => tariff.key === selectedTariffKey)) {
+  $: if (
+    tariffMode &&
+    selectedTariffKey &&
+    !tariffCatalog.some((tariff) => tariff.key === selectedTariffKey)
+  ) {
     billingStore.update((s) => ({
       ...s,
       selectedTariffKey: "",
@@ -306,7 +377,11 @@
       paymentStep: singleTariffMode ? "checkout" : "tariff",
     }));
   }
-  $: if (tariffMode && selectedTariffKey && (!selectedPlan || selectedPlan.tariff_key !== selectedTariffKey)) {
+  $: if (
+    tariffMode &&
+    selectedTariffKey &&
+    (!selectedPlan || selectedPlan.tariff_key !== selectedTariffKey)
+  ) {
     billingStore.update((s) => ({ ...s, selectedPlan: selectedTariffPlans[0] || null }));
   }
   $: if (!$billingStore.selectedMethod && methods.length) {
@@ -356,7 +431,6 @@
       syncBodyScrollLock(false);
     };
   });
-
 
   function syncBodyScrollLock(locked) {
     if (typeof document === "undefined") return;
@@ -467,7 +541,8 @@
       finalizeTelegramAuth: (authData, source) => authStore.finalizeTelegramAuth(authData, source),
       setAuthStatus: (message, isError) => authStore.setAuthStatus(message, isError),
       t,
-      getInitDataForBoot: () => telegramMiniAppInitData || tg?.initData || readTelegramMiniAppInitDataFromLocation(),
+      getInitDataForBoot: () =>
+        telegramMiniAppInitData || tg?.initData || readTelegramMiniAppInitDataFromLocation(),
       getToken: () => token,
       getCsrfToken: () => csrfToken,
     });
@@ -494,7 +569,10 @@
       paymentStep: "tariff",
       selectedMethod: payload.payment_methods?.[0]?.id || "",
     }));
-    let section = MOCK && query.get("screen") ? normalizeSection(query.get("screen")) : sectionFromPath(window.location.pathname);
+    let section =
+      MOCK && query.get("screen")
+        ? normalizeSection(query.get("screen"))
+        : sectionFromPath(window.location.pathname);
     if (section === "admin" && !payload.user?.is_admin) section = "settings";
     if (section === "devices" && !payload.settings?.my_devices_enabled) section = "home";
     activeTab = section === "admin" ? "settings" : section;
@@ -503,7 +581,7 @@
     syncSectionPath(
       section,
       true,
-      section === "admin" ? adminSectionFromPath(window.location.pathname) : null,
+      section === "admin" ? adminSectionFromPath(window.location.pathname) : null
     );
     if (section === "devices" && payload.settings?.my_devices_enabled) {
       await devicesStore.loadDevices(true);
@@ -520,9 +598,9 @@
       const tariffModeLocal = plansList.some((plan) => plan?.tariff_key);
       const hasTariffSub = Boolean(
         tariffModeLocal &&
-          sub?.active &&
-          sub?.tariff_key &&
-          tariffCatalogLocal.some((t) => t.key === sub.tariff_key),
+        sub?.active &&
+        sub?.tariff_key &&
+        tariffCatalogLocal.some((t) => t.key === sub.tariff_key)
       );
       const canRegular =
         hasTariffSub &&
@@ -707,7 +785,14 @@
   }
 
   function openPaymentModal() {
-    billingStore.openPaymentModal(tariffMode, singleTariffMode, tariffCatalog, subscription, plans, defaultPaymentMethod());
+    billingStore.openPaymentModal(
+      tariffMode,
+      singleTariffMode,
+      tariffCatalog,
+      subscription,
+      plans,
+      defaultPaymentMethod()
+    );
   }
 
   function openTopupModal(kind) {
@@ -767,11 +852,16 @@
   function handleAdminSectionChange(adminSection, adminUserId = null) {
     if (screen !== "admin") return;
     if (window.location.protocol === "file:") return;
-    const targetPath = adminSection === "users" && adminUserId
-      ? `/admin/users/${adminUserId}`
-      : `/admin/${adminSection}`;
+    const targetPath =
+      adminSection === "users" && adminUserId
+        ? `/admin/users/${adminUserId}`
+        : `/admin/${adminSection}`;
     if (window.location.pathname === targetPath) return;
-    window.history.pushState(null, "", `${targetPath}${window.location.search}${window.location.hash}`);
+    window.history.pushState(
+      null,
+      "",
+      `${targetPath}${window.location.search}${window.location.hash}`
+    );
   }
 
   async function handleAdminPersistedSaved() {
@@ -799,7 +889,6 @@
     if (trafficMode || selectedPlan?.sale_mode === "traffic_package") return t("wa_buy_traffic");
     return subscription.active ? t("wa_renew") : t("wa_pay_subscription");
   }
-
 </script>
 
 <svelte:head>
@@ -812,250 +901,251 @@
       <PreviewBoard config={CFG} mockData={DEV_MOCK.data} />
     {:else}
       <div class="app-shell" style={`--accent: ${accent};`}>
-      {#if mode === "loading"}
-        <div class="loader">
-          <BrandMark class="brand-mark-lg" logoUrl={CFG.logoUrl} emoji={brandEmoji} />
-          <div>{t("wa_loading")}</div>
-        </div>
-      {:else if mode === "login"}
-        <AuthScreen
-          {screen}
-          {CFG}
-          {brandTitle}
-          {brandEmoji}
-          bind:email={$authStore.email}
-          bind:emailCode={$authStore.emailCode}
-          {pendingEmail}
-          {authStatus}
-          {authIsError}
-          {authBusy}
-          {authResendCooldown}
-          {loginEmailFieldError}
-          {loginEmailTooltipOpen}
-          {telegramLoginBusy}
-          {telegramLoginUnavailable}
-          {telegramLoginChecking}
-          {telegramLoginLabel}
-          {telegramLoginUnavailableMessage}
-          {privacyPolicyUrl}
-          {userAgreementUrl}
-          {t}
-          requestEmailCode={() => authStore.requestEmailCode((s) => (screen = s))}
-          verifyEmailCode={authStore.verifyEmailCode}
-          openTelegramLogin={() => authStore.openTelegramLogin(telegramOAuthClientId, () => telegramMiniAppInitData)}
-          {openExternalLink}
-          {submitEmailOnEnter}
-          onBackToLogin={() => (screen = "login")}
-          clearLoginEmailError={() => {
-            loginEmailFieldError = "";
-            loginEmailTooltipOpen = false;
-          }}
-        />
-    {:else if screen === "admin" && isAdmin}
-      <AdminPanel
-        api={api}
-        onClose={closeAdminPanel}
-        onToast={(text) => showToast(text)}
-        initialSection={adminSectionFromPath(window.location.pathname)}
-        initialUserId={adminUserIdFromPath(window.location.pathname)}
-        onSectionChange={handleAdminSectionChange}
-        onSettingsSaved={handleAdminPersistedSaved}
-        onTariffsSaved={handleAdminPersistedSaved}
-        brandTitle={brandTitle}
-        logoUrl={CFG.logoUrl}
-        logoEmoji={brandEmoji}
-        appVersion={CFG.appVersion}
-        appRepositoryUrl={CFG.appRepositoryUrl}
-        currentLang={currentLang}
-        languageOptions={languageOptions}
-        languageBusy={languageBusy}
-        onLanguageChange={accountStore.updateAccountLanguage}
-        t={t}
-      />
-    {:else}
-      <WebAppShell
-        {screen}
-        {activeTab}
-        {CFG}
-        {brandTitle}
-        {brandEmoji}
-        {devicesEnabled}
-        {hasUnlinkedIdentity}
-        {isAdmin}
-        {openAdminPanel}
-        {goDevices}
-        {goHome}
-        {goInvite}
-        {goSettings}
-        {t}
-      >
-        {#if screen === "home"}
-          <HomeScreen
+        {#if mode === "loading"}
+          <div class="loader">
+            <BrandMark class="brand-mark-lg" logoUrl={CFG.logoUrl} emoji={brandEmoji} />
+            <div>{t("wa_loading")}</div>
+          </div>
+        {:else if mode === "login"}
+          <AuthScreen
+            {screen}
             {CFG}
-            {appSettings}
-            {brandEmoji}
             {brandTitle}
-            {canChangeTariff}
-            {currentTariffName}
-            {hasActiveTariffSubscription}
-            {hasMultipleTariffs}
-            {premiumTrafficTopupBarClickable}
-            {premiumTrafficTopupUnlocked}
-            {regularTrafficTopupBarClickable}
-            {regularTrafficTopupUnlocked}
-            {subscription}
-            {termUnitLabel}
-            {trafficMode}
-            {trialBusy}
-            {activateTrial}
-            {openConnectLink}
-            {openPaymentModal}
-            {openRegularTopupModal}
-            {openPremiumTopupModal}
-            {openTariffChangeModal}
-            {primaryPayActionLabel}
-            {t}
-          />
-        {:else if screen === "invite"}
-          <InviteScreen
-            {referral}
-            {referralBonusDetails}
-            {referralOneBonusPerReferee}
-            {referralWelcomeBonusDays}
-            bind:promoCode
-            bind:promoFieldError
-            {promoBusy}
-            {promoIsError}
-            {promoStatus}
-            {applyPromo}
-            clearPromoFieldError={() => (promoFieldError = "")}
-            {copyText}
-            {t}
-          />
-        {:else if screen === "devices"}
-          <DevicesScreen
-            {devicesBusy}
-            {devicesData}
-            {devicesIsError}
-            {devicesLoaded}
-            {devicesStatus}
-            {subscription}
-            {loadDevices}
-            openDeviceDisconnectDialog={devicesStore.openDeviceDisconnectDialog}
-            {openDeviceTopupModal}
-            {t}
-          />
-        {:else if screen === "settings"}
-          <SettingsScreen
-            {currentLang}
-            {currentLanguageOption}
-            {emailLinkStatus}
-            {isAdmin}
-            {languageBusy}
-            {languageClickGuard}
-            {languageClickGuardArmed}
-            bind:languageMenuOpen
-            {languageOptions}
-            {linkEmailBusy}
-            {linkTelegramBusy}
+            {brandEmoji}
+            bind:email={$authStore.email}
+            bind:emailCode={$authStore.emailCode}
+            {pendingEmail}
+            {authStatus}
+            {authIsError}
+            {authBusy}
+            {authResendCooldown}
+            {loginEmailFieldError}
+            {loginEmailTooltipOpen}
+            {telegramLoginBusy}
+            {telegramLoginUnavailable}
+            {telegramLoginChecking}
+            {telegramLoginLabel}
+            {telegramLoginUnavailableMessage}
             {privacyPolicyUrl}
-            {profileAvatarUrl}
-            {profileEmail}
-            {profileTelegramId}
-            {supportUrl}
-            {telegramProfileName}
-            {user}
             {userAgreementUrl}
-            {userLanguage}
-            linkTelegramAccount={accountStore.linkTelegramAccount}
-            logout={accountStore.logout}
-            {openAdminPanel}
-            {openExternalLink}
-            openLinkEmailDialog={accountStore.openLinkEmailDialog}
-            {setLanguageMenuOpen}
             {t}
-            updateAccountLanguage={accountStore.updateAccountLanguage}
+            requestEmailCode={() => authStore.requestEmailCode((s) => (screen = s))}
+            verifyEmailCode={authStore.verifyEmailCode}
+            openTelegramLogin={() =>
+              authStore.openTelegramLogin(telegramOAuthClientId, () => telegramMiniAppInitData)}
+            {openExternalLink}
+            {submitEmailOnEnter}
+            onBackToLogin={() => (screen = "login")}
+            clearLoginEmailError={() => {
+              loginEmailFieldError = "";
+              loginEmailTooltipOpen = false;
+            }}
+          />
+        {:else if screen === "admin" && isAdmin}
+          <AdminPanel
+            {api}
+            onClose={closeAdminPanel}
+            onToast={(text) => showToast(text)}
+            initialSection={adminSectionFromPath(window.location.pathname)}
+            initialUserId={adminUserIdFromPath(window.location.pathname)}
+            onSectionChange={handleAdminSectionChange}
+            onSettingsSaved={handleAdminPersistedSaved}
+            onTariffsSaved={handleAdminPersistedSaved}
+            {brandTitle}
+            logoUrl={CFG.logoUrl}
+            logoEmoji={brandEmoji}
+            appVersion={CFG.appVersion}
+            appRepositoryUrl={CFG.appRepositoryUrl}
+            {currentLang}
+            {languageOptions}
+            {languageBusy}
+            onLanguageChange={accountStore.updateAccountLanguage}
+            {t}
+          />
+        {:else}
+          <WebAppShell
+            {screen}
+            {activeTab}
+            {CFG}
+            {brandTitle}
+            {brandEmoji}
+            {devicesEnabled}
+            {hasUnlinkedIdentity}
+            {isAdmin}
+            {openAdminPanel}
+            {goDevices}
+            {goHome}
+            {goInvite}
+            {goSettings}
+            {t}
+          >
+            {#if screen === "home"}
+              <HomeScreen
+                {CFG}
+                {appSettings}
+                {brandEmoji}
+                {brandTitle}
+                {canChangeTariff}
+                {currentTariffName}
+                {hasActiveTariffSubscription}
+                {hasMultipleTariffs}
+                {premiumTrafficTopupBarClickable}
+                {premiumTrafficTopupUnlocked}
+                {regularTrafficTopupBarClickable}
+                {regularTrafficTopupUnlocked}
+                {subscription}
+                {termUnitLabel}
+                {trafficMode}
+                {trialBusy}
+                {activateTrial}
+                {openConnectLink}
+                {openPaymentModal}
+                {openRegularTopupModal}
+                {openPremiumTopupModal}
+                {openTariffChangeModal}
+                {primaryPayActionLabel}
+                {t}
+              />
+            {:else if screen === "invite"}
+              <InviteScreen
+                {referral}
+                {referralBonusDetails}
+                {referralOneBonusPerReferee}
+                {referralWelcomeBonusDays}
+                bind:promoCode
+                bind:promoFieldError
+                {promoBusy}
+                {promoIsError}
+                {promoStatus}
+                {applyPromo}
+                clearPromoFieldError={() => (promoFieldError = "")}
+                {copyText}
+                {t}
+              />
+            {:else if screen === "devices"}
+              <DevicesScreen
+                {devicesBusy}
+                {devicesData}
+                {devicesIsError}
+                {devicesLoaded}
+                {devicesStatus}
+                {subscription}
+                {loadDevices}
+                openDeviceDisconnectDialog={devicesStore.openDeviceDisconnectDialog}
+                {openDeviceTopupModal}
+                {t}
+              />
+            {:else if screen === "settings"}
+              <SettingsScreen
+                {currentLang}
+                {currentLanguageOption}
+                {emailLinkStatus}
+                {isAdmin}
+                {languageBusy}
+                {languageClickGuard}
+                {languageClickGuardArmed}
+                bind:languageMenuOpen
+                {languageOptions}
+                {linkEmailBusy}
+                {linkTelegramBusy}
+                {privacyPolicyUrl}
+                {profileAvatarUrl}
+                {profileEmail}
+                {profileTelegramId}
+                {supportUrl}
+                {telegramProfileName}
+                {user}
+                {userAgreementUrl}
+                {userLanguage}
+                linkTelegramAccount={accountStore.linkTelegramAccount}
+                logout={accountStore.logout}
+                {openAdminPanel}
+                {openExternalLink}
+                openLinkEmailDialog={accountStore.openLinkEmailDialog}
+                {setLanguageMenuOpen}
+                {t}
+                updateAccountLanguage={accountStore.updateAccountLanguage}
+              />
+            {/if}
+          </WebAppShell>
+
+          <PaymentDialogs
+            bind:linkEmailCode={$accountStore.linkEmailCode}
+            bind:linkEmailFieldError={$accountStore.linkEmailFieldError}
+            bind:linkEmailValue={$accountStore.linkEmailValue}
+            bind:paymentModalOpen={$billingStore.paymentModalOpen}
+            bind:paymentStep={$billingStore.paymentStep}
+            bind:selectedMethod={$billingStore.selectedMethod}
+            bind:selectedPlan={$billingStore.selectedPlan}
+            bind:selectedTariffKey={$billingStore.selectedTariffKey}
+            createPayment={billingStore.createPayment}
+            {deviceConfirmOpen}
+            {deviceDisconnectBusy}
+            {deviceToDisconnect}
+            {disconnectDevice}
+            {linkEmailBusy}
+            {linkEmailIsError}
+            {linkEmailOpen}
+            {linkEmailPending}
+            {linkEmailResendCooldown}
+            {linkEmailStatus}
+            {hasMultipleTariffs}
+            {methods}
+            {payBusy}
+            {plans}
+            {selectedTariff}
+            {selectedTariffPlans}
+            {singleTariffMode}
+            {subscription}
+            {tariffCatalog}
+            {tariffMode}
+            closeDeviceDisconnectDialog={devicesStore.closeDeviceDisconnectDialog}
+            closeLinkEmailDialog={accountStore.closeLinkEmailDialog}
+            closePaymentModal={billingStore.closePaymentModal}
+            {backToTariffList}
+            {continueWithSelectedTariff}
+            requestLinkEmailCode={accountStore.requestLinkEmailCode}
+            {selectTariff}
+            {t}
+            {termUnitLabel}
+            verifyLinkEmailCode={accountStore.verifyLinkEmailCode}
+          />
+
+          <TariffDialogs
+            bind:changeConfirmOpen={$billingStore.changeConfirmOpen}
+            bind:changeModalOpen={$billingStore.changeModalOpen}
+            bind:deviceTopupModalOpen={$billingStore.deviceTopupModalOpen}
+            bind:selectedChangeAction={$billingStore.selectedChangeAction}
+            bind:selectedChangeTarget={$billingStore.selectedChangeTarget}
+            bind:selectedDeviceTopupPlan={$billingStore.selectedDeviceTopupPlan}
+            bind:selectedMethod={$billingStore.selectedMethod}
+            bind:selectedTopupPlan={$billingStore.selectedTopupPlan}
+            bind:topupModalOpen={$billingStore.topupModalOpen}
+            applyTariffChange={billingStore.applyTariffChange}
+            {changeOptions}
+            {closeDeviceTopupModal}
+            closeTariffChangeConfirm={billingStore.closeTariffChangeConfirm}
+            closeTariffChangeModal={billingStore.closeTariffChangeModal}
+            closeTopupModal={billingStore.closeTopupModal}
+            createDeviceTopupPayment={billingStore.createDeviceTopupPayment}
+            createTopupPayment={billingStore.createTopupPayment}
+            {deviceTopupOptions}
+            {methods}
+            openTariffChangeConfirm={billingStore.openTariffChangeConfirm}
+            {payBusy}
+            {singleTariffMode}
+            {subscription}
+            {tariffActionBusy}
+            {topupKind}
+            {topupOptions}
+            {trafficMode}
+            {t}
           />
         {/if}
-      </WebAppShell>
 
-      <PaymentDialogs
-        bind:linkEmailCode={$accountStore.linkEmailCode}
-        bind:linkEmailFieldError={$accountStore.linkEmailFieldError}
-        bind:linkEmailValue={$accountStore.linkEmailValue}
-        bind:paymentModalOpen={$billingStore.paymentModalOpen}
-        bind:paymentStep={$billingStore.paymentStep}
-        bind:selectedMethod={$billingStore.selectedMethod}
-        bind:selectedPlan={$billingStore.selectedPlan}
-        bind:selectedTariffKey={$billingStore.selectedTariffKey}
-        createPayment={billingStore.createPayment}
-        {deviceConfirmOpen}
-        {deviceDisconnectBusy}
-        {deviceToDisconnect}
-        {disconnectDevice}
-        {linkEmailBusy}
-        {linkEmailIsError}
-        {linkEmailOpen}
-        {linkEmailPending}
-        {linkEmailResendCooldown}
-        {linkEmailStatus}
-        {hasMultipleTariffs}
-        {methods}
-        {payBusy}
-        {plans}
-        {selectedTariff}
-        {selectedTariffPlans}
-        {singleTariffMode}
-        {subscription}
-        {tariffCatalog}
-        {tariffMode}
-        closeDeviceDisconnectDialog={devicesStore.closeDeviceDisconnectDialog}
-        closeLinkEmailDialog={accountStore.closeLinkEmailDialog}
-        closePaymentModal={billingStore.closePaymentModal}
-        {backToTariffList}
-        {continueWithSelectedTariff}
-        requestLinkEmailCode={accountStore.requestLinkEmailCode}
-        {selectTariff}
-        {t}
-        {termUnitLabel}
-        verifyLinkEmailCode={accountStore.verifyLinkEmailCode}
-      />
-
-      <TariffDialogs
-        bind:changeConfirmOpen={$billingStore.changeConfirmOpen}
-        bind:changeModalOpen={$billingStore.changeModalOpen}
-        bind:deviceTopupModalOpen={$billingStore.deviceTopupModalOpen}
-        bind:selectedChangeAction={$billingStore.selectedChangeAction}
-        bind:selectedChangeTarget={$billingStore.selectedChangeTarget}
-        bind:selectedDeviceTopupPlan={$billingStore.selectedDeviceTopupPlan}
-        bind:selectedMethod={$billingStore.selectedMethod}
-        bind:selectedTopupPlan={$billingStore.selectedTopupPlan}
-        bind:topupModalOpen={$billingStore.topupModalOpen}
-        applyTariffChange={billingStore.applyTariffChange}
-        {changeOptions}
-        {closeDeviceTopupModal}
-        closeTariffChangeConfirm={billingStore.closeTariffChangeConfirm}
-        closeTariffChangeModal={billingStore.closeTariffChangeModal}
-        closeTopupModal={billingStore.closeTopupModal}
-        createDeviceTopupPayment={billingStore.createDeviceTopupPayment}
-        createTopupPayment={billingStore.createTopupPayment}
-        {deviceTopupOptions}
-        {methods}
-        openTariffChangeConfirm={billingStore.openTariffChangeConfirm}
-        {payBusy}
-        {singleTariffMode}
-        {subscription}
-        {tariffActionBusy}
-        {topupKind}
-        {topupOptions}
-        {trafficMode}
-        {t}
-      />
-    {/if}
-
-    {#if toastText}
-      <div class="toast" role="status">{toastText}</div>
-      {/if}
+        {#if toastText}
+          <div class="toast" role="status">{toastText}</div>
+        {/if}
       </div>
     {/if}
   {/key}

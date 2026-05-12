@@ -1,10 +1,11 @@
 import logging
 import os
 import secrets
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ValidationError, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from config.tariffs_config import TariffsConfig, load_tariffs_config
 
 
@@ -102,9 +103,8 @@ class WebAppSettings(BaseModel):
 class Settings(BaseSettings):
     BOT_TOKEN: str
     ADMIN_IDS_STR: str = Field(
-        default="",
-        alias="ADMIN_IDS",
-        description="Comma-separated list of admin Telegram User IDs")
+        default="", alias="ADMIN_IDS", description="Comma-separated list of admin Telegram User IDs"
+    )
 
     POSTGRES_USER: str = Field(...)
     POSTGRES_PASSWORD: str = Field(...)
@@ -121,11 +121,12 @@ class Settings(BaseSettings):
     PRIVACY_POLICY_URL: Optional[str] = Field(default=None)
     USER_AGREEMENT_URL: Optional[str] = Field(default=None)
     REQUIRED_CHANNEL_ID: Optional[int] = Field(
-        default=None,
-        description="Telegram channel ID the user must join to access the bot")
+        default=None, description="Telegram channel ID the user must join to access the bot"
+    )
     REQUIRED_CHANNEL_LINK: Optional[str] = Field(
         default=None,
-        description="Public username or invite link to the required channel for join button")
+        description="Public username or invite link to the required channel for join button",
+    )
 
     YOOKASSA_SHOP_ID: Optional[str] = None
     YOOKASSA_SECRET_KEY: Optional[str] = None
@@ -140,33 +141,33 @@ class Settings(BaseSettings):
     YOOKASSA_AUTOPAYMENTS_ENABLED: bool = Field(default=False)
     YOOKASSA_AUTOPAYMENTS_REQUIRE_CARD_BINDING: bool = Field(
         default=True,
-        description="When true, new YooKassa payments in autopay mode force card binding without a user checkbox."
+        description="When true, new YooKassa payments in autopay mode force card binding without a user checkbox.",
     )
 
     LKNPD_INN: Optional[str] = Field(
         default=None,
         alias="NALOGO_INN",
-        description="INN for lknpd.nalog.ru (self-employed) authentication"
+        description="INN for lknpd.nalog.ru (self-employed) authentication",
     )
     LKNPD_PASSWORD: Optional[str] = Field(
         default=None,
         alias="NALOGO_PASSWORD",
-        description="Password for lknpd.nalog.ru (self-employed) authentication"
+        description="Password for lknpd.nalog.ru (self-employed) authentication",
     )
     LKNPD_API_URL: str = Field(
         default="https://lknpd.nalog.ru/api",
         alias="NALOGO_API_URL",
-        description="Base URL for LKNPD API (can be overridden for proxies)"
+        description="Base URL for LKNPD API (can be overridden for proxies)",
     )
     LKNPD_RECEIPT_NAME_SUBSCRIPTION: str = Field(
         default="subscription {months} months",
         alias="NALOGO_RECEIPT_NAME_SUBSCRIPTION",
-        description="Receipt item name for time-based subscriptions. Use {months} placeholder for duration."
+        description="Receipt item name for time-based subscriptions. Use {months} placeholder for duration.",
     )
     LKNPD_RECEIPT_NAME_TRAFFIC: str = Field(
         default="traffic package {gb} GB",
         alias="NALOGO_RECEIPT_NAME_TRAFFIC",
-        description="Receipt item name for traffic packages. Use {gb} placeholder for traffic amount."
+        description="Receipt item name for traffic packages. Use {gb} placeholder for traffic amount.",
     )
 
     WEBHOOK_BASE_URL: Optional[str] = None
@@ -273,27 +274,35 @@ class Settings(BaseSettings):
     SUBSCRIPTION_NOTIFY_DAYS_BEFORE: int = Field(default=3)
 
     REFERRAL_BONUS_DAYS_INVITER_1_MONTH: Optional[int] = Field(
-        default=3, alias="REFERRAL_BONUS_DAYS_1_MONTH")
+        default=3, alias="REFERRAL_BONUS_DAYS_1_MONTH"
+    )
     REFERRAL_BONUS_DAYS_INVITER_3_MONTHS: Optional[int] = Field(
-        default=7, alias="REFERRAL_BONUS_DAYS_3_MONTHS")
+        default=7, alias="REFERRAL_BONUS_DAYS_3_MONTHS"
+    )
     REFERRAL_BONUS_DAYS_INVITER_6_MONTHS: Optional[int] = Field(
-        default=15, alias="REFERRAL_BONUS_DAYS_6_MONTHS")
+        default=15, alias="REFERRAL_BONUS_DAYS_6_MONTHS"
+    )
     REFERRAL_BONUS_DAYS_INVITER_12_MONTHS: Optional[int] = Field(
-        default=30, alias="REFERRAL_BONUS_DAYS_12_MONTHS")
+        default=30, alias="REFERRAL_BONUS_DAYS_12_MONTHS"
+    )
 
     REFERRAL_BONUS_DAYS_REFEREE_1_MONTH: Optional[int] = Field(
-        default=1, alias="REFEREE_BONUS_DAYS_1_MONTH")
+        default=1, alias="REFEREE_BONUS_DAYS_1_MONTH"
+    )
     REFERRAL_BONUS_DAYS_REFEREE_3_MONTHS: Optional[int] = Field(
-        default=3, alias="REFEREE_BONUS_DAYS_3_MONTHS")
+        default=3, alias="REFEREE_BONUS_DAYS_3_MONTHS"
+    )
     REFERRAL_BONUS_DAYS_REFEREE_6_MONTHS: Optional[int] = Field(
-        default=7, alias="REFEREE_BONUS_DAYS_6_MONTHS")
+        default=7, alias="REFEREE_BONUS_DAYS_6_MONTHS"
+    )
     REFERRAL_BONUS_DAYS_REFEREE_12_MONTHS: Optional[int] = Field(
-        default=15, alias="REFEREE_BONUS_DAYS_12_MONTHS")
+        default=15, alias="REFEREE_BONUS_DAYS_12_MONTHS"
+    )
 
     # Referral program configuration
     REFERRAL_ONE_BONUS_PER_REFEREE: bool = Field(
         default=True,
-        description="When true, referral bonuses (for inviter and referee) are applied only once per invited user - on their first successful payment."
+        description="When true, referral bonuses (for inviter and referee) are applied only once per invited user - on their first successful payment.",
     )
     REFERRAL_WELCOME_BONUS_DAYS: int = Field(
         default=3,
@@ -301,7 +310,7 @@ class Settings(BaseSettings):
     )
     LEGACY_REFS: bool = Field(
         default=True,
-        description="Allow legacy referral links like ref_<telegram_id> to continue working. Defaults to True when unset."
+        description="Allow legacy referral links like ref_<telegram_id> to continue working. Defaults to True when unset.",
     )
 
     PANEL_API_URL: Optional[str] = None
@@ -310,20 +319,25 @@ class Settings(BaseSettings):
     USER_TRAFFIC_STRATEGY: str = Field(default="NO_RESET")
     USER_SQUAD_UUIDS: Optional[str] = Field(
         default=None,
-        description=
-        "Comma-separated UUIDs of internal squads to assign to new panel users")
+        description="Comma-separated UUIDs of internal squads to assign to new panel users",
+    )
     USER_EXTERNAL_SQUAD_UUID: Optional[str] = Field(
         default=None,
-        description=
-        "UUID of the external squad to assign to new panel users (optional)")
+        description="UUID of the external squad to assign to new panel users (optional)",
+    )
 
     TRIAL_ENABLED: bool = Field(default=True)
     TRIAL_DURATION_DAYS: int = Field(default=3)
     TRIAL_TRAFFIC_LIMIT_GB: Optional[float] = Field(default=5.0)
     TRIAL_TRAFFIC_STRATEGY: str = Field(default="NO_RESET")
 
-    CRYPT4_ENABLED: bool = Field(default=False, description="Enable happ crypt4 encryption for subscription URLs")
-    CRYPT4_REDIRECT_URL: Optional[str] = Field(default=None, description="Base redirect URL used for the connect button when crypt4 is enabled")
+    CRYPT4_ENABLED: bool = Field(
+        default=False, description="Enable happ crypt4 encryption for subscription URLs"
+    )
+    CRYPT4_REDIRECT_URL: Optional[str] = Field(
+        default=None,
+        description="Base redirect URL used for the connect button when crypt4 is enabled",
+    )
 
     WEB_SERVER_HOST: str = Field(default="0.0.0.0")
     WEB_SERVER_PORT: int = Field(default=8080)
@@ -391,22 +405,30 @@ class Settings(BaseSettings):
     SUBSCRIPTION_MINI_APP_URL: Optional[str] = Field(default=None)
 
     START_COMMAND_DESCRIPTION: Optional[str] = Field(default=None)
-    DISABLE_WELCOME_MESSAGE: bool = Field(default=False, description="Disable welcome message on /start command")
+    DISABLE_WELCOME_MESSAGE: bool = Field(
+        default=False, description="Disable welcome message on /start command"
+    )
 
     MY_DEVICES_SECTION_ENABLED: bool = Field(
-        default=False,
-        description="Enable the My Devices section in the subscription menu"
+        default=False, description="Enable the My Devices section in the subscription menu"
     )
     USER_HWID_DEVICE_LIMIT: Optional[int] = Field(
-        default=None,
-        description="Default hardware device limit for panel users (0 = unlimited)"
+        default=None, description="Default hardware device limit for panel users (0 = unlimited)"
     )
-    
+
     # Inline mode thumbnail URLs
-    INLINE_REFERRAL_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/1077/1077114.png")
-    INLINE_USER_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/681/681494.png")
-    INLINE_FINANCIAL_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/2769/2769339.png")
-    INLINE_SYSTEM_STATS_THUMBNAIL_URL: str = Field(default="https://cdn-icons-png.flaticon.com/512/2920/2920277.png")
+    INLINE_REFERRAL_THUMBNAIL_URL: str = Field(
+        default="https://cdn-icons-png.flaticon.com/512/1077/1077114.png"
+    )
+    INLINE_USER_STATS_THUMBNAIL_URL: str = Field(
+        default="https://cdn-icons-png.flaticon.com/512/681/681494.png"
+    )
+    INLINE_FINANCIAL_STATS_THUMBNAIL_URL: str = Field(
+        default="https://cdn-icons-png.flaticon.com/512/2769/2769339.png"
+    )
+    INLINE_SYSTEM_STATS_THUMBNAIL_URL: str = Field(
+        default="https://cdn-icons-png.flaticon.com/512/2920/2920277.png"
+    )
 
     @computed_field
     @property
@@ -517,7 +539,7 @@ class Settings(BaseSettings):
             try:
                 return [
                     int(admin_id.strip())
-                    for admin_id in self.ADMIN_IDS_STR.split(',')
+                    for admin_id in self.ADMIN_IDS_STR.split(",")
                     if admin_id.strip().isdigit()
                 ]
             except ValueError:
@@ -551,11 +573,7 @@ class Settings(BaseSettings):
     @property
     def parsed_user_squad_uuids(self) -> Optional[List[str]]:
         if self.USER_SQUAD_UUIDS:
-            return [
-                uuid.strip()
-                for uuid in self.USER_SQUAD_UUIDS.split(',')
-                if uuid.strip()
-            ]
+            return [uuid.strip() for uuid in self.USER_SQUAD_UUIDS.split(",") if uuid.strip()]
         return None
 
     @computed_field
@@ -885,16 +903,20 @@ class Settings(BaseSettings):
         for item in (self.SMTP_FALLBACK_PORTS or "").split(","):
             add_port(item)
         return ports
-    
+
     # Logging Configuration
     LOG_LEVEL: str = Field(
         default="INFO",
         description="Global log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
-    LOG_CHAT_ID: Optional[int] = Field(default=None, description="Telegram chat/group ID for sending notifications")
-    LOG_THREAD_ID: Optional[int] = Field(default=None, description="Thread ID for supergroup messages (optional)")
-    
-    @field_validator('LOG_LEVEL', mode='before')
+    LOG_CHAT_ID: Optional[int] = Field(
+        default=None, description="Telegram chat/group ID for sending notifications"
+    )
+    LOG_THREAD_ID: Optional[int] = Field(
+        default=None, description="Thread ID for supergroup messages (optional)"
+    )
+
+    @field_validator("LOG_LEVEL", mode="before")
     @classmethod
     def normalize_log_level(cls, v):
         if isinstance(v, str):
@@ -903,7 +925,7 @@ class Settings(BaseSettings):
             return "INFO"
         return v
 
-    @field_validator('POSTGRES_USER', 'POSTGRES_PASSWORD', mode='before')
+    @field_validator("POSTGRES_USER", "POSTGRES_PASSWORD", mode="before")
     @classmethod
     def validate_required_db_credentials(cls, v):
         if isinstance(v, str):
@@ -912,7 +934,7 @@ class Settings(BaseSettings):
             raise ValueError("must not be empty")
         return v
 
-    @field_validator('WEBAPP_SESSION_SECRET', 'WEBHOOK_SECRET_TOKEN', mode='before')
+    @field_validator("WEBAPP_SESSION_SECRET", "WEBHOOK_SECRET_TOKEN", mode="before")
     @classmethod
     def normalize_webapp_secrets(cls, v):
         if isinstance(v, str):
@@ -923,40 +945,42 @@ class Settings(BaseSettings):
             return v
         return secrets.token_urlsafe(32)
 
-    @field_validator('LOG_CHAT_ID', 'LOG_THREAD_ID', mode='before')
+    @field_validator("LOG_CHAT_ID", "LOG_THREAD_ID", mode="before")
     @classmethod
     def validate_optional_int_fields(cls, v):
         """Convert empty strings to None for optional integer fields"""
-        if isinstance(v, str) and v.strip() == '':
+        if isinstance(v, str) and v.strip() == "":
             return None
         return v
 
     @field_validator(
-        'REQUIRED_CHANNEL_LINK',
-        'PLATEGA_RETURN_URL',
-        'PLATEGA_FAILED_URL',
-        'SEVERPAY_RETURN_URL',
-        'CRYPT4_REDIRECT_URL',
-        'PRIVACY_POLICY_URL',
-        'USER_AGREEMENT_URL',
-        'SUBSCRIPTION_MINI_APP_URL',
-        'WEBAPP_LOGO_URL',
-        'TELEGRAM_OAUTH_CLIENT_SECRET',
-        'TELEGRAM_OAUTH_REQUEST_ACCESS',
-        'SMTP_USERNAME',
-        'SMTP_PASSWORD',
-        'SMTP_FROM_EMAIL',
-        'SMTP_FROM_NAME',
-        'SMTP_FALLBACK_PORTS',
-        mode='before',
+        "REQUIRED_CHANNEL_LINK",
+        "PLATEGA_RETURN_URL",
+        "PLATEGA_FAILED_URL",
+        "SEVERPAY_RETURN_URL",
+        "CRYPT4_REDIRECT_URL",
+        "PRIVACY_POLICY_URL",
+        "USER_AGREEMENT_URL",
+        "SUBSCRIPTION_MINI_APP_URL",
+        "WEBAPP_LOGO_URL",
+        "TELEGRAM_OAUTH_CLIENT_SECRET",
+        "TELEGRAM_OAUTH_REQUEST_ACCESS",
+        "SMTP_USERNAME",
+        "SMTP_PASSWORD",
+        "SMTP_FROM_EMAIL",
+        "SMTP_FROM_NAME",
+        "SMTP_FALLBACK_PORTS",
+        mode="before",
     )
     @classmethod
     def sanitize_optional_link(cls, v):
         if isinstance(v, str) and not v.strip():
             return None
         return v
-    
-    @field_validator('USER_HWID_DEVICE_LIMIT', 'SEVERPAY_MID', 'SEVERPAY_LIFETIME_MINUTES', mode='before')
+
+    @field_validator(
+        "USER_HWID_DEVICE_LIMIT", "SEVERPAY_MID", "SEVERPAY_LIFETIME_MINUTES", mode="before"
+    )
     @classmethod
     def validate_optional_int(cls, v):
         if isinstance(v, str):
@@ -964,18 +988,27 @@ class Settings(BaseSettings):
             if not v:
                 return None
         return v
-    
-    # Notification types
-    LOG_NEW_USERS: bool = Field(default=True, description="Send notifications for new user registrations")
-    LOG_PAYMENTS: bool = Field(default=True, description="Send notifications for successful payments")
-    LOG_PROMO_ACTIVATIONS: bool = Field(default=True, description="Send notifications for promo code activations")
-    LOG_TRIAL_ACTIVATIONS: bool = Field(default=True, description="Send notifications for trial activations")
-    LOG_SUSPICIOUS_ACTIVITY: bool = Field(default=True, description="Send notifications for suspicious promo attempts")
 
-    model_config = SettingsConfigDict(env_file='.env',
-                                      env_file_encoding='utf-8',
-                                      extra='ignore',
-                                      populate_by_name=True)
+    # Notification types
+    LOG_NEW_USERS: bool = Field(
+        default=True, description="Send notifications for new user registrations"
+    )
+    LOG_PAYMENTS: bool = Field(
+        default=True, description="Send notifications for successful payments"
+    )
+    LOG_PROMO_ACTIVATIONS: bool = Field(
+        default=True, description="Send notifications for promo code activations"
+    )
+    LOG_TRIAL_ACTIVATIONS: bool = Field(
+        default=True, description="Send notifications for trial activations"
+    )
+    LOG_SUSPICIOUS_ACTIVITY: bool = Field(
+        default=True, description="Send notifications for suspicious promo attempts"
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True
+    )
 
 
 _settings_instance: Optional[Settings] = None
@@ -989,7 +1022,8 @@ def get_settings() -> Settings:
             if not _settings_instance.ADMIN_IDS:
                 logging.warning(
                     "CRITICAL: ADMIN_IDS not set or contains no valid integer IDs in .env. "
-                    "Admin functionality will be restricted.")
+                    "Admin functionality will be restricted."
+                )
 
             if not _settings_instance.PANEL_API_URL:
                 logging.warning(
@@ -1003,16 +1037,15 @@ def get_settings() -> Settings:
                 logging.warning(
                     "WEBHOOK_SECRET_TOKEN is not set. A generated secret will be used for this process only."
                 )
-            if not _settings_instance.YOOKASSA_SHOP_ID or not _settings_instance.YOOKASSA_SECRET_KEY:
+            if (
+                not _settings_instance.YOOKASSA_SHOP_ID
+                or not _settings_instance.YOOKASSA_SECRET_KEY
+            ):
                 logging.warning(
                     "CRITICAL: YooKassa credentials (SHOP_ID or SECRET_KEY) are not set. Payments will not work."
                 )
-            if (
-                _settings_instance.LKNPD_INN
-                or _settings_instance.LKNPD_PASSWORD
-            ) and not (
-                _settings_instance.LKNPD_INN
-                and _settings_instance.LKNPD_PASSWORD
+            if (_settings_instance.LKNPD_INN or _settings_instance.LKNPD_PASSWORD) and not (
+                _settings_instance.LKNPD_INN and _settings_instance.LKNPD_PASSWORD
             ):
                 logging.warning(
                     "WARNING: LKNPD credentials are incomplete. Receipt sending will be disabled."
@@ -1049,8 +1082,7 @@ def get_settings() -> Settings:
                     )
 
         except ValidationError as e:
-            logging.critical(
-                f"Pydantic validation error while loading settings: {e}")
+            logging.critical(f"Pydantic validation error while loading settings: {e}")
 
             raise SystemExit(
                 f"CRITICAL SETTINGS ERROR: {e}. Please check your .env file and Settings model."

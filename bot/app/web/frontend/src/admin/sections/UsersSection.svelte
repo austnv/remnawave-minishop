@@ -69,7 +69,10 @@
   const USERS_PREMIUM_TRAFFIC_OPTIONS = [
     { value: "all", label: at("premium_traffic_filter_all", {}, "Все (премиум)") },
     { value: "none", label: at("premium_traffic_filter_none", {}, "Без лимита в тарифе") },
-    { value: "unlimited", label: at("premium_traffic_filter_unlimited", {}, "Безлимит (оверрайд)") },
+    {
+      value: "unlimited",
+      label: at("premium_traffic_filter_unlimited", {}, "Безлимит (оверрайд)"),
+    },
     { value: "good", label: at("premium_traffic_filter_good", {}, "Премиум: норма") },
     { value: "warn", label: at("premium_traffic_filter_warn", {}, "Премиум: мало") },
     { value: "critical", label: at("premium_traffic_filter_critical", {}, "Премиум: исчерпан") },
@@ -110,9 +113,16 @@
       placeholder={at("users_search_placeholder", {}, "ID, @username или email")}
       value={usersQuery}
       on:input={(e) => usersStore.updateState({ usersQuery: e.target.value })}
-      on:keydown={(e) => e.key === "Enter" && (usersStore.updateState({ usersPage: 0 }), usersStore.loadUsers())}
+      on:keydown={(e) =>
+        e.key === "Enter" && (usersStore.updateState({ usersPage: 0 }), usersStore.loadUsers())}
     />
-    <AdminButton variant="primary" onclick={() => { usersStore.updateState({ usersPage: 0 }); usersStore.loadUsers(); }}>{at("find", {}, "Найти")}</AdminButton>
+    <AdminButton
+      variant="primary"
+      onclick={() => {
+        usersStore.updateState({ usersPage: 0 });
+        usersStore.loadUsers();
+      }}>{at("find", {}, "Найти")}</AdminButton
+    >
   </div>
 
   <div class="admin-toolbar-controls">
@@ -123,7 +133,10 @@
         items={USERS_FILTER_OPTIONS}
         class="admin-toolbar-select"
         ariaLabel={at("filter", {}, "Фильтр")}
-        onValueChange={(value) => { usersStore.updateState({ usersFilter: value, usersPage: 0 }); usersStore.loadUsers(); }}
+        onValueChange={(value) => {
+          usersStore.updateState({ usersFilter: value, usersPage: 0 });
+          usersStore.loadUsers();
+        }}
       />
     </Label.Root>
 
@@ -134,18 +147,26 @@
         items={USERS_PANEL_STATUS_OPTIONS}
         class="admin-toolbar-select"
         ariaLabel={at("panel_status", {}, "Статус панели")}
-        onValueChange={(value) => { usersStore.updateState({ usersPanelStatus: value, usersPage: 0 }); usersStore.loadUsers(); }}
+        onValueChange={(value) => {
+          usersStore.updateState({ usersPanelStatus: value, usersPage: 0 });
+          usersStore.loadUsers();
+        }}
       />
     </Label.Root>
 
     <Label.Root class="admin-toolbar-field">
-      <span class="admin-toolbar-field-label">{at("premium_traffic_filter_label", {}, "Премиум трафик")}</span>
+      <span class="admin-toolbar-field-label"
+        >{at("premium_traffic_filter_label", {}, "Премиум трафик")}</span
+      >
       <AdminSelect
         value={usersPremiumTraffic}
         items={USERS_PREMIUM_TRAFFIC_OPTIONS}
         class="admin-toolbar-select"
         ariaLabel={at("premium_traffic_filter_label", {}, "Премиум трафик")}
-        onValueChange={(value) => { usersStore.updateState({ usersPremiumTraffic: value, usersPage: 0 }); usersStore.loadUsers(); }}
+        onValueChange={(value) => {
+          usersStore.updateState({ usersPremiumTraffic: value, usersPage: 0 });
+          usersStore.loadUsers();
+        }}
       />
     </Label.Root>
 
@@ -156,7 +177,10 @@
         items={USERS_SORT_OPTIONS}
         class="admin-toolbar-select"
         ariaLabel={at("sort", {}, "Сортировка")}
-        onValueChange={(value) => { usersStore.updateState({ usersSort: value, usersPage: 0 }); usersStore.loadUsers(); }}
+        onValueChange={(value) => {
+          usersStore.updateState({ usersSort: value, usersPage: 0 });
+          usersStore.loadUsers();
+        }}
       />
     </Label.Root>
 
@@ -175,7 +199,10 @@
       widths={["minmax(220px, 42%)", "minmax(140px, 28%)", "108px", "112px"]}
     />
   {:else if !users.length}
-    <AdminEmptyState tone="card"><span class="admin-muted">{at("users_empty", {}, "Никого не найдено")}</span></AdminEmptyState>
+    <AdminEmptyState tone="card"
+      ><span class="admin-muted">{at("users_empty", {}, "Никого не найдено")}</span
+      ></AdminEmptyState
+    >
   {:else}
     <AdminTable class="admin-users-table">
       <thead>
@@ -219,19 +246,30 @@
                 </div>
               </div>
             </td>
-            <td class="admin-users-cell-premium" data-label={at("premium_traffic_filter_label", {}, "Премиум трафик")}>
+            <td
+              class="admin-users-cell-premium"
+              data-label={at("premium_traffic_filter_label", {}, "Премиум трафик")}
+            >
               {#if user.premium_traffic && user.premium_traffic.state !== "none"}
-                <AdminBadge variant={premiumTrafficBadgeVariant(user.premium_traffic)} class="admin-user-premium-badge">
+                <AdminBadge
+                  variant={premiumTrafficBadgeVariant(user.premium_traffic)}
+                  class="admin-user-premium-badge"
+                >
                   {premiumTrafficBadgeText(user.premium_traffic)}
                 </AdminBadge>
               {:else}
-                <span class="admin-user-premium-placeholder">{at("premium_traffic_na", {}, "—")}</span>
+                <span class="admin-user-premium-placeholder"
+                  >{at("premium_traffic_na", {}, "—")}</span
+                >
               {/if}
             </td>
             <td data-label={at("status", {}, "Статус")}>
               <AdminBadge variant={badge.variant}>{badge.label}</AdminBadge>
             </td>
-            <td class="admin-users-cell-date admin-cell-mono" data-label={at("users_col_registration", {}, "Регистрация")}>
+            <td
+              class="admin-users-cell-date admin-cell-mono"
+              data-label={at("users_col_registration", {}, "Регистрация")}
+            >
               {fmtDateShort(user.registration_date)}
             </td>
           </tr>
@@ -247,8 +285,14 @@
   nextLabel={at("next", {}, "Далее")}
   prevDisabled={usersPage === 0}
   nextDisabled={!usersHasMore}
-  onPrev={() => { usersStore.updateState({ usersPage: Math.max(0, usersPage - 1) }); usersStore.loadUsers(); }}
-  onNext={() => { usersStore.updateState({ usersPage: usersPage + 1 }); usersStore.loadUsers(); }}
+  onPrev={() => {
+    usersStore.updateState({ usersPage: Math.max(0, usersPage - 1) });
+    usersStore.loadUsers();
+  }}
+  onNext={() => {
+    usersStore.updateState({ usersPage: usersPage + 1 });
+    usersStore.loadUsers();
+  }}
 />
 
 <style>

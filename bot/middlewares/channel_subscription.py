@@ -9,10 +9,10 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.keyboards.inline.user_keyboards import get_channel_subscription_keyboard
+from bot.middlewares.i18n import JsonI18n
 from config.settings import Settings
 from db.dal import user_dal
-from bot.middlewares.i18n import JsonI18n
-from bot.keyboards.inline.user_keyboards import get_channel_subscription_keyboard
 
 
 class ChannelSubscriptionMiddleware(BaseMiddleware):
@@ -50,11 +50,7 @@ class ChannelSubscriptionMiddleware(BaseMiddleware):
 
         # Allow /start to reach the handler so the check can be re-run.
         message_object: Optional[Message] = event.message
-        if (
-            message_object
-            and message_object.text
-            and message_object.text.startswith("/start")
-        ):
+        if message_object and message_object.text and message_object.text.startswith("/start"):
             return await handler(event, data)
 
         session: AsyncSession = data["session"]
@@ -79,9 +75,7 @@ class ChannelSubscriptionMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         i18n_payload: Dict[str, Any] = data.get("i18n_data", {})
-        current_lang: str = i18n_payload.get(
-            "current_language", self.settings.DEFAULT_LANGUAGE
-        )
+        current_lang: str = i18n_payload.get("current_language", self.settings.DEFAULT_LANGUAGE)
         i18n_instance: Optional[JsonI18n] = i18n_payload.get(
             "i18n_instance", self.i18n_main_instance
         )

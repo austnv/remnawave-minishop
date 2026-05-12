@@ -120,19 +120,49 @@
   $: SECTION_META = {
     stats: {
       title: at("section_stats_title", {}, "Дашборд"),
-      subtitle: at("section_stats_subtitle", {}, "Аудитория, доходы, панель Remnawave и последние платежи"),
+      subtitle: at(
+        "section_stats_subtitle",
+        {},
+        "Аудитория, доходы, панель Remnawave и последние платежи"
+      ),
     },
-    users: { title: at("section_users_title", {}, "Пользователи"), subtitle: at("section_users_subtitle", {}, "Поиск, баны и действия над аккаунтами") },
-    payments: { title: at("section_payments_title", {}, "Платежи"), subtitle: at("section_payments_subtitle", {}, "История транзакций и экспорт") },
-    promos: { title: at("section_promos_title", {}, "Промокоды"), subtitle: at("section_promos_subtitle", {}, "Создание и управление кодами") },
-    ads: { title: at("section_ads_title", {}, "Рекламные кампании"), subtitle: at("section_ads_subtitle", {}, "UTM-источники и атрибуция") },
-    broadcast: { title: at("section_broadcast_title", {}, "Рассылка"), subtitle: at("section_broadcast_subtitle", {}, "Массовая отправка сообщений в Telegram") },
-    logs: { title: at("section_logs_title", {}, "Логи активности"), subtitle: at("section_logs_subtitle", {}, "События пользователей и админ-действия") },
-    tariffs: { title: at("section_tariffs_title", {}, "Тарифы"), subtitle: at("section_tariffs_subtitle", {}, "Каталог продаж, периоды, пакеты и лимиты") },
-    settings: { title: at("section_settings_title", {}, "Настройки приложения"), subtitle: at("section_settings_subtitle", {}, "Оверрайды над .env, применяются мгновенно") },
+    users: {
+      title: at("section_users_title", {}, "Пользователи"),
+      subtitle: at("section_users_subtitle", {}, "Поиск, баны и действия над аккаунтами"),
+    },
+    payments: {
+      title: at("section_payments_title", {}, "Платежи"),
+      subtitle: at("section_payments_subtitle", {}, "История транзакций и экспорт"),
+    },
+    promos: {
+      title: at("section_promos_title", {}, "Промокоды"),
+      subtitle: at("section_promos_subtitle", {}, "Создание и управление кодами"),
+    },
+    ads: {
+      title: at("section_ads_title", {}, "Рекламные кампании"),
+      subtitle: at("section_ads_subtitle", {}, "UTM-источники и атрибуция"),
+    },
+    broadcast: {
+      title: at("section_broadcast_title", {}, "Рассылка"),
+      subtitle: at("section_broadcast_subtitle", {}, "Массовая отправка сообщений в Telegram"),
+    },
+    logs: {
+      title: at("section_logs_title", {}, "Логи активности"),
+      subtitle: at("section_logs_subtitle", {}, "События пользователей и админ-действия"),
+    },
+    tariffs: {
+      title: at("section_tariffs_title", {}, "Тарифы"),
+      subtitle: at("section_tariffs_subtitle", {}, "Каталог продаж, периоды, пакеты и лимиты"),
+    },
+    settings: {
+      title: at("section_settings_title", {}, "Настройки приложения"),
+      subtitle: at("section_settings_subtitle", {}, "Оверрайды над .env, применяются мгновенно"),
+    },
   };
 
-  $: VALID_SECTIONS = (NAV_GROUPS || []).flatMap((group) => (group.items || []).map((item) => item.id));
+  $: VALID_SECTIONS = (NAV_GROUPS || []).flatMap((group) =>
+    (group.items || []).map((item) => item.id)
+  );
   const normalizeSection = (value) => ((VALID_SECTIONS || []).includes(value) ? value : "stats");
 
   let active = normalizeSection(initialSection);
@@ -176,7 +206,8 @@
   $: syncBusy = $statsStore.syncBusy;
   $: settingsSaving = $settingsStore.settingsSaving;
   $: meta = SECTION_META[active] || { title: active, subtitle: "" };
-  $: currentLanguageOption = languageOptions.find((option) => option.value === currentLang) || languageOptions[0];
+  $: currentLanguageOption =
+    languageOptions.find((option) => option.value === currentLang) || languageOptions[0];
 
   const gravatarCache = createGravatarCache(() => usersStore.updateState({}));
 
@@ -233,7 +264,10 @@
   }
 
   function resolvedAvatarUrl(user) {
-    return userAvatarUrl(user) || (!user?.telegram_id && user?.email ? gravatarCache.gravatarUrl(user.email) : "");
+    return (
+      userAvatarUrl(user) ||
+      (!user?.telegram_id && user?.email ? gravatarCache.gravatarUrl(user.email) : "")
+    );
   }
 
   function panelStatusBadge(user) {
@@ -245,7 +279,11 @@
       case "expired":
         return {
           label: user?.panel_status_expired_at
-            ? at("expired_badge", { date: fmtDateShort(user.panel_status_expired_at) }, `Expired ${fmtDateShort(user.panel_status_expired_at)}`)
+            ? at(
+                "expired_badge",
+                { date: fmtDateShort(user.panel_status_expired_at) },
+                `Expired ${fmtDateShort(user.panel_status_expired_at)}`
+              )
             : at("status_expired", {}, "Expired"),
           variant: "warning",
         };
@@ -318,7 +356,8 @@
     }
     return () => {
       if (compactMql) {
-        if (compactMql.removeEventListener) compactMql.removeEventListener("change", onCompactChange);
+        if (compactMql.removeEventListener)
+          compactMql.removeEventListener("change", onCompactChange);
         else if (compactMql.removeListener) compactMql.removeListener(onCompactChange);
       }
       if (typeof window !== "undefined") window.removeEventListener("popstate", onPopState);
@@ -326,14 +365,23 @@
     };
   });
 
-  $: if (active === "users" && initialUserId && (!$usersStore.openedUser || $usersStore.openedUser.user_id !== initialUserId)) {
+  $: if (
+    active === "users" &&
+    initialUserId &&
+    (!$usersStore.openedUser || $usersStore.openedUser.user_id !== initialUserId)
+  ) {
     usersStore.openUser(initialUserId, { skipPush: true });
   }
 </script>
 
 <div class="admin-screen-wrap" class:is-sidebar-open={sidebarOpen}>
   {#if sidebarOpen}
-    <button type="button" class="admin-sidebar-backdrop" aria-label={at("close_menu", {}, "Закрыть меню")} on:click={() => (sidebarOpen = false)}></button>
+    <button
+      type="button"
+      class="admin-sidebar-backdrop"
+      aria-label={at("close_menu", {}, "Закрыть меню")}
+      on:click={() => (sidebarOpen = false)}
+    ></button>
   {/if}
   {#if isCompact && (adminLanguageMenuOpen || adminLanguageClickGuard)}
     <button
@@ -348,12 +396,17 @@
 
   <aside class="admin-sidebar" aria-label={at("sidebar_navigation", {}, "Навигация админки")}>
     <div class="admin-sidebar-brand">
-      <BrandMark class="admin-brand-mark" logoUrl={logoUrl} emoji={logoEmoji} />
+      <BrandMark class="admin-brand-mark" {logoUrl} emoji={logoEmoji} />
       <div>
         <strong class="admin-brand-title">{brandTitle}</strong>
         <small>{at("panel_title", {}, "Админ-панель")}</small>
       </div>
-      <AdminButton variant="ghost" size="icon" onclick={onClose} aria-label={at("exit", {}, "Выйти")}>
+      <AdminButton
+        variant="ghost"
+        size="icon"
+        onclick={onClose}
+        aria-label={at("exit", {}, "Выйти")}
+      >
         <ArrowLeft size={16} />
       </AdminButton>
     </div>
@@ -362,7 +415,12 @@
       <div class="admin-sidebar-section-label">{group.label}</div>
       <nav class="admin-nav" aria-label={group.label}>
         {#each group.items as item}
-          <button type="button" class="admin-nav-item" class:active={active === item.id} on:click={() => setActive(item.id)}>
+          <button
+            type="button"
+            class="admin-nav-item"
+            class:active={active === item.id}
+            on:click={() => setActive(item.id)}
+          >
             <svelte:component this={item.icon} size={16} />
             <span>{item.label}</span>
             <span></span>
@@ -384,11 +442,16 @@
             onOpenChange={setAdminLanguageMenuOpen}
             onValueChange={onLanguageChange}
           >
-            <Select.Trigger class="admin-language-trigger" aria-label={t("wa_settings_language", {}, at("language", {}, "Язык"))}>
+            <Select.Trigger
+              class="admin-language-trigger"
+              aria-label={t("wa_settings_language", {}, at("language", {}, "Язык"))}
+            >
               <span>
                 <strong>{t("wa_settings_language", {}, at("language", {}, "Язык"))}</strong>
                 <small>
-                  <span class="emoji-flag" aria-hidden="true">{currentLanguageOption?.flag || "🏳️"}</span>
+                  <span class="emoji-flag" aria-hidden="true"
+                    >{currentLanguageOption?.flag || "🏳️"}</span
+                  >
                   {currentLanguageOption?.label || currentLang}
                 </small>
               </span>
@@ -397,7 +460,11 @@
             <Select.Content class="language-select-content" side="top" align="start" sideOffset={8}>
               <Select.Viewport class="language-select-viewport">
                 {#each languageOptions as option (option.value)}
-                  <Select.Item value={option.value} label={option.label} class="language-select-item">
+                  <Select.Item
+                    value={option.value}
+                    label={option.label}
+                    class="language-select-item"
+                  >
                     <span class="language-select-item-main">
                       <span class="emoji-flag" aria-hidden="true">{option.flag}</span>
                       <span>{option.label}</span>
@@ -410,7 +477,13 @@
           </Select.Root>
         </div>
       {/if}
-      <a class="admin-version-link" href={appRepositoryUrl} target="_blank" rel="noopener noreferrer" title="GitHub">
+      <a
+        class="admin-version-link"
+        href={appRepositoryUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="GitHub"
+      >
         <span>remnawave-minishop</span>
         <span>{appVersion || "dev+local"}</span>
       </a>
@@ -420,7 +493,12 @@
   <section class="admin-content">
     <header class="admin-header">
       <div style="display:flex; align-items:center; gap:12px; min-width:0;">
-        <button type="button" class="admin-mobile-toggle" on:click={() => (sidebarOpen = !sidebarOpen)} aria-label={at("menu", {}, "Меню")}>
+        <button
+          type="button"
+          class="admin-mobile-toggle"
+          on:click={() => (sidebarOpen = !sidebarOpen)}
+          aria-label={at("menu", {}, "Меню")}
+        >
           <Menu size={18} />
         </button>
         <div class="admin-header-title">
@@ -431,7 +509,10 @@
       <div class="admin-header-actions">
         {#if active === "stats"}
           <AdminButton onclick={statsStore.triggerSync} disabled={syncBusy}>
-            <RefreshCw size={14} /> {syncBusy ? at("btn_syncing", {}, "Синхронизация...") : at("btn_sync", {}, "Синхронизировать")}
+            <RefreshCw size={14} />
+            {syncBusy
+              ? at("btn_syncing", {}, "Синхронизация...")
+              : at("btn_sync", {}, "Синхронизировать")}
           </AdminButton>
         {/if}
         {#if active === "payments"}
@@ -441,25 +522,41 @@
         {/if}
         {#if active === "promos"}
           <AdminButton variant="primary" onclick={() => promosStore.setCreateOpen(true)}>
-            <Plus size={14} /> {at("btn_create", {}, "Создать")}
+            <Plus size={14} />
+            {at("btn_create", {}, "Создать")}
           </AdminButton>
         {/if}
         {#if active === "ads"}
           <AdminButton variant="primary" onclick={() => adsStore.setCreateOpen(true)}>
-            <Plus size={14} /> {at("btn_campaign", {}, "Кампания")}
+            <Plus size={14} />
+            {at("btn_campaign", {}, "Кампания")}
           </AdminButton>
         {/if}
         {#if active === "tariffs"}
           <AdminButton variant="primary" onclick={tariffsStore.openCreateTariff}>
-            <Plus size={14} /> {at("btn_tariff", {}, "Тариф")}
+            <Plus size={14} />
+            {at("btn_tariff", {}, "Тариф")}
           </AdminButton>
         {/if}
         {#if active === "settings"}
           {#if dirtyCount}
-            <AdminBadge variant="warning">{at("settings_dirty_count", { count: dirtyCount }, "Изменений: " + dirtyCount)}</AdminBadge>
+            <AdminBadge variant="warning"
+              >{at(
+                "settings_dirty_count",
+                { count: dirtyCount },
+                "Изменений: " + dirtyCount
+              )}</AdminBadge
+            >
           {/if}
-          <AdminButton variant="primary" onclick={() => settingsStore.saveSettings(onSettingsSaved)} disabled={!dirtyCount || settingsSaving}>
-            <Save size={14} /> {settingsSaving ? at("btn_saving", {}, "Сохранение...") : at("btn_save", {}, "Сохранить")}
+          <AdminButton
+            variant="primary"
+            onclick={() => settingsStore.saveSettings(onSettingsSaved)}
+            disabled={!dirtyCount || settingsSaving}
+          >
+            <Save size={14} />
+            {settingsSaving
+              ? at("btn_saving", {}, "Сохранение...")
+              : at("btn_save", {}, "Сохранить")}
           </AdminButton>
         {/if}
       </div>
@@ -483,7 +580,13 @@
       {/if}
 
       {#if active === "payments"}
-        <PaymentsSection {at} {fmtDate} {fmtMoney} {paymentStatusVariant} onOpenUserCard={openPaymentUserCard} />
+        <PaymentsSection
+          {at}
+          {fmtDate}
+          {fmtMoney}
+          {paymentStatusVariant}
+          onOpenUserCard={openPaymentUserCard}
+        />
       {/if}
 
       {#if active === "promos"}

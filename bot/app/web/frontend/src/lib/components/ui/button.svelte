@@ -36,11 +36,17 @@
 </script>
 
 {#if href}
-  <a class={cn(buttonVariants({ variant, size }), className)} {href} onclick={onclick} {...$$restProps}>
+  <a class={cn(buttonVariants({ variant, size }), className)} {href} {onclick} {...$$restProps}>
     <slot />
   </a>
 {:else}
-  <button class={cn(buttonVariants({ variant, size }), className)} {type} {disabled} onclick={onclick} {...$$restProps}>
+  <button
+    class={cn(buttonVariants({ variant, size }), className)}
+    {type}
+    {disabled}
+    {onclick}
+    {...$$restProps}
+  >
     <slot />
   </button>
 {/if}

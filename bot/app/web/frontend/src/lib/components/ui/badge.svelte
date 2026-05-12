@@ -16,7 +16,7 @@
     variant === "destructive" && "admin-cn-badge-destructive",
     variant === "success" && "admin-cn-badge-success",
     variant === "muted" && "admin-cn-badge-muted",
-    className,
+    className
   )}
   {...$$restProps}
 >

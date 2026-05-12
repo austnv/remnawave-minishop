@@ -13,8 +13,8 @@ from bot.app.web.webapp_auth import (
     create_webapp_session_token,
     verify_telegram_oauth_nonce,
 )
-from bot.services.crypto_pay_service import CryptoPayService
 from bot.handlers.user.payment import yookassa_webhook_route
+from bot.services.crypto_pay_service import CryptoPayService
 from bot.services.freekassa_service import FreeKassaService
 from bot.utils.request_security import request_client_ip
 
@@ -280,7 +280,9 @@ class WebAppSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(payload)
         self.assertEqual(payload["referral_code"], "x" * 128)
         self.assertEqual(len(payload["code_verifier"]), 43)
-        self.assertIsNone(subscription_webapp._read_telegram_oauth_state_payload(callback_request, state + "x"))
+        self.assertIsNone(
+            subscription_webapp._read_telegram_oauth_state_payload(callback_request, state + "x")
+        )
 
     def test_telegram_oauth_client_id_defaults_to_bot_id(self):
         settings = SimpleNamespace(

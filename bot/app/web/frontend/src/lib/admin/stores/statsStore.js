@@ -26,9 +26,12 @@ export function createStatsStore({ api, onToast, at }) {
 
   async function triggerSync() {
     let busy = false;
-    state.update(s => { busy = s.syncBusy; return s; });
+    state.update((s) => {
+      busy = s.syncBusy;
+      return s;
+    });
     if (busy) return;
-    
+
     state.update((s) => ({ ...s, syncBusy: true }));
     try {
       const res = await api("/admin/sync", { method: "POST" });

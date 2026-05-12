@@ -34,5 +34,3 @@ def month_start(base_dt: Optional[datetime] = None) -> datetime:
     else:
         moment = moment.astimezone(timezone.utc)
     return datetime(moment.year, moment.month, 1, tzinfo=timezone.utc)
-
-

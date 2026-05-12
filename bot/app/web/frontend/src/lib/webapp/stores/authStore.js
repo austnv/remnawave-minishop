@@ -17,7 +17,7 @@ export function createAuthStore({
   getTg,
   t,
   currentLang,
-  clearManualLogoutFlag
+  clearManualLogoutFlag,
 }) {
   const state = writable({
     authStatus: "",
@@ -66,14 +66,14 @@ export function createAuthStore({
     stopTelegramLoginWatchdog();
     state.update((s) => ({ ...s, telegramLoginAttemptId: s.telegramLoginAttemptId + 1 }));
     const { telegramLoginAttemptId } = get(state);
-    
+
     telegramLoginWatchdogTimer = window.setTimeout(() => {
       if (get(state).telegramLoginAttemptId !== telegramLoginAttemptId) return;
       telegramLoginWatchdogTimer = null;
       state.update((s) => ({ ...s, telegramLoginBusy: false, authBusy: false }));
       setAuthStatus(t("wa_auth_telegram_timeout"), true);
     }, TELEGRAM_MINI_APP_AUTH_TIMEOUT_MS);
-    
+
     return telegramLoginAttemptId;
   }
 
@@ -93,7 +93,7 @@ export function createAuthStore({
   async function finalizeMagicLogin(loginToken) {
     const s = get(state);
     if (s.authBusy) return false;
-    state.update(s => ({ ...s, authBusy: true }));
+    state.update((s) => ({ ...s, authBusy: true }));
     setAuthStatus(t("wa_auth_checking_login"));
     try {
       const payload = { token: loginToken };
@@ -110,7 +110,7 @@ export function createAuthStore({
     } catch {
       setAuthStatus(t("wa_auth_login_confirm_failed"), true);
     } finally {
-      state.update(s => ({ ...s, authBusy: false }));
+      state.update((s) => ({ ...s, authBusy: false }));
     }
     return false;
   }
@@ -118,7 +118,7 @@ export function createAuthStore({
   async function finalizeTelegramAuth(authData, source = "auth_data", options = {}) {
     const s = get(state);
     if (s.authBusy) return false;
-    state.update(s => ({ ...s, authBusy: true }));
+    state.update((s) => ({ ...s, authBusy: true }));
     setAuthStatus(t("wa_auth_checking_telegram"));
     try {
       const payload =
@@ -137,14 +137,21 @@ export function createAuthStore({
         await loadData();
         return true;
       }
-      setAuthStatus(response.error === "banned" ? t("wa_auth_access_denied") : t("wa_auth_telegram_not_confirmed"), true);
+      setAuthStatus(
+        response.error === "banned"
+          ? t("wa_auth_access_denied")
+          : t("wa_auth_telegram_not_confirmed"),
+        true
+      );
     } catch (error) {
       setAuthStatus(
-        error?.name === "AbortError" ? t("wa_auth_telegram_timeout") : t("wa_auth_telegram_unavailable"),
-        true,
+        error?.name === "AbortError"
+          ? t("wa_auth_telegram_timeout")
+          : t("wa_auth_telegram_unavailable"),
+        true
       );
     } finally {
-      state.update(s => ({ ...s, authBusy: false }));
+      state.update((s) => ({ ...s, authBusy: false }));
     }
     return false;
   }
@@ -154,10 +161,19 @@ export function createAuthStore({
     if (s.authResendCooldown > 0 && s.pendingEmail) return;
     const normalized = s.email.trim().toLowerCase();
     if (!normalized || !normalized.includes("@")) {
-      state.update(s => ({ ...s, loginEmailFieldError: t("wa_auth_invalid_email"), loginEmailTooltipOpen: true }));
+      state.update((s) => ({
+        ...s,
+        loginEmailFieldError: t("wa_auth_invalid_email"),
+        loginEmailTooltipOpen: true,
+      }));
       return;
     }
-    state.update(s => ({ ...s, loginEmailFieldError: "", loginEmailTooltipOpen: false, authBusy: true }));
+    state.update((s) => ({
+      ...s,
+      loginEmailFieldError: "",
+      loginEmailTooltipOpen: false,
+      authBusy: true,
+    }));
     setAuthStatus(t("wa_auth_sending_code"));
     try {
       const payload = { email: normalized, language: currentLang() };
@@ -165,14 +181,14 @@ export function createAuthStore({
       if (referralParam) payload.referral_code = referralParam;
       const response = await publicApi("/auth/email/request", payload);
       if (!response.ok) throw response;
-      state.update(s => ({ ...s, pendingEmail: normalized, emailCode: "" }));
+      state.update((s) => ({ ...s, pendingEmail: normalized, emailCode: "" }));
       changeScreen("code");
       setAuthStatus("");
       startCooldownTimer(60);
     } catch (error) {
       setAuthStatus(emailError(error, t("wa_auth_send_code_failed"), t), true);
     } finally {
-      state.update(s => ({ ...s, authBusy: false }));
+      state.update((s) => ({ ...s, authBusy: false }));
     }
   }
 
@@ -183,7 +199,7 @@ export function createAuthStore({
       setAuthStatus(t("wa_auth_enter_code_6digits"), true);
       return;
     }
-    state.update(s => ({ ...s, authBusy: true }));
+    state.update((s) => ({ ...s, authBusy: true }));
     setAuthStatus(t("wa_auth_checking_code"));
     try {
       const payload = { email: s.pendingEmail, code };
@@ -197,7 +213,7 @@ export function createAuthStore({
     } catch (error) {
       setAuthStatus(emailError(error, t("wa_auth_invalid_code"), t), true);
     } finally {
-      state.update(s => ({ ...s, authBusy: false }));
+      state.update((s) => ({ ...s, authBusy: false }));
     }
   }
 
@@ -208,15 +224,15 @@ export function createAuthStore({
 
     const isTelegramMiniAppAttempt = telegramSdk.hasLaunchParams();
     if (!isTelegramMiniAppAttempt && telegramOAuthClientId) {
-      state.update(s => ({ ...s, telegramLoginBusy: true }));
+      state.update((s) => ({ ...s, telegramLoginBusy: true }));
       window.location.assign(buildTelegramOAuthStartUrl("login", getTg()));
       window.setTimeout(() => {
-        state.update(s => ({ ...s, telegramLoginBusy: false }));
+        state.update((s) => ({ ...s, telegramLoginBusy: false }));
       }, 1500);
       return;
     }
 
-    state.update(s => ({ ...s, telegramLoginBusy: true }));
+    state.update((s) => ({ ...s, telegramLoginBusy: true }));
     const attemptId = startTelegramLoginWatchdog();
     const loginTimeout = telegramSdk.createMiniAppAuthTimeout();
     try {
@@ -250,11 +266,11 @@ export function createAuthStore({
       loginTimeout.clear();
       if (loginTimeout.timedOut) {
         setAuthStatus(t("wa_auth_telegram_timeout"), true);
-        state.update(s => ({ ...s, authBusy: false }));
+        state.update((s) => ({ ...s, authBusy: false }));
       }
       if (isActiveTelegramLoginAttempt(attemptId)) {
         stopTelegramLoginWatchdog(attemptId);
-        state.update(s => ({ ...s, telegramLoginBusy: false }));
+        state.update((s) => ({ ...s, telegramLoginBusy: false }));
       }
     }
   }

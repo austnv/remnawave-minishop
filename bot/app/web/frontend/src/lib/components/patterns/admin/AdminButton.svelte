@@ -38,7 +38,7 @@
   class={cn(buttonVariants({ variant, size }), className)}
   {type}
   {disabled}
-  onclick={onclick}
+  {onclick}
   {...$$restProps}
 >
   <slot />

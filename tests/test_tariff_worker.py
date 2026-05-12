@@ -69,7 +69,9 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
             )
             tariff = settings.tariffs_config.require("standard")
 
-            await worker._ensure_period_reset_strategy(sub, tariff, sub.traffic_limit_bytes, "NO_RESET")
+            await worker._ensure_period_reset_strategy(
+                sub, tariff, sub.traffic_limit_bytes, "NO_RESET"
+            )
 
             panel_service.update_user_details_on_panel.assert_awaited_once()
             panel_service.reset_user_traffic.assert_not_awaited()
@@ -112,7 +114,10 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
             )
             tariff = settings.tariffs_config.require("standard")
 
-            with patch("bot.services.tariff_worker.tariff_dal.get_warning", new=AsyncMock(return_value=True)):
+            with patch(
+                "bot.services.tariff_worker.tariff_dal.get_warning",
+                new=AsyncMock(return_value=True),
+            ):
                 await worker._maybe_warn_or_throttle(
                     AsyncMock(),
                     sub,
@@ -175,7 +180,10 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
             )
             tariff = settings.tariffs_config.require("standard")
 
-            with patch("bot.services.tariff_worker.tariff_dal.get_warning", new=AsyncMock(return_value=True)):
+            with patch(
+                "bot.services.tariff_worker.tariff_dal.get_warning",
+                new=AsyncMock(return_value=True),
+            ):
                 await worker._sync_premium_squad_limit(
                     AsyncMock(),
                     sub,
@@ -206,7 +214,9 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
                 TARIFF_TRAFFIC_WARNING_LEVELS="101",
             )
             panel_service = AsyncMock(spec=PanelApiService)
-            panel_service.get_internal_squad_accessible_nodes = AsyncMock(return_value=[{"uuid": "node-1"}])
+            panel_service.get_internal_squad_accessible_nodes = AsyncMock(
+                return_value=[{"uuid": "node-1"}]
+            )
             panel_service.get_node_users_bandwidth_stats = AsyncMock(
                 return_value={
                     "topUsers": [

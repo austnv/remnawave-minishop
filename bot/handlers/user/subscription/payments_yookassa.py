@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from typing import List, Optional, Tuple
 
 from aiogram import F, Router, types
@@ -37,7 +37,9 @@ def _sale_mode_base(sale_mode: str) -> str:
     return (sale_mode or "subscription").split("@", 1)[0].split("|", 1)[0]
 
 
-def _format_saved_payment_method_title(get_text, network: Optional[str], last4: Optional[str], is_default: bool) -> str:
+def _format_saved_payment_method_title(
+    get_text, network: Optional[str], last4: Optional[str], is_default: bool
+) -> str:
     def _is_yoomoney_network(name: Optional[str]) -> bool:
         s = (name or "").lower()
         return "yoomoney" in s or "yoo money" in s or "yoo-money" in s
@@ -85,7 +87,11 @@ async def _initiate_yk_payment(
     payment_description = (
         get_text("payment_description_traffic", traffic_gb=_format_value(months))
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
-        else (get_text("payment_description_hwid_devices", count=int(months)) if sale_base in {"hwid_device", "hwid_devices"} else get_text("payment_description_subscription", months=int(months)))
+        else (
+            get_text("payment_description_hwid_devices", count=int(months))
+            if sale_base in {"hwid_device", "hwid_devices"}
+            else get_text("payment_description_subscription", months=int(months))
+        )
     )
     payment_record_data = {
         "user_id": user_id,
@@ -96,8 +102,12 @@ async def _initiate_yk_payment(
         "subscription_duration_months": int(months) if sale_base == "subscription" else None,
         "sale_mode": sale_base,
         "tariff_key": sale_mode.split("@", 1)[1] if "@" in sale_mode else None,
-        "purchased_gb": float(months) if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"} else None,
-        "purchased_hwid_devices": int(months) if sale_base in {"hwid_device", "hwid_devices"} else None,
+        "purchased_gb": float(months)
+        if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+        else None,
+        "purchased_hwid_devices": int(months)
+        if sale_base in {"hwid_device", "hwid_devices"}
+        else None,
     }
 
     db_payment_record = None
@@ -157,7 +167,11 @@ async def _initiate_yk_payment(
                 title = pm.get("title")
                 card = pm.get("card") or {}
                 account_number = pm.get("account_number") or pm.get("account")
-                if isinstance(card, dict) and (pm_type or "").lower() in {"bank_card", "bank-card", "card"}:
+                if isinstance(card, dict) and (pm_type or "").lower() in {
+                    "bank_card",
+                    "bank-card",
+                    "card",
+                }:
                     display_network = card.get("card_type") or title or "Card"
                     display_last4 = card.get("last4")
                 elif (pm_type or "").lower() in {"yoo_money", "yoomoney", "yoo-money", "wallet"}:
@@ -206,7 +220,9 @@ async def _initiate_yk_payment(
                         session, user_id, selected_method_internal_id
                     )
                 except Exception:
-                    logging.exception("Failed to set default payment method after initiating payment")
+                    logging.exception(
+                        "Failed to set default payment method after initiating payment"
+                    )
             await session.commit()
         except Exception as e_db_update_ykid:
             await session.rollback()
@@ -223,7 +239,9 @@ async def _initiate_yk_payment(
         try:
             await callback.message.edit_text(
                 get_text(
-                    key="payment_link_message_traffic" if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"} else "payment_link_message",
+                    key="payment_link_message_traffic"
+                    if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+                    else "payment_link_message",
                     months=int(months),
                     traffic_gb=_format_value(months),
                 ),
@@ -237,13 +255,13 @@ async def _initiate_yk_payment(
                 disable_web_page_preview=False,
             )
         except Exception as e_edit:
-            logging.warning(
-                f"Edit message for payment link failed: {e_edit}. Sending new one."
-            )
+            logging.warning(f"Edit message for payment link failed: {e_edit}. Sending new one.")
             try:
                 await callback.message.answer(
                     get_text(
-                        key="payment_link_message_traffic" if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"} else "payment_link_message",
+                        key="payment_link_message_traffic"
+                        if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+                        else "payment_link_message",
                         months=int(months),
                         traffic_gb=_format_value(months),
                     ),
@@ -275,7 +293,9 @@ async def _initiate_yk_payment(
                         session, user_id, selected_method_internal_id
                     )
                 except Exception:
-                    logging.exception("Failed to set default payment method after saved-card payment start")
+                    logging.exception(
+                        "Failed to set default payment method after saved-card payment start"
+                    )
             await session.commit()
         except Exception as e_db_update_saved:
             await session.rollback()
@@ -328,7 +348,13 @@ async def _initiate_yk_payment(
 
 
 @router.callback_query(F.data.startswith("pay_yk:"))
-async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, yookassa_service: YooKassaService, session: AsyncSession):
+async def pay_yk_callback_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    yookassa_service: YooKassaService,
+    session: AsyncSession,
+):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
@@ -372,9 +398,13 @@ async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Setti
     months, price_rub, sale_mode = parsed
     user_id = callback.from_user.id
     currency_code_for_yk = "RUB"
-    autopay_enabled = bool(settings.yookassa_autopayments_active and _sale_mode_base(sale_mode) == "subscription" and not settings.traffic_sale_mode)
+    autopay_enabled = bool(
+        settings.yookassa_autopayments_active
+        and _sale_mode_base(sale_mode) == "subscription"
+        and not settings.traffic_sale_mode
+    )
     autopay_require_binding = bool(
-        getattr(settings, 'YOOKASSA_AUTOPAYMENTS_REQUIRE_CARD_BINDING', True)
+        getattr(settings, "YOOKASSA_AUTOPAYMENTS_REQUIRE_CARD_BINDING", True)
     )
     saved_methods: List = []
     if autopay_enabled:
@@ -444,7 +474,13 @@ async def pay_yk_callback_handler(callback: types.CallbackQuery, settings: Setti
 
 
 @router.callback_query(F.data.startswith("pay_yk_new:"))
-async def pay_yk_new_card_handler(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, yookassa_service: YooKassaService, session: AsyncSession):
+async def pay_yk_new_card_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    yookassa_service: YooKassaService,
+    session: AsyncSession,
+):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
@@ -490,9 +526,13 @@ async def pay_yk_new_card_handler(callback: types.CallbackQuery, settings: Setti
     months, price_rub, sale_mode = parsed
     user_id = callback.from_user.id
     currency_code_for_yk = "RUB"
-    autopay_enabled = bool(settings.yookassa_autopayments_active and _sale_mode_base(sale_mode) == "subscription" and not settings.traffic_sale_mode)
+    autopay_enabled = bool(
+        settings.yookassa_autopayments_active
+        and _sale_mode_base(sale_mode) == "subscription"
+        and not settings.traffic_sale_mode
+    )
     autopay_require_binding = bool(
-        getattr(settings, 'YOOKASSA_AUTOPAYMENTS_REQUIRE_CARD_BINDING', True)
+        getattr(settings, "YOOKASSA_AUTOPAYMENTS_REQUIRE_CARD_BINDING", True)
     )
 
     await _initiate_yk_payment(
@@ -518,7 +558,13 @@ async def pay_yk_new_card_handler(callback: types.CallbackQuery, settings: Setti
 
 
 @router.callback_query(F.data.startswith("pay_yk_saved_list:"))
-async def pay_yk_saved_list_handler(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, yookassa_service: YooKassaService, session: AsyncSession):
+async def pay_yk_saved_list_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    yookassa_service: YooKassaService,
+    session: AsyncSession,
+):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
@@ -562,7 +608,11 @@ async def pay_yk_saved_list_handler(callback: types.CallbackQuery, settings: Set
             pass
         return
 
-    autopay_enabled = bool(settings.yookassa_autopayments_active and _sale_mode_base(sale_mode) == "subscription" and not settings.traffic_sale_mode)
+    autopay_enabled = bool(
+        settings.yookassa_autopayments_active
+        and _sale_mode_base(sale_mode) == "subscription"
+        and not settings.traffic_sale_mode
+    )
     if not autopay_enabled:
         try:
             await callback.answer(get_text("error_try_again"), show_alert=True)
@@ -662,7 +712,13 @@ async def pay_yk_saved_list_handler(callback: types.CallbackQuery, settings: Set
 
 
 @router.callback_query(F.data.startswith("pay_yk_use_saved:"))
-async def pay_yk_use_saved_handler(callback: types.CallbackQuery, settings: Settings, i18n_data: dict, yookassa_service: YooKassaService, session: AsyncSession):
+async def pay_yk_use_saved_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    yookassa_service: YooKassaService,
+    session: AsyncSession,
+):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
     get_text = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
@@ -717,7 +773,11 @@ async def pay_yk_use_saved_handler(callback: types.CallbackQuery, settings: Sett
             pass
         return
 
-    autopay_enabled = bool(settings.yookassa_autopayments_active and _sale_mode_base(sale_mode) == "subscription" and not settings.traffic_sale_mode)
+    autopay_enabled = bool(
+        settings.yookassa_autopayments_active
+        and _sale_mode_base(sale_mode) == "subscription"
+        and not settings.traffic_sale_mode
+    )
     if not autopay_enabled:
         try:
             await callback.answer(get_text("error_try_again"), show_alert=True)
@@ -747,7 +807,9 @@ async def pay_yk_use_saved_handler(callback: types.CallbackQuery, settings: Sett
             break
 
     if not selected_method:
-        logging.warning(f"Selected payment method not found for user {user_id}: {method_identifier}")
+        logging.warning(
+            f"Selected payment method not found for user {user_id}: {method_identifier}"
+        )
         try:
             await callback.answer(get_text("error_try_again"), show_alert=True)
         except Exception:

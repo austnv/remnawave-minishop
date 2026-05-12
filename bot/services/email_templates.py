@@ -18,7 +18,6 @@ from urllib.parse import urlsplit
 from bot.middlewares.i18n import JsonI18n, get_i18n_instance
 from config.settings import Settings
 
-
 _BG = "#05070a"
 _CARD_BG = "#0e1116"
 _BORDER = "#1a1f27"
@@ -152,10 +151,10 @@ def _info_rows_html(rows: Sequence[Tuple[str, str]]) -> str:
     for index, (label, value) in enumerate(rows):
         border = "" if index == last else f"border-bottom:1px solid {_BORDER};"
         cells.append(
-            f'<tr>'
+            f"<tr>"
             f'<td style="padding:11px 0;{border}font-size:12px;color:{_TEXT_DIM};text-transform:uppercase;letter-spacing:0.04em;">{html.escape(label)}</td>'
-            f'<td align="right" style="padding:11px 0;{border}font-family:\'JetBrains Mono\',\'SFMono-Regular\',Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:{_TEXT};">{html.escape(value)}</td>'
-            f'</tr>'
+            f"<td align=\"right\" style=\"padding:11px 0;{border}font-family:'JetBrains Mono','SFMono-Regular',Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:{_TEXT};\">{html.escape(value)}</td>"
+            f"</tr>"
         )
     return (
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
@@ -175,9 +174,9 @@ def _cta_button_html(*, label: str, url: str, accent: str) -> str:
         f'<tr><td align="center" bgcolor="{accent}" style="background:{accent};border-radius:12px;">'
         f'<a href="{safe_url}" target="_blank" rel="noopener" '
         f'style="display:block;width:100%;box-sizing:border-box;padding:15px 22px;'
-        f'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;'
+        f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"
         f'font-size:15px;font-weight:700;color:#05070a;text-decoration:none;letter-spacing:0.02em;text-align:center;">{safe_label}</a>'
-        f'</td></tr></table>'
+        f"</td></tr></table>"
     )
 
 
@@ -226,16 +225,14 @@ def render_login_code(
     footer = _t_html(i18n, lang, "email_footer_auto", brand=brand)
     text_lines = [_t_text(i18n, lang, "email_login_code_text", code=code, minutes=minutes)]
     if safe_magic_link:
-        text_lines.append(
-            _t_text(i18n, lang, "email_login_code_text_magic", url=safe_magic_link)
-        )
+        text_lines.append(_t_text(i18n, lang, "email_login_code_text_magic", url=safe_magic_link))
 
     code_block = (
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px 0;">'
         f'<tr><td align="center" style="background:{_BG};border:1px solid {_BORDER};border-radius:14px;padding:22px 16px;">'
-        f'<div style="font-family:\'JetBrains Mono\',\'SFMono-Regular\',Menlo,Consolas,monospace;font-size:36px;line-height:1;font-weight:700;letter-spacing:10px;color:{accent};">'
-        f'{html.escape(code)}'
-        f'</div></td></tr></table>'
+        f"<div style=\"font-family:'JetBrains Mono','SFMono-Regular',Menlo,Consolas,monospace;font-size:36px;line-height:1;font-weight:700;letter-spacing:10px;color:{accent};\">"
+        f"{html.escape(code)}"
+        f"</div></td></tr></table>"
     )
 
     magic_block = ""
@@ -246,11 +243,11 @@ def render_login_code(
         magic_hint = _t_text(i18n, lang, "email_login_code_magic_hint")
         divider_html = (
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 14px 0;">'
-            f'<tr>'
+            f"<tr>"
             f'<td width="40%" style="border-bottom:1px solid {_BORDER};font-size:0;line-height:0;">&nbsp;</td>'
             f'<td align="center" style="padding:0 10px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:{_TEXT_DIM};white-space:nowrap;">{html.escape(divider_label)}</td>'
             f'<td width="40%" style="border-bottom:1px solid {_BORDER};font-size:0;line-height:0;">&nbsp;</td>'
-            f'</tr></table>'
+            f"</tr></table>"
         )
         magic_block = (
             divider_html
@@ -347,7 +344,12 @@ def render_payment_success(
     lang = _normalize_lang(language_code, settings)
     accent = _safe_color(settings.WEBAPP_PRIMARY_COLOR)
     brand = _brand_title(settings)
-    is_traffic = (sale_mode or "").split("@", 1)[0].split("|", 1)[0] in {"traffic", "traffic_package", "topup", "premium_topup"}
+    is_traffic = (sale_mode or "").split("@", 1)[0].split("|", 1)[0] in {
+        "traffic",
+        "traffic_package",
+        "topup",
+        "premium_topup",
+    }
     amount_text = _format_amount(amount, currency)
     safe_dashboard_url = (dashboard_url or "").strip()
     end_date = end_date_text or "—"
@@ -363,7 +365,9 @@ def render_payment_success(
     if is_traffic:
         intro = _t_text(i18n, lang, "email_payment_success_intro_traffic", traffic_gb=traffic_label)
         period_label = _t_text(i18n, lang, "email_payment_success_row_traffic")
-        period_value = _t_text(i18n, lang, "email_payment_success_traffic_value", traffic_gb=traffic_label)
+        period_value = _t_text(
+            i18n, lang, "email_payment_success_traffic_value", traffic_gb=traffic_label
+        )
         text = _t_text(
             i18n,
             lang,
@@ -401,7 +405,9 @@ def render_payment_success(
 
     text_lines = [text]
     if safe_dashboard_url:
-        text_lines.append(_t_text(i18n, lang, "email_payment_success_text_dashboard", url=safe_dashboard_url))
+        text_lines.append(
+            _t_text(i18n, lang, "email_payment_success_text_dashboard", url=safe_dashboard_url)
+        )
 
     body_parts = [_info_rows_html(rows)]
     if safe_dashboard_url:

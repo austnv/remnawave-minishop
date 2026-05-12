@@ -8,12 +8,19 @@
     priceLabel as priceLabelFn,
     actionKey as actionKeyFn,
   } from "../lib/webapp/tariffs.js";
-  import { premiumTitle as premiumTitleFn, trafficPercent as trafficPercentFn } from "../lib/webapp/traffic.js";
+  import {
+    premiumTitle as premiumTitleFn,
+    trafficPercent as trafficPercentFn,
+  } from "../lib/webapp/traffic.js";
   import { formatCompactNumber } from "../lib/webapp/formatters.js";
 
   import Card from "$components/ui/card.svelte";
   import Dialog from "$components/ui/dialog.svelte";
-  import { DialogOptionsSkeleton, EmptyCard, PaymentMethodGrid } from "$components/patterns/webapp/index.js";
+  import {
+    DialogOptionsSkeleton,
+    EmptyCard,
+    PaymentMethodGrid,
+  } from "$components/patterns/webapp/index.js";
 
   export let applyTariffChange = () => {};
   export let changeConfirmOpen = false;
@@ -43,10 +50,18 @@
   export let subscription = {};
   export let trafficMode = false;
 
-  function priceLabel(plan) { return priceLabelFn(plan, selectedMethod); }
-  function planKey(plan) { return planKeyFn(plan); }
-  function planUnitHint(plan) { return planUnitHintFn(plan, { trafficMode, selectedMethod, t }); }
-  function actionKey(action) { return actionKeyFn(action); }
+  function priceLabel(plan) {
+    return priceLabelFn(plan, selectedMethod);
+  }
+  function planKey(plan) {
+    return planKeyFn(plan);
+  }
+  function planUnitHint(plan) {
+    return planUnitHintFn(plan, { trafficMode, selectedMethod, t });
+  }
+  function actionKey(action) {
+    return actionKeyFn(action);
+  }
 
   function changeActionTitle(action) {
     const mode = String(action?.mode || "");
@@ -54,13 +69,18 @@
       return t("wa_tariff_change_recalc_days", { days: Number(action?.days_after || 0) });
     }
     if (mode === "convert_days_to_gb") {
-      return t("wa_tariff_change_convert_gb", { gb: formatCompactNumber(action?.converted_gb || 0) });
+      return t("wa_tariff_change_convert_gb", {
+        gb: formatCompactNumber(action?.converted_gb || 0),
+      });
     }
     if (mode === "paid_diff") {
       return t("wa_tariff_change_pay_diff", { price: priceLabel(action) });
     }
     if (mode === "buy_package") {
-      return t("wa_tariff_change_buy_package", { gb: formatCompactNumber(action?.traffic_gb || 0), price: priceLabel(action) });
+      return t("wa_tariff_change_buy_package", {
+        gb: formatCompactNumber(action?.traffic_gb || 0),
+        price: priceLabel(action),
+      });
     }
     if (mode === "buy_period") {
       return `${action?.title || ""} · ${priceLabel(action)}`;
@@ -76,9 +96,15 @@
     ];
     const mode = String(selectedChangeAction.mode || "");
     if (mode === "recalc_days") {
-      rows.push(t("wa_tariff_change_confirm_recalc", { days: Number(selectedChangeAction.days_after || 0) }));
+      rows.push(
+        t("wa_tariff_change_confirm_recalc", { days: Number(selectedChangeAction.days_after || 0) })
+      );
     } else if (mode === "convert_days_to_gb") {
-      rows.push(t("wa_tariff_change_confirm_convert", { gb: formatCompactNumber(selectedChangeAction.converted_gb || 0) }));
+      rows.push(
+        t("wa_tariff_change_confirm_convert", {
+          gb: formatCompactNumber(selectedChangeAction.converted_gb || 0),
+        })
+      );
     } else if (selectedChangeAction.kind === "payment") {
       rows.push(t("wa_tariff_change_confirm_payment", { price: priceLabel(selectedChangeAction) }));
     }
@@ -99,14 +125,18 @@
 
   function deviceTopupModalDescription() {
     if (!deviceTopupOptions) return "";
-    return deviceTopupOptions?.tariff_name ? t("wa_device_topup_for_tariff", { tariff: deviceTopupOptions.tariff_name }) : "";
+    return deviceTopupOptions?.tariff_name
+      ? t("wa_device_topup_for_tariff", { tariff: deviceTopupOptions.tariff_name })
+      : "";
   }
 
   function tariffChangeModalDescription() {
     if (!changeOptions) return "";
-    return changeOptions?.current ? t("wa_current_tariff", { tariff: changeOptions.current.title }) : "";
+    return changeOptions?.current
+      ? t("wa_current_tariff", { tariff: changeOptions.current.title })
+      : "";
   }
-  
+
   function isPremiumTopupContext() {
     if (selectedTopupPlan?.sale_mode === "premium_topup") return true;
     if (topupOptions?.topup_kind) return topupOptions.topup_kind === "premium";
@@ -115,16 +145,21 @@
 
   function topupModalDescription() {
     if (!topupOptions) return "";
-    if (isPremiumTopupContext()) return topupOptions?.tariff_name ? t("wa_topup_for_tariff", { tariff: topupOptions.tariff_name }) : "";
+    if (isPremiumTopupContext())
+      return topupOptions?.tariff_name
+        ? t("wa_topup_for_tariff", { tariff: topupOptions.tariff_name })
+        : "";
     if (singleTariffMode) return "";
-    return topupOptions?.tariff_name ? t("wa_topup_for_tariff", { tariff: topupOptions.tariff_name }) : "";
+    return topupOptions?.tariff_name
+      ? t("wa_topup_for_tariff", { tariff: topupOptions.tariff_name })
+      : "";
   }
 
   function topupModalTitle() {
-    if (isPremiumTopupContext()) return premiumTitleFn({ ...subscription, ...(topupOptions || {}) }, t);
+    if (isPremiumTopupContext())
+      return premiumTitleFn({ ...subscription, ...(topupOptions || {}) }, t);
     return t("wa_topup_traffic");
   }
-
 
   export let t = (key) => key;
 </script>
@@ -139,7 +174,13 @@
 >
   <div class="payment-dialog-body">
     {#if !changeOptions}
-      <DialogOptionsSkeleton label={t("wa_tariff_options_loading")} actions={2} rows={2} methods={0} showMeta={false} />
+      <DialogOptionsSkeleton
+        label={t("wa_tariff_options_loading")}
+        actions={2}
+        rows={2}
+        methods={0}
+        showMeta={false}
+      />
     {:else if changeOptions?.targets?.length}
       <p class="section-kicker">{t("wa_tariff_change_targets_title")}</p>
       <div class="tariff-action-list">
@@ -157,7 +198,11 @@
               <strong>{target.title}</strong>
               <small>{target.description}</small>
             </span>
-            <em>{target.billing_model === "traffic" ? t("wa_tariff_model_traffic") : t("wa_tariff_model_period")}</em>
+            <em
+              >{target.billing_model === "traffic"
+                ? t("wa_tariff_model_traffic")
+                : t("wa_tariff_model_period")}</em
+            >
           </button>
         {/each}
       </div>
@@ -175,9 +220,17 @@
               <span class="option-row-main">
                 <strong>{changeActionTitle(action)}</strong>
                 {#if action.mode === "recalc_days"}
-                  <small>{t("wa_tariff_change_recalc_hint", { days: Number(action.remaining_days || 0) })}</small>
+                  <small
+                    >{t("wa_tariff_change_recalc_hint", {
+                      days: Number(action.remaining_days || 0),
+                    })}</small
+                  >
                 {:else if action.mode === "convert_days_to_gb"}
-                  <small>{t("wa_tariff_change_convert_hint", { days: Number(action.remaining_days || 0) })}</small>
+                  <small
+                    >{t("wa_tariff_change_convert_hint", {
+                      days: Number(action.remaining_days || 0),
+                    })}</small
+                  >
                 {:else if action.kind === "payment"}
                   <small>{t("wa_tariff_change_payment_hint")}</small>
                 {/if}
@@ -189,9 +242,18 @@
           {/each}
         </div>
         {#if selectedChangeAction?.kind === "payment"}
-          <PaymentMethodGrid {methods} {selectedMethod} {t} onSelect={(id) => (selectedMethod = id)} />
+          <PaymentMethodGrid
+            {methods}
+            {selectedMethod}
+            {t}
+            onSelect={(id) => (selectedMethod = id)}
+          />
         {/if}
-        <Button class="wide bottom-action payment-submit-button" onclick={openTariffChangeConfirm} disabled={tariffActionBusy || payBusy}>
+        <Button
+          class="wide bottom-action payment-submit-button"
+          onclick={openTariffChangeConfirm}
+          disabled={tariffActionBusy || payBusy}
+        >
           {selectedChangeAction?.kind === "payment" ? t("wa_pay") : t("wa_apply")}
           <ArrowRight size={17} />
         </Button>
@@ -218,11 +280,22 @@
         <p>{row}</p>
       {/each}
     </Card>
-    <Button class="wide bottom-action payment-submit-button" onclick={applyTariffChange} disabled={tariffActionBusy || payBusy}>
-      {selectedChangeAction?.kind === "payment" ? t("wa_confirm_and_pay") : t("wa_confirm_and_apply")}
+    <Button
+      class="wide bottom-action payment-submit-button"
+      onclick={applyTariffChange}
+      disabled={tariffActionBusy || payBusy}
+    >
+      {selectedChangeAction?.kind === "payment"
+        ? t("wa_confirm_and_pay")
+        : t("wa_confirm_and_apply")}
       <ArrowRight size={17} />
     </Button>
-    <Button variant="secondary" class="wide" onclick={closeTariffChangeConfirm} disabled={tariffActionBusy || payBusy}>
+    <Button
+      variant="secondary"
+      class="wide"
+      onclick={closeTariffChangeConfirm}
+      disabled={tariffActionBusy || payBusy}
+    >
       {t("wa_cancel")}
     </Button>
   </div>
@@ -272,8 +345,13 @@
         </div>
       {/if}
       <PaymentMethodGrid {methods} {selectedMethod} {t} onSelect={(id) => (selectedMethod = id)} />
-      <Button class="wide bottom-action payment-submit-button" onclick={createTopupPayment} disabled={!selectedTopupPlan || !methods.length || payBusy}>
-        {t("wa_buy_traffic")} {selectedTopupPlan ? priceLabel(selectedTopupPlan) : ""}
+      <Button
+        class="wide bottom-action payment-submit-button"
+        onclick={createTopupPayment}
+        disabled={!selectedTopupPlan || !methods.length || payBusy}
+      >
+        {t("wa_buy_traffic")}
+        {selectedTopupPlan ? priceLabel(selectedTopupPlan) : ""}
         <LockKeyhole size={17} />
       </Button>
     {:else}
@@ -303,7 +381,11 @@
             onclick={() => (selectedDeviceTopupPlan = plan)}
           >
             <span class="option-row-main">
-              <strong>{t("wa_hwid_devices_package", { count: Number(plan.device_count || plan.months || 0) })}</strong>
+              <strong
+                >{t("wa_hwid_devices_package", {
+                  count: Number(plan.device_count || plan.months || 0),
+                })}</strong
+              >
               <small>{plan.subtitle || deviceTopupOptions.tariff_name}</small>
             </span>
             <span class="option-row-meta">
@@ -316,8 +398,13 @@
         {/each}
       </div>
       <PaymentMethodGrid {methods} {selectedMethod} {t} onSelect={(id) => (selectedMethod = id)} />
-      <Button class="wide bottom-action payment-submit-button" onclick={createDeviceTopupPayment} disabled={!selectedDeviceTopupPlan || !methods.length || payBusy}>
-        {t("wa_pay")} {selectedDeviceTopupPlan ? priceLabel(selectedDeviceTopupPlan) : ""}
+      <Button
+        class="wide bottom-action payment-submit-button"
+        onclick={createDeviceTopupPayment}
+        disabled={!selectedDeviceTopupPlan || !methods.length || payBusy}
+      >
+        {t("wa_pay")}
+        {selectedDeviceTopupPlan ? priceLabel(selectedDeviceTopupPlan) : ""}
         <LockKeyhole size={17} />
       </Button>
     {:else}
@@ -325,4 +412,3 @@
     {/if}
   </div>
 </Dialog>
-

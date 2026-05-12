@@ -15,28 +15,25 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
-from aiogram import Bot
 from aiohttp import web
 from pydantic import ValidationError
-from sqlalchemy import and_, case, cast, Float, func as sa_func, or_, select
+from sqlalchemy import Float, and_, case, cast, or_, select
+from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from bot.app.web.admin_settings_manifest import (
-    SETTINGS_MANIFEST,
-    coerce_value,
-    get_field_by_key,
     manifest_payload,
 )
+from bot.services.referral_service import ReferralService
 from bot.services.settings_override_service import (
     current_value,
     update_overrides,
 )
-from bot.services.referral_service import ReferralService
 from bot.utils import MessageContent, send_message_via_queue
 from bot.utils.message_queue import get_queue_manager
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from config.settings import Settings
 from config.tariffs_config import TariffsConfig
 from db.dal import (
@@ -312,7 +309,9 @@ def _serialize_promo(promo: PromoCode) -> Dict[str, Any]:
         "is_active": bool(promo.is_active),
         "valid_until": promo.valid_until.isoformat() if promo.valid_until else None,
         "created_at": promo.created_at.isoformat() if promo.created_at else None,
-        "created_by_admin_id": int(promo.created_by_admin_id) if promo.created_by_admin_id else None,
+        "created_by_admin_id": int(promo.created_by_admin_id)
+        if promo.created_by_admin_id
+        else None,
     }
 
 
@@ -475,7 +474,9 @@ async def admin_stats_route(request: web.Request) -> web.Response:
         "financial": financial_stats,
         "panel_sync": {
             "status": sync_status.status if sync_status else "never_run",
-            "last_sync_time": sync_status.last_sync_time.isoformat() if sync_status and sync_status.last_sync_time else None,
+            "last_sync_time": sync_status.last_sync_time.isoformat()
+            if sync_status and sync_status.last_sync_time
+            else None,
             "details": sync_status.details if sync_status else None,
             "users_processed": sync_status.users_processed_from_panel if sync_status else 0,
             "subscriptions_synced": sync_status.subscriptions_synced if sync_status else 0,
@@ -567,7 +568,9 @@ async def admin_users_list_route(request: web.Request) -> web.Response:
 
         statuses = await _bulk_user_statuses(session, [u.user_id for u in users])
         cached_avatar_ids = await _bulk_user_avatar_keys(session, [u.user_id for u in users])
-        active_subs = await _bulk_active_subscriptions_for_users(session, [u.user_id for u in users])
+        active_subs = await _bulk_active_subscriptions_for_users(
+            session, [u.user_id for u in users]
+        )
 
     serialized = []
     for user in users:
@@ -607,7 +610,12 @@ async def _bulk_user_statuses(
     if not user_ids:
         return {}
     stmt = (
-        select(Subscription.user_id, Subscription.status_from_panel, Subscription.is_active, Subscription.end_date)
+        select(
+            Subscription.user_id,
+            Subscription.status_from_panel,
+            Subscription.is_active,
+            Subscription.end_date,
+        )
         .where(Subscription.user_id.in_(user_ids))
         .order_by(Subscription.is_active.desc(), Subscription.end_date.desc().nullslast())
     )
@@ -630,9 +638,7 @@ async def _bulk_user_statuses(
     return out
 
 
-async def _bulk_user_avatar_keys(
-    session: AsyncSession, user_ids: List[int]
-) -> Dict[int, str]:
+async def _bulk_user_avatar_keys(session: AsyncSession, user_ids: List[int]) -> Dict[int, str]:
     """Return ``{user_id: cache_key}`` for users with a cached Telegram avatar.
 
     The cache key is the row's ``updated_at`` timestamp — used as a
@@ -646,10 +652,7 @@ async def _bulk_user_avatar_keys(
         UserTelegramAvatar.user_id.in_(user_ids)
     )
     rows = (await session.execute(stmt)).all()
-    return {
-        int(uid): (updated_at.isoformat() if updated_at else "")
-        for uid, updated_at in rows
-    }
+    return {int(uid): (updated_at.isoformat() if updated_at else "") for uid, updated_at in rows}
 
 
 async def admin_user_avatar_route(request: web.Request) -> web.Response:
@@ -916,11 +919,17 @@ def _user_panel_status_condition(panel_status: str):
         return None
 
     normalized_status = sa_func.lower(sa_func.coalesce(Subscription.status_from_panel, ""))
-    blank_status = or_(Subscription.status_from_panel.is_(None), Subscription.status_from_panel == "")
+    blank_status = or_(
+        Subscription.status_from_panel.is_(None), Subscription.status_from_panel == ""
+    )
     if status == "active":
-        status_cond = or_(normalized_status == "active", blank_status & Subscription.is_active.is_(True))
+        status_cond = or_(
+            normalized_status == "active", blank_status & Subscription.is_active.is_(True)
+        )
     elif status == "expired":
-        status_cond = or_(normalized_status == "expired", blank_status & Subscription.is_active.is_(False))
+        status_cond = or_(
+            normalized_status == "expired", blank_status & Subscription.is_active.is_(False)
+        )
     else:
         status_cond = normalized_status == "limited"
 
@@ -1021,7 +1030,9 @@ async def admin_user_detail_route(request: web.Request) -> web.Response:
             except Exception as exc_panel:  # pragma: no cover
                 logger.warning(
                     "Failed to fetch subscriptionUrl for user %s (uuid=%s): %s",
-                    target_id, panel_uuid, exc_panel,
+                    target_id,
+                    panel_uuid,
+                    exc_panel,
                 )
 
     serialized_user = _serialize_user(user)
@@ -1243,7 +1254,7 @@ async def admin_user_premium_override_route(request: web.Request) -> web.Respons
             return _error(400, "invalid_bonus", "bonus_bytes must be an integer")
     else:
         try:
-            bonus_bytes = int(round(float(bonus_gb_raw) * (1024 ** 3)))
+            bonus_bytes = int(round(float(bonus_gb_raw) * (1024**3)))
         except (TypeError, ValueError):
             return _error(400, "invalid_bonus", "bonus_gb must be a number")
 
@@ -1266,9 +1277,7 @@ async def admin_user_premium_override_route(request: web.Request) -> web.Respons
             {
                 "user_id": actor_id,
                 "event_type": "admin_premium_override_webapp",
-                "content": (
-                    f"unlimited={bool(unlimited)} bonus_bytes={int(bonus_bytes)}"
-                ),
+                "content": (f"unlimited={bool(unlimited)} bonus_bytes={int(bonus_bytes)}"),
                 "is_admin_event": True,
                 "target_user_id": target_id,
             },
@@ -1297,7 +1306,7 @@ async def admin_user_regular_traffic_override_route(request: web.Request) -> web
             return _error(400, "invalid_regular_bonus", "regular_bonus_bytes must be an integer")
     else:
         try:
-            regular_bonus_bytes = int(round(float(regular_bonus_gb_raw) * (1024 ** 3)))
+            regular_bonus_bytes = int(round(float(regular_bonus_gb_raw) * (1024**3)))
         except (TypeError, ValueError):
             return _error(400, "invalid_regular_bonus", "regular_bonus_gb must be a number")
 
@@ -1360,10 +1369,10 @@ async def admin_user_traffic_grant_route(request: web.Request) -> web.Response:
     try:
         if bytes_raw is not None:
             grant_bytes = int(bytes_raw)
-            gb_value = grant_bytes / (1024 ** 3)
+            gb_value = grant_bytes / (1024**3)
         else:
             gb_value = float(gb_raw)
-            grant_bytes = int(round(gb_value * (1024 ** 3)))
+            grant_bytes = int(round(gb_value * (1024**3)))
     except (TypeError, ValueError):
         return _error(400, "invalid_amount", "amount must be a positive number")
     if gb_value <= 0 or grant_bytes <= 0:
@@ -1380,9 +1389,7 @@ async def admin_user_traffic_grant_route(request: web.Request) -> web.Response:
             return _error(404, "no_active_subscription")
 
         if kind == "regular":
-            result = await subscription_service.admin_grant_topup(
-                session, target_id, gb_value
-            )
+            result = await subscription_service.admin_grant_topup(session, target_id, gb_value)
         else:
             result = await subscription_service.admin_grant_premium_topup(
                 session, target_id, gb_value
@@ -1407,9 +1414,7 @@ async def admin_user_traffic_grant_route(request: web.Request) -> web.Response:
         )
         await session.commit()
 
-        refreshed = await subscription_dal.get_active_subscription_by_user_id(
-            session, target_id
-        )
+        refreshed = await subscription_dal.get_active_subscription_by_user_id(session, target_id)
 
     return _ok(
         {
@@ -1462,15 +1467,11 @@ async def admin_user_extend_route(request: web.Request) -> web.Response:
         )
         await session.commit()
 
-        refreshed = await subscription_dal.get_active_subscription_by_user_id(
-            session, target_id
-        )
+        refreshed = await subscription_dal.get_active_subscription_by_user_id(session, target_id)
 
     return _ok(
         {
-            "subscription": _serialize_subscription(refreshed)
-            if refreshed
-            else None,
+            "subscription": _serialize_subscription(refreshed) if refreshed else None,
         }
     )
 
@@ -1699,7 +1700,7 @@ async def admin_logs_route(request: web.Request) -> web.Response:
 
     return _ok(
         {
-            "logs": [_serialize_log(l) for l in entries],
+            "logs": [_serialize_log(entry) for entry in entries],
             "page": page,
             "page_size": page_size,
             "total": int(total or 0),
@@ -2015,8 +2016,11 @@ async def admin_panel_internal_squads_route(request: web.Request) -> web.Respons
             {
                 "uuid": str(uuid),
                 "name": squad.get("name") or squad.get("title") or str(uuid),
-                "members_count": squad.get("membersCount") or squad.get("usersCount") or squad.get("members_count"),
-                "active_inbounds_count": squad.get("activeInboundsCount") or squad.get("active_inbounds_count"),
+                "members_count": squad.get("membersCount")
+                or squad.get("usersCount")
+                or squad.get("members_count"),
+                "active_inbounds_count": squad.get("activeInboundsCount")
+                or squad.get("active_inbounds_count"),
             }
         )
     return _ok({"squads": items})
@@ -2035,7 +2039,9 @@ def setup_admin_routes(app: web.Application) -> None:
     router.add_get("/api/admin/users/{user_id:-?\\d+}/avatar", admin_user_avatar_route)
     router.add_post("/api/admin/users/{user_id:-?\\d+}/ban", admin_user_ban_route)
     router.add_post("/api/admin/users/{user_id:-?\\d+}/message", admin_user_message_route)
-    router.add_post("/api/admin/users/{user_id:-?\\d+}/message/preview", admin_user_message_preview_route)
+    router.add_post(
+        "/api/admin/users/{user_id:-?\\d+}/message/preview", admin_user_message_preview_route
+    )
     router.add_post("/api/admin/users/{user_id:-?\\d+}/reset-trial", admin_user_reset_trial_route)
     router.add_post("/api/admin/users/{user_id:-?\\d+}/extend", admin_user_extend_route)
     router.add_post(

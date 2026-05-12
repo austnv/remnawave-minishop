@@ -5,7 +5,6 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-
 Currency = Literal["rub", "stars"]
 BillingModel = Literal["period", "traffic"]
 
@@ -95,7 +94,9 @@ class Tariff(BaseModel):
         if self.premium_monthly_gb is not None and self.premium_monthly_gb < 0:
             raise ValueError(f"tariff {self.key}: premium_monthly_gb must be >= 0")
         if self.premium_topup_packages and not self.premium_squad_uuids:
-            raise ValueError(f"tariff {self.key}: premium_topup_packages require premium_squad_uuids")
+            raise ValueError(
+                f"tariff {self.key}: premium_topup_packages require premium_squad_uuids"
+            )
         if self.premium_monthly_gb and self.premium_monthly_gb > 0 and not self.premium_squad_uuids:
             raise ValueError(f"tariff {self.key}: premium_monthly_gb requires premium_squad_uuids")
 
@@ -174,7 +175,10 @@ class Tariff(BaseModel):
         return int(float(self.premium_monthly_gb) * (1024**3))
 
     def has_premium_squad_limit(self) -> bool:
-        return bool(self.premium_squad_uuids and (self.premium_monthly_bytes > 0 or self.premium_topup_packages))
+        return bool(
+            self.premium_squad_uuids
+            and (self.premium_monthly_bytes > 0 or self.premium_topup_packages)
+        )
 
 
 class TariffsConfig(BaseModel):

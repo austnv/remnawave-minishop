@@ -1,7 +1,23 @@
 import { writable, get } from "svelte/store";
 import { emailError, buildTelegramOAuthStartUrl } from "../authHelpers.js";
 
-export function createAccountStore({ api, publicApi, setToken, loadData, t, showToast, clearToken, markManualLogout, showLogin, telegramSdk, getTg, telegramOAuthClientId, currentLang, normalizeLangCode, updateLocalData }) {
+export function createAccountStore({
+  api,
+  publicApi,
+  setToken,
+  loadData,
+  t,
+  showToast,
+  clearToken,
+  markManualLogout,
+  showLogin,
+  telegramSdk,
+  getTg,
+  telegramOAuthClientId,
+  currentLang,
+  normalizeLangCode,
+  updateLocalData,
+}) {
   const state = writable({
     linkEmailOpen: false,
     linkEmailBusy: false,
@@ -19,7 +35,7 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
   let linkEmailResendTimer = null;
 
   function setLinkEmailStatus(message, isError = false) {
-    state.update(s => ({ ...s, linkEmailStatus: message, linkEmailIsError: isError }));
+    state.update((s) => ({ ...s, linkEmailStatus: message, linkEmailIsError: isError }));
   }
 
   function clearCooldownTimer() {
@@ -31,20 +47,20 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
 
   function startCooldownTimer(seconds = 60) {
     clearCooldownTimer();
-    state.update(s => ({ ...s, linkEmailResendCooldown: Math.max(0, Number(seconds || 60)) }));
+    state.update((s) => ({ ...s, linkEmailResendCooldown: Math.max(0, Number(seconds || 60)) }));
     linkEmailResendTimer = window.setInterval(() => {
       const s = get(state);
       if (s.linkEmailResendCooldown <= 1) {
-        state.update(s => ({ ...s, linkEmailResendCooldown: 0 }));
+        state.update((s) => ({ ...s, linkEmailResendCooldown: 0 }));
         clearCooldownTimer();
         return;
       }
-      state.update(s => ({ ...s, linkEmailResendCooldown: s.linkEmailResendCooldown - 1 }));
+      state.update((s) => ({ ...s, linkEmailResendCooldown: s.linkEmailResendCooldown - 1 }));
     }, 1000);
   }
 
   function openLinkEmailDialog(email) {
-    state.update(s => ({
+    state.update((s) => ({
       ...s,
       linkEmailOpen: true,
       linkEmailBusy: false,
@@ -60,7 +76,7 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
   }
 
   function closeLinkEmailDialog() {
-    state.update(s => ({
+    state.update((s) => ({
       ...s,
       linkEmailOpen: false,
       linkEmailBusy: false,
@@ -77,12 +93,14 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
   async function requestLinkEmailCode() {
     const s = get(state);
     if (s.linkEmailPending && s.linkEmailResendCooldown > 0) return;
-    const normalized = String(s.linkEmailValue || "").trim().toLowerCase();
+    const normalized = String(s.linkEmailValue || "")
+      .trim()
+      .toLowerCase();
     if (!normalized || !normalized.includes("@")) {
-      state.update(s => ({ ...s, linkEmailFieldError: t("wa_auth_invalid_email") }));
+      state.update((s) => ({ ...s, linkEmailFieldError: t("wa_auth_invalid_email") }));
       return;
     }
-    state.update(s => ({ ...s, linkEmailFieldError: "", linkEmailBusy: true }));
+    state.update((s) => ({ ...s, linkEmailFieldError: "", linkEmailBusy: true }));
     setLinkEmailStatus(t("wa_auth_sending_code"));
     try {
       const response = await api("/account/email/request", {
@@ -90,19 +108,21 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
         body: JSON.stringify({ email: normalized }),
       });
       if (!response?.ok) throw response;
-      state.update(s => ({ ...s, linkEmailPending: normalized, linkEmailCode: "" }));
+      state.update((s) => ({ ...s, linkEmailPending: normalized, linkEmailCode: "" }));
       setLinkEmailStatus("");
       startCooldownTimer(60);
     } catch (error) {
       setLinkEmailStatus(emailError(error, t("wa_auth_send_code_failed"), t), true);
     } finally {
-      state.update(s => ({ ...s, linkEmailBusy: false }));
+      state.update((s) => ({ ...s, linkEmailBusy: false }));
     }
   }
 
   async function verifyLinkEmailCode() {
     const s = get(state);
-    const code = String(s.linkEmailCode || "").replace(/\\D/g, "").slice(0, 6);
+    const code = String(s.linkEmailCode || "")
+      .replace(/\\D/g, "")
+      .slice(0, 6);
     if (!s.linkEmailPending) {
       setLinkEmailStatus(t("wa_auth_send_code_failed"), true);
       return;
@@ -111,7 +131,7 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
       setLinkEmailStatus(t("wa_auth_enter_code_6digits"), true);
       return;
     }
-    state.update(s => ({ ...s, linkEmailBusy: true }));
+    state.update((s) => ({ ...s, linkEmailBusy: true }));
     setLinkEmailStatus(t("wa_auth_checking_code"));
     try {
       const response = await api("/account/email/verify", {
@@ -126,12 +146,12 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
     } catch (error) {
       setLinkEmailStatus(emailError(error, t("wa_auth_invalid_code"), t), true);
     } finally {
-      state.update(s => ({ ...s, linkEmailBusy: false }));
+      state.update((s) => ({ ...s, linkEmailBusy: false }));
     }
   }
 
   async function linkTelegramAccountWithPayload(payload) {
-    state.update(s => ({ ...s, linkTelegramBusy: true }));
+    state.update((s) => ({ ...s, linkTelegramBusy: true }));
     try {
       const response = await api("/account/telegram/link", {
         method: "POST",
@@ -144,7 +164,7 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
     } catch (error) {
       showToast(error?.message || t("wa_auth_telegram_not_confirmed"));
     } finally {
-      state.update(s => ({ ...s, linkTelegramBusy: false }));
+      state.update((s) => ({ ...s, linkTelegramBusy: false }));
     }
   }
 
@@ -164,7 +184,7 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
       showToast(t("wa_auth_telegram_not_configured"));
       return;
     }
-    state.update(s => ({ ...s, linkTelegramBusy: true }));
+    state.update((s) => ({ ...s, linkTelegramBusy: true }));
     window.location.assign(buildTelegramOAuthStartUrl("link", getTg()));
   }
 
@@ -173,7 +193,7 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
     const normalize = typeof normalizeLangCode === "function" ? normalizeLangCode : (v) => v;
     const language = normalize(nextValue);
     if (!language || s.languageBusy || language === currentLang()) return;
-    state.update(s => ({ ...s, languageBusy: true }));
+    state.update((s) => ({ ...s, languageBusy: true }));
     try {
       const response = await api("/account/language", {
         method: "POST",
@@ -187,7 +207,7 @@ export function createAccountStore({ api, publicApi, setToken, loadData, t, show
     } catch {
       showToast(t("wa_settings_language_update_failed"));
     } finally {
-      state.update(s => ({ ...s, languageBusy: false }));
+      state.update((s) => ({ ...s, languageBusy: false }));
     }
   }
 

@@ -15,38 +15,38 @@ export function createDevicesStore({ api, t, showToast }) {
   async function loadDevices(devicesEnabled, force = false) {
     const s = get(state);
     if (!devicesEnabled || s.devicesBusy || (s.devicesLoaded && !force)) return;
-    state.update(s => ({ ...s, devicesBusy: true, devicesStatus: "", devicesIsError: false }));
+    state.update((s) => ({ ...s, devicesBusy: true, devicesStatus: "", devicesIsError: false }));
     try {
       const response = await api("/devices");
       if (!response?.ok) throw response;
-      state.update(s => ({ ...s, devicesData: response, devicesLoaded: true }));
+      state.update((s) => ({ ...s, devicesData: response, devicesLoaded: true }));
     } catch (error) {
-      state.update(s => ({ 
-        ...s, 
-        devicesStatus: error?.message || t("wa_devices_load_failed"), 
-        devicesIsError: true, 
-        devicesLoaded: true 
+      state.update((s) => ({
+        ...s,
+        devicesStatus: error?.message || t("wa_devices_load_failed"),
+        devicesIsError: true,
+        devicesLoaded: true,
       }));
     } finally {
-      state.update(s => ({ ...s, devicesBusy: false }));
+      state.update((s) => ({ ...s, devicesBusy: false }));
     }
   }
 
   function openDeviceDisconnectDialog(device) {
-    state.update(s => ({ ...s, deviceToDisconnect: device, deviceConfirmOpen: true }));
+    state.update((s) => ({ ...s, deviceToDisconnect: device, deviceConfirmOpen: true }));
   }
 
   function closeDeviceDisconnectDialog() {
     const s = get(state);
     if (s.deviceDisconnectBusy) return;
-    state.update(s => ({ ...s, deviceConfirmOpen: false, deviceToDisconnect: null }));
+    state.update((s) => ({ ...s, deviceConfirmOpen: false, deviceToDisconnect: null }));
   }
 
   async function disconnectDevice(devicesEnabled) {
     const s = get(state);
     const token = String(s.deviceToDisconnect?.token || "").trim();
     if (!token || s.deviceDisconnectBusy) return;
-    state.update(s => ({ ...s, deviceDisconnectBusy: true }));
+    state.update((s) => ({ ...s, deviceDisconnectBusy: true }));
     try {
       const response = await api("/devices/disconnect", {
         method: "POST",
@@ -54,12 +54,17 @@ export function createDevicesStore({ api, t, showToast }) {
       });
       if (!response?.ok) throw response;
       showToast(t("wa_device_disconnected"));
-      state.update(s => ({ ...s, deviceConfirmOpen: false, deviceToDisconnect: null, devicesLoaded: false }));
+      state.update((s) => ({
+        ...s,
+        deviceConfirmOpen: false,
+        deviceToDisconnect: null,
+        devicesLoaded: false,
+      }));
       await loadDevices(devicesEnabled, true);
     } catch (error) {
       showToast(error?.message || t("wa_device_disconnect_failed"));
     } finally {
-      state.update(s => ({ ...s, deviceDisconnectBusy: false }));
+      state.update((s) => ({ ...s, deviceDisconnectBusy: false }));
     }
   }
 

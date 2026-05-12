@@ -1,5 +1,13 @@
 <script>
-  import { CheckCircle2, ChevronsUpDown, CircleX, Database, Download, Gift, RefreshCw } from "$components/ui/icons.js";
+  import {
+    CheckCircle2,
+    ChevronsUpDown,
+    CircleX,
+    Database,
+    Download,
+    Gift,
+    RefreshCw,
+  } from "$components/ui/icons.js";
 
   import BrandMark from "../../BrandMark.svelte";
   import Button from "$components/ui/button.svelte";
@@ -16,7 +24,6 @@
     premiumServerLabels as premiumServerLabelsFn,
     activeSubscriptionTermLabel as activeSubscriptionTermLabelFn,
   } from "../../lib/webapp/traffic.js";
-
 
   export let CFG = {};
   export let appSettings = {};
@@ -35,19 +42,34 @@
   export let trialBusy = false;
   export let termUnitLabel = () => ""; // We need this passed from App or context. Actually, App.svelte doesn't pass it yet. We'll pass it.
 
-  function trafficPercent(sub) { return trafficPercentFn(sub); }
-  function trafficLabel(sub) { return trafficLabelFn(sub, t); }
-  function trafficResetLabel(sub) { return trafficResetLabelFn(sub, t); }
-  function premiumTrafficPercent(sub) { return premiumTrafficPercentFn(sub); }
-  function premiumTrafficLabel(sub) { return premiumTrafficLabelFn(sub, t); }
-  function premiumTitle(sub = subscription) { return premiumTitleFn(sub, t); }
-  function premiumServerLabels(sub) { return premiumServerLabelsFn(sub); }
-  function activeSubscriptionTermLabel(sub) { return activeSubscriptionTermLabelFn(sub, { t, termUnitLabel }); }
+  function trafficPercent(sub) {
+    return trafficPercentFn(sub);
+  }
+  function trafficLabel(sub) {
+    return trafficLabelFn(sub, t);
+  }
+  function trafficResetLabel(sub) {
+    return trafficResetLabelFn(sub, t);
+  }
+  function premiumTrafficPercent(sub) {
+    return premiumTrafficPercentFn(sub);
+  }
+  function premiumTrafficLabel(sub) {
+    return premiumTrafficLabelFn(sub, t);
+  }
+  function premiumTitle(sub = subscription) {
+    return premiumTitleFn(sub, t);
+  }
+  function premiumServerLabels(sub) {
+    return premiumServerLabelsFn(sub);
+  }
+  function activeSubscriptionTermLabel(sub) {
+    return activeSubscriptionTermLabelFn(sub, { t, termUnitLabel });
+  }
   function trialTrafficLabel() {
     const limit = Number(appSettings?.trial_traffic_limit_gb || 0);
     return limit > 0 ? formatTrafficGb(limit) : t("wa_unlimited_traffic");
   }
-
 
   export let activateTrial = () => {};
   export let openConnectLink = () => {};
@@ -71,11 +93,21 @@
         <div class="sub-status">
           <CheckCircle2 size={23} />
           <div>
-            <h2>{trafficMode ? t("wa_home_access_active") : t("wa_home_subscription_active")} | {activeSubscriptionTermLabel(subscription)}</h2>
+            <h2>
+              {trafficMode ? t("wa_home_access_active") : t("wa_home_subscription_active")} | {activeSubscriptionTermLabel(
+                subscription
+              )}
+            </h2>
             {#if hasActiveTariffSubscription && hasMultipleTariffs && currentTariffName}
-              <p class="current-tariff-line">{t("wa_current_tariff", { tariff: currentTariffName })}</p>
+              <p class="current-tariff-line">
+                {t("wa_current_tariff", { tariff: currentTariffName })}
+              </p>
             {/if}
-            <p>{subscription.end_date_text ? t("wa_until_date", { date: subscription.end_date_text }) : subscription.remaining_text}</p>
+            <p>
+              {subscription.end_date_text
+                ? t("wa_until_date", { date: subscription.end_date_text })
+                : subscription.remaining_text}
+            </p>
           </div>
         </div>
       {:else}
@@ -89,7 +121,12 @@
     {#if subscription.active}
       <Card class={regularTrafficTopupBarClickable ? "traffic-card-clickable" : ""}>
         {#if regularTrafficTopupBarClickable}
-          <button class="card-click-target" type="button" onclick={openRegularTopupModal} aria-label={t("wa_add_traffic")}></button>
+          <button
+            class="card-click-target"
+            type="button"
+            onclick={openRegularTopupModal}
+            aria-label={t("wa_add_traffic")}
+          ></button>
         {/if}
         <div class="traffic-top">
           <span>{t("wa_home_traffic_used")}</span>
@@ -115,7 +152,9 @@
                   <ChevronsUpDown size={13} />
                 </summary>
                 <div class="premium-server-list premium-server-list-dropdown">
-                  <small>{t("wa_premium_servers_limited", {}, "Отдельный лимит действует на")}</small>
+                  <small
+                    >{t("wa_premium_servers_limited", {}, "Отдельный лимит действует на")}</small
+                  >
                   <div>
                     {#each premiumServerLabels(subscription).slice(0, 8) as label}
                       <span>{label}</span>
@@ -129,7 +168,9 @@
           </div>
         </Card>
       {:else if Number(subscription?.premium_limit_bytes || 0) > 0}
-        <Card class={`${premiumTrafficTopupBarClickable ? "traffic-card-clickable " : ""}premium-traffic-card${subscription?.premium_is_limited ? " premium-traffic-card-limited" : ""}`}>
+        <Card
+          class={`${premiumTrafficTopupBarClickable ? "traffic-card-clickable " : ""}premium-traffic-card${subscription?.premium_is_limited ? " premium-traffic-card-limited" : ""}`}
+        >
           {#if premiumTrafficTopupBarClickable}
             <button
               class="card-click-target"
@@ -142,16 +183,26 @@
             <span>{premiumTitle(subscription)}</span>
             <strong>{premiumTrafficLabel(subscription)}</strong>
           </div>
-          <LinearProgress class="premium-progress" value={premiumTrafficPercent(subscription)} label={premiumTitle(subscription)} />
+          <LinearProgress
+            class="premium-progress"
+            value={premiumTrafficPercent(subscription)}
+            label={premiumTitle(subscription)}
+          />
           <div class="traffic-meta premium-traffic-meta">
             {#if premiumServerLabels(subscription).length}
               <details class="premium-server-dropdown">
                 <summary>
-                  <span>{subscription?.premium_is_limited ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен") : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span>
+                  <span
+                    >{subscription?.premium_is_limited
+                      ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен")
+                      : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span
+                  >
                   <ChevronsUpDown size={13} />
                 </summary>
                 <div class="premium-server-list premium-server-list-dropdown">
-                  <small>{t("wa_premium_servers_limited", {}, "Отдельный лимит действует на")}</small>
+                  <small
+                    >{t("wa_premium_servers_limited", {}, "Отдельный лимит действует на")}</small
+                  >
                   <div>
                     {#each premiumServerLabels(subscription).slice(0, 8) as label}
                       <span>{label}</span>
@@ -160,7 +211,11 @@
                 </div>
               </details>
             {:else}
-              <span>{subscription?.premium_is_limited ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен") : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span>
+              <span
+                >{subscription?.premium_is_limited
+                  ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен")
+                  : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span
+              >
             {/if}
             <span class="traffic-percent">{premiumTrafficPercent(subscription)}%</span>
           </div>
@@ -172,7 +227,12 @@
           <Gift size={22} />
           <span>
             <strong>{t("wa_trial_title")}</strong>
-            <small>{t("wa_trial_details", { days: Number(appSettings?.trial_duration_days || 0), traffic: trialTrafficLabel() })}</small>
+            <small
+              >{t("wa_trial_details", {
+                days: Number(appSettings?.trial_duration_days || 0),
+                traffic: trialTrafficLabel(),
+              })}</small
+            >
           </span>
         </div>
       </Card>
@@ -185,7 +245,11 @@
           {t("wa_install_and_configure")}
         </Button>
       {/if}
-      <Button class="wide" variant={subscription.active ? "secondary" : "default"} onclick={openPaymentModal}>
+      <Button
+        class="wide"
+        variant={subscription.active ? "secondary" : "default"}
+        onclick={openPaymentModal}
+      >
         {#if subscription.active}
           <RefreshCw size={18} />
         {:else if trafficMode}

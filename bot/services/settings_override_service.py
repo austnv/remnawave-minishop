@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from bot.app.web.admin_settings_manifest import (
@@ -74,9 +73,7 @@ def apply_overrides(settings: Settings, overrides: Dict[str, Any]) -> int:
     return applied
 
 
-async def load_overrides_from_db(
-    settings: Settings, async_session_factory: sessionmaker
-) -> int:
+async def load_overrides_from_db(settings: Settings, async_session_factory: sessionmaker) -> int:
     """Fetch overrides from the DB and apply them to the in-memory settings."""
 
     try:

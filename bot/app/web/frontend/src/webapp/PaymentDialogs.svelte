@@ -1,11 +1,23 @@
 <script>
-  import { ArrowLeft, CheckCircle2, CircleX, LockKeyhole, RefreshCw, TriangleAlert } from "$components/ui/icons.js";
+  import {
+    ArrowLeft,
+    ArrowRight,
+    CheckCircle2,
+    CircleX,
+    LockKeyhole,
+    RefreshCw,
+    TriangleAlert,
+  } from "$components/ui/icons.js";
   import { Tooltip } from "$components/ui/primitives.js";
 
   import Button from "$components/ui/button.svelte";
   import Dialog from "$components/ui/dialog.svelte";
   import Input from "$components/ui/input.svelte";
-  import { EmptyCard, PaymentMethodGrid, StatusMessage } from "$components/patterns/webapp/index.js";
+  import {
+    EmptyCard,
+    PaymentMethodGrid,
+    StatusMessage,
+  } from "$components/patterns/webapp/index.js";
   import {
     planKey as planKeyFn,
     planDisplayTitle as planDisplayTitleFn,
@@ -14,7 +26,6 @@
     tariffLimitLabel as tariffLimitLabelFn,
     priceLabel as priceLabelFn,
   } from "../lib/webapp/tariffs.js";
-
 
   export let createPayment = () => {};
   export let deviceConfirmOpen = false;
@@ -46,17 +57,31 @@
   export let tariffCatalog = [];
   export let tariffMode = false;
   export let trafficMode = false;
-  
-  function priceLabel(plan) { return priceLabelFn(plan, selectedMethod); }
-  function planKey(plan) { return planKeyFn(plan); }
-  function planDisplayTitle(plan) { return planDisplayTitleFn(plan, { trafficMode, t }); }
-  function planSubtitle(plan) { return planSubtitleFn(plan, { t, termUnitLabel }); }
-  function planUnitHint(plan) { return planUnitHintFn(plan, { trafficMode, selectedMethod, t }); }
-  function tariffLimitLabel(tariff) { return tariffLimitLabelFn(tariff, { t }); }
+
+  function priceLabel(plan) {
+    return priceLabelFn(plan, selectedMethod);
+  }
+  function planKey(plan) {
+    return planKeyFn(plan);
+  }
+  function planDisplayTitle(plan) {
+    return planDisplayTitleFn(plan, { trafficMode, t });
+  }
+  function planSubtitle(plan) {
+    return planSubtitleFn(plan, { t, termUnitLabel });
+  }
+  function planUnitHint(plan) {
+    return planUnitHintFn(plan, { trafficMode, selectedMethod, t });
+  }
+  function tariffLimitLabel(tariff) {
+    return tariffLimitLabelFn(tariff, { t });
+  }
 
   function paymentTitle() {
     if (singleTariffMode) {
-      return selectedTariff?.billing_model === "traffic" ? t("wa_traffic_packages_title") : t("wa_subscription_title");
+      return selectedTariff?.billing_model === "traffic"
+        ? t("wa_traffic_packages_title")
+        : t("wa_subscription_title");
     }
     if (tariffMode) return t("wa_tariffs_title");
     return trafficMode ? t("wa_traffic_packages_title") : t("wa_subscription_title");
@@ -65,7 +90,9 @@
   function paymentDescription() {
     if (tariffMode) {
       if (singleTariffMode) {
-        return selectedTariff?.billing_model === "traffic" ? t("wa_traffic_packages_choose") : t("wa_subscription_choose_period");
+        return selectedTariff?.billing_model === "traffic"
+          ? t("wa_traffic_packages_choose")
+          : t("wa_subscription_choose_period");
       }
       return paymentStep === "checkout" && selectedTariff
         ? t("wa_tariff_choose_period_payment", { tariff: selectedTariff.title })
@@ -73,7 +100,6 @@
     }
     return trafficMode ? t("wa_traffic_packages_choose") : t("wa_subscription_choose_period");
   }
-
 
   export let closeDeviceDisconnectDialog = () => {};
   export let closeLinkEmailDialog = () => {};
@@ -121,7 +147,11 @@
             </button>
           {/each}
         </div>
-        <Button class="wide bottom-action payment-submit-button" onclick={continueWithSelectedTariff} disabled={!selectedTariffKey}>
+        <Button
+          class="wide bottom-action payment-submit-button"
+          onclick={continueWithSelectedTariff}
+          disabled={!selectedTariffKey}
+        >
           {t("wa_next")}
           <ArrowRight size={17} />
         </Button>
@@ -137,7 +167,9 @@
           </button>
         {/if}
         {#if hasMultipleTariffs && selectedTariff}
-          <p class="tariff-step-caption">{t("wa_selected_tariff", { tariff: selectedTariff.title })}</p>
+          <p class="tariff-step-caption">
+            {t("wa_selected_tariff", { tariff: selectedTariff.title })}
+          </p>
         {/if}
       {/if}
       {#if selectedTariffPlans.length}
@@ -162,12 +194,22 @@
         </div>
         <div class="payment-divider" aria-hidden="true"></div>
         {#if methods.length}
-          <PaymentMethodGrid {methods} {selectedMethod} {t} onSelect={(id) => (selectedMethod = id)} />
+          <PaymentMethodGrid
+            {methods}
+            {selectedMethod}
+            {t}
+            onSelect={(id) => (selectedMethod = id)}
+          />
         {:else}
           <EmptyCard>{t("wa_payment_methods_not_configured")}</EmptyCard>
         {/if}
-        <Button class="wide bottom-action payment-submit-button" onclick={createPayment} disabled={!selectedPlan || !methods.length || payBusy}>
-          {t("wa_pay")} {selectedPlan ? priceLabel(selectedPlan) : ""}
+        <Button
+          class="wide bottom-action payment-submit-button"
+          onclick={createPayment}
+          disabled={!selectedPlan || !methods.length || payBusy}
+        >
+          {t("wa_pay")}
+          {selectedPlan ? priceLabel(selectedPlan) : ""}
           <LockKeyhole size={17} />
         </Button>
       {:else}
@@ -199,12 +241,22 @@
       </div>
       <div class="payment-divider" aria-hidden="true"></div>
       {#if methods.length}
-        <PaymentMethodGrid {methods} {selectedMethod} {t} onSelect={(id) => (selectedMethod = id)} />
+        <PaymentMethodGrid
+          {methods}
+          {selectedMethod}
+          {t}
+          onSelect={(id) => (selectedMethod = id)}
+        />
       {:else}
         <EmptyCard>{t("wa_payment_methods_not_configured")}</EmptyCard>
       {/if}
-      <Button class="wide bottom-action payment-submit-button" onclick={createPayment} disabled={!selectedPlan || !methods.length || payBusy}>
-        {t("wa_pay")} {selectedPlan ? priceLabel(selectedPlan) : ""}
+      <Button
+        class="wide bottom-action payment-submit-button"
+        onclick={createPayment}
+        disabled={!selectedPlan || !methods.length || payBusy}
+      >
+        {t("wa_pay")}
+        {selectedPlan ? priceLabel(selectedPlan) : ""}
         <LockKeyhole size={17} />
       </Button>
     {/if}
@@ -215,18 +267,30 @@
   open={deviceConfirmOpen}
   title={t("wa_devices_disconnect_title")}
   description={t("wa_devices_disconnect_desc", {
-    device: deviceToDisconnect?.display_name || t("wa_device_fallback_name", { index: deviceToDisconnect?.index || "" }),
+    device:
+      deviceToDisconnect?.display_name ||
+      t("wa_device_fallback_name", { index: deviceToDisconnect?.index || "" }),
   })}
   closeLabel={t("wa_close")}
   onclose={closeDeviceDisconnectDialog}
   class="payment-dialog-card"
 >
   <div class="payment-dialog-body">
-    <Button variant="outline" class="wide device-danger-button" onclick={disconnectDevice} disabled={deviceDisconnectBusy}>
+    <Button
+      variant="outline"
+      class="wide device-danger-button"
+      onclick={disconnectDevice}
+      disabled={deviceDisconnectBusy}
+    >
       <CircleX size={17} />
       {t("wa_devices_disconnect_confirm")}
     </Button>
-    <Button variant="secondary" class="wide" onclick={closeDeviceDisconnectDialog} disabled={deviceDisconnectBusy}>
+    <Button
+      variant="secondary"
+      class="wide"
+      onclick={closeDeviceDisconnectDialog}
+      disabled={deviceDisconnectBusy}
+    >
       {t("wa_cancel")}
     </Button>
   </div>
@@ -235,7 +299,9 @@
 <Dialog
   open={linkEmailOpen}
   title={t("wa_link_email_modal_title")}
-  description={linkEmailPending ? t("wa_email_sent_to", { email: linkEmailPending }) : t("wa_link_email_modal_desc")}
+  description={linkEmailPending
+    ? t("wa_email_sent_to", { email: linkEmailPending })
+    : t("wa_link_email_modal_desc")}
   closeLabel={t("wa_close")}
   onclose={closeLinkEmailDialog}
   class={`payment-dialog-card${linkEmailPending ? " link-email-dialog-card" : ""}`}
@@ -264,7 +330,11 @@
           {/if}
         </Tooltip.Root>
       </div>
-      <Button class="wide bottom-action payment-submit-button" onclick={requestLinkEmailCode} disabled={linkEmailBusy}>
+      <Button
+        class="wide bottom-action payment-submit-button"
+        onclick={requestLinkEmailCode}
+        disabled={linkEmailBusy}
+      >
         {t("wa_send_code_email")}
       </Button>
     {:else}
@@ -284,7 +354,11 @@
               {/each}
             </span>
           </label>
-          <Button class="wide bottom-action payment-submit-button" onclick={verifyLinkEmailCode} disabled={linkEmailBusy}>
+          <Button
+            class="wide bottom-action payment-submit-button"
+            onclick={verifyLinkEmailCode}
+            disabled={linkEmailBusy}
+          >
             {t("wa_confirm")}
           </Button>
         </div>

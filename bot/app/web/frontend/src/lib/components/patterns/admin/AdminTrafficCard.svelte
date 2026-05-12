@@ -12,7 +12,13 @@
   $: clamped = Math.max(0, Math.min(100, Number(percent) || 0));
 </script>
 
-<div class={cn("admin-traffic-card", warning && "admin-traffic-card-warning", premium && "admin-traffic-card-premium")}>
+<div
+  class={cn(
+    "admin-traffic-card",
+    warning && "admin-traffic-card-warning",
+    premium && "admin-traffic-card-premium"
+  )}
+>
   <div class="admin-traffic-head">
     <span>{title}</span>
     <strong>{value}</strong>

@@ -109,7 +109,7 @@ export function parseIntNumber(value, fallback = null) {
 
 export function compactMap(obj) {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, value]) => value !== "" && value !== null && value !== undefined),
+    Object.entries(obj).filter(([, value]) => value !== "" && value !== null && value !== undefined)
   );
 }
 
@@ -139,7 +139,10 @@ export function normalizeUuidList(value) {
 export function tariffFromDraft(draft) {
   const key = draft.key.trim();
   const names = compactMap({ ru: draft.nameRu.trim(), en: draft.nameEn.trim() });
-  const descriptions = compactMap({ ru: draft.descriptionRu.trim(), en: draft.descriptionEn.trim() });
+  const descriptions = compactMap({
+    ru: draft.descriptionRu.trim(),
+    en: draft.descriptionEn.trim(),
+  });
   const premiumNames = compactMap({
     ru: draft.premiumNameRu.trim(),
     en: draft.premiumNameEn.trim(),
@@ -164,7 +167,7 @@ export function tariffFromDraft(draft) {
   const premiumTopupPackages = packageSetFromRows(
     draft.premiumTopupRubRows,
     draft.premiumTopupStarsRows,
-    "gb",
+    "gb"
   );
   if (premiumTopupPackages) tariff.premium_topup_packages = premiumTopupPackages;
 
@@ -186,7 +189,9 @@ export function tariffFromDraft(draft) {
     tariff.monthly_gb = parseNumber(draft.monthly_gb, 0);
     tariff.enabled_periods = rows.map((row) => row.months);
     tariff.prices_rub = Object.fromEntries(rows.map((row) => [String(row.months), row.rub || 0]));
-    tariff.prices_stars = Object.fromEntries(rows.map((row) => [String(row.months), row.stars || 0]));
+    tariff.prices_stars = Object.fromEntries(
+      rows.map((row) => [String(row.months), row.stars || 0])
+    );
     const topupPackages = packageSetFromRows(draft.topupRubRows, draft.topupStarsRows, "gb");
     if (topupPackages) tariff.topup_packages = topupPackages;
   } else {

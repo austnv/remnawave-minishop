@@ -43,7 +43,9 @@ async def select_subscription_period_callback_handler(
         return
 
     price_source = traffic_packages if traffic_mode else settings.subscription_options
-    stars_price_source = stars_traffic_packages if traffic_mode else settings.stars_subscription_options
+    stars_price_source = (
+        stars_traffic_packages if traffic_mode else settings.stars_subscription_options
+    )
 
     price_rub = price_source.get(months)
     stars_price = stars_price_source.get(months)
@@ -82,7 +84,11 @@ async def select_subscription_period_callback_handler(
                 pass
             return
 
-    text_content = get_text("choose_payment_method_traffic") if traffic_mode else get_text("choose_payment_method")
+    text_content = (
+        get_text("choose_payment_method_traffic")
+        if traffic_mode
+        else get_text("choose_payment_method")
+    )
     reply_markup = get_payment_method_keyboard(
         months,
         price_rub,

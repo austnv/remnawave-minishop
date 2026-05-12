@@ -38,7 +38,10 @@
       <h3 class="card-heading">{t("wa_referral_link_title")}</h3>
       <div class="copy-row referral-copy-row">
         <code>{referral.webapp_link || referral.bot_link || t("wa_link_unavailable")}</code>
-        <Button class="referral-copy-button" onclick={() => copyText(referral.webapp_link || referral.bot_link, t("wa_link_copied"))}>
+        <Button
+          class="referral-copy-button"
+          onclick={() => copyText(referral.webapp_link || referral.bot_link, t("wa_link_copied"))}
+        >
           {t("wa_copy")}
           <Copy size={17} />
         </Button>
@@ -58,8 +61,12 @@
         {#each referralBonusDetails as bonus, index (bonus.months || index)}
           <div class="referral-bonus-row">
             <strong>{bonus.title || `${bonus.months || "?"}`}</strong>
-            <small>{t("wa_referral_bonus_you_days", { days: Number(bonus.inviter_days || 0) })}</small>
-            <small>{t("wa_referral_bonus_friend_days", { days: Number(bonus.friend_days || 0) })}</small>
+            <small
+              >{t("wa_referral_bonus_you_days", { days: Number(bonus.inviter_days || 0) })}</small
+            >
+            <small
+              >{t("wa_referral_bonus_friend_days", { days: Number(bonus.friend_days || 0) })}</small
+            >
           </div>
         {/each}
       </div>

@@ -11,18 +11,14 @@
 
   const settingsStore = getContext("settingsStore");
 
-  $: ({
-    settingsSections,
-    settingsLoading,
-    settingsDirty,
-    settingsSaving,
-  } = $settingsStore);
+  $: ({ settingsSections, settingsLoading, settingsDirty, settingsSaving } = $settingsStore);
 
   let settingsOpenSections = [];
   let settingsOpenSubsections = {};
   let revealedSecrets = new Set();
 
-  $: settingsAllOpen = settingsSections.length > 0 && settingsOpenSections.length === settingsSections.length;
+  $: settingsAllOpen =
+    settingsSections.length > 0 && settingsOpenSections.length === settingsSections.length;
 
   onMount(() => {
     settingsStore.loadSettings().then(() => {
@@ -109,7 +105,9 @@
   }
 
   function fieldLabelText(field) {
-    const isEnglish = String(currentLang || "").toLowerCase().startsWith("en");
+    const isEnglish = String(currentLang || "")
+      .toLowerCase()
+      .startsWith("en");
     const fallback = isEnglish ? englishFieldLabelFallback(field.key, field.label) : field.label;
     return field.i18n_label_key ? at(field.i18n_label_key, {}, fallback) : fallback;
   }
@@ -121,14 +119,18 @@
     <div class="admin-setting-meta">
       <strong>
         {fieldLabelText(field)}
-          <AdminBadge variant="warning">{at("settings_badge_secret", {}, "Secret")}</AdminBadge>
+        <AdminBadge variant="warning">{at("settings_badge_secret", {}, "Secret")}</AdminBadge>
         {#if isOverridden(field)}
           <AdminBadge variant="success">{at("settings_badge_override", {}, "Override")}</AdminBadge>
         {/if}
       </strong>
       <code>{field.key}</code>
       {#if field.description}
-        <small>{field.i18n_description_key ? at(field.i18n_description_key, {}, field.description) : field.description}</small>
+        <small
+          >{field.i18n_description_key
+            ? at(field.i18n_description_key, {}, field.description)
+            : field.description}</small
+        >
       {/if}
     </div>
     <div class="admin-setting-control">
@@ -141,7 +143,11 @@
           >
             <Switch.Thumb class="admin-switch-thumb" />
           </Switch.Root>
-          <span>{Boolean(valueFor(field)) ? at("enabled", {}, "Включено") : at("disabled", {}, "Выключено")}</span>
+          <span
+            >{valueFor(field)
+              ? at("enabled", {}, "Включено")
+              : at("disabled", {}, "Выключено")}</span
+          >
         </div>
       {:else if field.type === "color"}
         <input
@@ -193,7 +199,8 @@
       {/if}
       {#if isOverridden(field) || settingsDirty[field.key]}
         <AdminButton size="sm" variant="ghost" onclick={() => settingsStore.resetField(field)}>
-          <X size={12} /> {at("reset", {}, "Сбросить")}
+          <X size={12} />
+          {at("reset", {}, "Сбросить")}
         </AdminButton>
       {/if}
     </div>
@@ -201,18 +208,35 @@
 {/snippet}
 
 {#if settingsLoading || !settingsSections.length}
-  <AdminEmptyState>{settingsLoading ? at("loading", {}, "Загрузка…") : at("no_data", {}, "Нет данных")}</AdminEmptyState>
+  <AdminEmptyState
+    >{settingsLoading
+      ? at("loading", {}, "Загрузка…")
+      : at("no_data", {}, "Нет данных")}</AdminEmptyState
+  >
 {:else}
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+  <div
+    style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;"
+  >
     <p class="admin-muted" style="margin:0;">
-      {at("settings_hint", {}, "Изменения в админке имеют приоритет над .env. Кнопка «Сбросить» возвращает значение из переменных окружения.")}
+      {at(
+        "settings_hint",
+        {},
+        "Изменения в админке имеют приоритет над .env. Кнопка «Сбросить» возвращает значение из переменных окружения."
+      )}
     </p>
     <div style="display:flex; gap:8px;">
       <AdminButton size="sm" variant="ghost" onclick={toggleAllSections}>
-        {settingsAllOpen ? at("collapse_all", {}, "Свернуть всё") : at("expand_all", {}, "Развернуть всё")}
+        {settingsAllOpen
+          ? at("collapse_all", {}, "Свернуть всё")
+          : at("expand_all", {}, "Развернуть всё")}
       </AdminButton>
       {#if Object.keys(settingsDirty).length > 0}
-        <AdminButton size="sm" variant="primary" onclick={() => settingsStore.saveSettings(onSettingsSaved)} disabled={settingsSaving}>
+        <AdminButton
+          size="sm"
+          variant="primary"
+          onclick={() => settingsStore.saveSettings(onSettingsSaved)}
+          disabled={settingsSaving}
+        >
           {settingsSaving ? at("saving", {}, "Сохранение...") : at("save", {}, "Сохранить")}
         </AdminButton>
       {/if}
@@ -227,7 +251,21 @@
           <Accordion.Trigger class="admin-accordion-trigger">
             <span class="admin-accordion-title">{sectionTitle(section.id)}</span>
             <span class="admin-accordion-meta">
-              {at("settings_params_count", { count: section.fields.length }, `${section.fields.length} параметров`)}{#if overriddenInSection} · {at("settings_overridden_count", { count: overriddenInSection }, `${overriddenInSection} override`)}{/if}{#if dirtyInSection} · {at("settings_dirty_count", { count: dirtyInSection }, `${dirtyInSection} изм.`)}{/if}
+              {at(
+                "settings_params_count",
+                { count: section.fields.length },
+                `${section.fields.length} параметров`
+              )}{#if overriddenInSection}
+                · {at(
+                  "settings_overridden_count",
+                  { count: overriddenInSection },
+                  `${overriddenInSection} override`
+                )}{/if}{#if dirtyInSection}
+                · {at(
+                  "settings_dirty_count",
+                  { count: dirtyInSection },
+                  `${dirtyInSection} изм.`
+                )}{/if}
             </span>
             <ChevronRight size={16} class="admin-accordion-chev" />
           </Accordion.Trigger>
@@ -246,18 +284,35 @@
               <Accordion.Root
                 type="multiple"
                 value={settingsOpenSubsections[section.id] || []}
-                onValueChange={(v) => (settingsOpenSubsections = { ...settingsOpenSubsections, [section.id]: v })}
+                onValueChange={(v) =>
+                  (settingsOpenSubsections = { ...settingsOpenSubsections, [section.id]: v })}
                 class="admin-subsection-accordion"
               >
                 {#each labelGroups as group}
-                  {@const subDirty = group.fields.filter((f) => Boolean(settingsDirty[f.key])).length}
+                  {@const subDirty = group.fields.filter((f) =>
+                    Boolean(settingsDirty[f.key])
+                  ).length}
                   {@const subOverridden = group.fields.filter((f) => isOverridden(f)).length}
                   <Accordion.Item value={group.id} class="admin-settings-subsection">
                     <Accordion.Header class="admin-accordion-header">
                       <Accordion.Trigger class="admin-settings-subsection-trigger">
                         <strong>{group.label}</strong>
                         <span class="admin-settings-subsection-meta">
-                          {at("settings_fields_count", { count: group.fields.length }, `${group.fields.length} полей`)}{#if subOverridden} · {at("settings_overridden_count", { count: subOverridden }, `${subOverridden} override`)}{/if}{#if subDirty} · {at("settings_dirty_count", { count: subDirty }, `${subDirty} изм.`)}{/if}
+                          {at(
+                            "settings_fields_count",
+                            { count: group.fields.length },
+                            `${group.fields.length} полей`
+                          )}{#if subOverridden}
+                            · {at(
+                              "settings_overridden_count",
+                              { count: subOverridden },
+                              `${subOverridden} override`
+                            )}{/if}{#if subDirty}
+                            · {at(
+                              "settings_dirty_count",
+                              { count: subDirty },
+                              `${subDirty} изм.`
+                            )}{/if}
                         </span>
                         <ChevronRight size={14} class="admin-accordion-chev" />
                       </Accordion.Trigger>

@@ -52,7 +52,7 @@
     "brand-mark",
     normalizedLogoUrl && !failed && !loaded && "brand-mark-loading",
     normalizedLogoUrl && !failed && loaded && "brand-mark-loaded",
-    className,
+    className
   )}
   aria-busy={normalizedLogoUrl && !failed && !loaded ? "true" : undefined}
 >
@@ -61,7 +61,7 @@
       <span class="brand-mark-spinner" aria-hidden="true"></span>
     {/if}
     <img
-      class:loaded={loaded}
+      class:loaded
       src={normalizedLogoUrl}
       alt=""
       loading="lazy"

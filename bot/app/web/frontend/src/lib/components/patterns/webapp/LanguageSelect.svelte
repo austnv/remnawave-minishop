@@ -41,8 +41,8 @@
     {value}
     items={options}
     {disabled}
-    onOpenChange={onOpenChange}
-    onValueChange={onValueChange}
+    {onOpenChange}
+    {onValueChange}
   >
     <Select.Trigger class="language-select-trigger" aria-label={label}>
       <span class="language-select-copy">

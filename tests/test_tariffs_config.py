@@ -1,7 +1,6 @@
 import json
 import unittest
 
-
 from config.tariffs_config import TariffsConfig, load_tariffs_config
 
 

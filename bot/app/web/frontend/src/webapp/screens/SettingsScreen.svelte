@@ -1,5 +1,13 @@
 <script>
-  import { ArrowRight, CheckCircle2, FileText, Mail, Send, Shield, UserRound } from "$components/ui/icons.js";
+  import {
+    ArrowRight,
+    CheckCircle2,
+    FileText,
+    Mail,
+    Send,
+    Shield,
+    UserRound,
+  } from "$components/ui/icons.js";
 
   import Button from "$components/ui/button.svelte";
   import Card from "$components/ui/card.svelte";
@@ -40,7 +48,12 @@
   <Card class="settings-profile">
     <div class="settings-avatar">
       {#if profileAvatarUrl}
-        <img src={profileAvatarUrl} alt={t("wa_settings_avatar_alt")} loading="lazy" referrerpolicy="no-referrer" />
+        <img
+          src={profileAvatarUrl}
+          alt={t("wa_settings_avatar_alt")}
+          loading="lazy"
+          referrerpolicy="no-referrer"
+        />
       {:else}
         <UserRound size={30} />
       {/if}
@@ -95,7 +108,12 @@
         </span>
       </div>
     {:else}
-      <button class="settings-row attention-wrap" type="button" onclick={openLinkEmailDialog} disabled={linkEmailBusy}>
+      <button
+        class="settings-row attention-wrap"
+        type="button"
+        onclick={openLinkEmailDialog}
+        disabled={linkEmailBusy}
+      >
         <span class="attention-dot" aria-hidden="true"></span>
         <Mail size={21} />
         <span>
@@ -123,21 +141,33 @@
       onValueChange={updateAccountLanguage}
     />
     {#if supportUrl}
-      <button class="settings-row settings-row-support" type="button" onclick={() => openExternalLink(supportUrl)}>
+      <button
+        class="settings-row settings-row-support"
+        type="button"
+        onclick={() => openExternalLink(supportUrl)}
+      >
         <Send size={21} />
         <span><strong>{t("menu_support_button")}</strong></span>
         <ArrowRight size={17} />
       </button>
     {/if}
     {#if userAgreementUrl}
-      <button class="settings-row settings-row-policy" type="button" onclick={() => openExternalLink(userAgreementUrl)}>
+      <button
+        class="settings-row settings-row-policy"
+        type="button"
+        onclick={() => openExternalLink(userAgreementUrl)}
+      >
         <FileText size={21} />
         <span><strong>{t("wa_settings_user_agreement")}</strong></span>
         <ArrowRight size={17} />
       </button>
     {/if}
     {#if privacyPolicyUrl}
-      <button class="settings-row settings-row-policy" type="button" onclick={() => openExternalLink(privacyPolicyUrl)}>
+      <button
+        class="settings-row settings-row-policy"
+        type="button"
+        onclick={() => openExternalLink(privacyPolicyUrl)}
+      >
         <Shield size={21} />
         <span><strong>{t("wa_settings_privacy_policy")}</strong></span>
         <ArrowRight size={17} />

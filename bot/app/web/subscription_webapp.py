@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from aiohttp import ClientSession, ClientTimeout, web
 from aiogram import Bot, Dispatcher
 from aiogram.types import LabeledPrice
+from aiohttp import ClientSession, ClientTimeout, web
 from pydantic import BaseModel, ConfigDict, EmailStr, ValidationError, constr, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -33,8 +33,8 @@ from bot.app.web.webapp_auth import (
     create_signed_telegram_oauth_state,
     create_telegram_oauth_nonce,
     create_webapp_session_token,
-    validate_telegram_oauth_id_token,
     validate_telegram_login_widget_data,
+    validate_telegram_oauth_id_token,
     validate_telegram_webapp_init_data,
     verify_signed_telegram_oauth_state,
     verify_telegram_oauth_nonce,
@@ -51,8 +51,8 @@ from bot.services.severpay_service import SeverPayService
 from bot.services.subscription_service import SubscriptionService
 from bot.services.yookassa_service import YooKassaService
 from bot.utils.config_link import prepare_config_links
-from bot.utils.text_sanitizer import sanitize_display_name, sanitize_username
 from bot.utils.request_security import request_client_ip
+from bot.utils.text_sanitizer import sanitize_display_name, sanitize_username
 from config.settings import Settings
 from db.dal import payment_dal, subscription_dal, user_dal
 from db.dal.user_dal import UserMergeConflictError
@@ -146,6 +146,7 @@ class WebAppDeviceDisconnectPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     token: constr(min_length=8, max_length=128)
+
 
 _SHARED_HTTP_SESSION: Optional[ClientSession] = None
 _SHARED_HTTP_SESSION_LOCK = asyncio.Lock()
@@ -468,7 +469,9 @@ async def _fetch_webapp_logo(logo_url: str) -> Optional[Tuple[bytes, str]]:
                 )
                 return None
 
-            content_type = (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+            content_type = (
+                (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+            )
             if content_type and not content_type.startswith("image/"):
                 logger.warning(
                     "WEBAPP_LOGO_URL returned non-image content type %s; keeping the logo hidden.",
@@ -607,7 +610,7 @@ async def _csrf_protection_middleware(request: web.Request, handler):
     header = request.headers.get("Authorization", "")
     prefix = "Bearer "
     if header.startswith(prefix):
-        if verify_webapp_session_token(settings, header[len(prefix):].strip()):
+        if verify_webapp_session_token(settings, header[len(prefix) :].strip()):
             return await handler(request)
 
     if (
@@ -617,11 +620,7 @@ async def _csrf_protection_middleware(request: web.Request, handler):
     ):
         csrf_cookie = request.cookies.get(WEBAPP_CSRF_COOKIE_NAME, "")
         csrf_header = request.headers.get(WEBAPP_CSRF_HEADER_NAME, "")
-        if (
-            not csrf_cookie
-            or not csrf_header
-            or not hmac.compare_digest(csrf_header, csrf_cookie)
-        ):
+        if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_header, csrf_cookie):
             return _json_error(403, "csrf_failed", "Invalid CSRF token")
 
     return await handler(request)
@@ -714,7 +713,11 @@ async def _enforce_webapp_rate_limit(
     action: str,
 ) -> Optional[web.Response]:
     settings: Settings = request.app["settings"]
-    ip_address = request_client_ip(request, trusted_proxies=settings.trusted_proxies) or request.remote or "unknown"
+    ip_address = (
+        request_client_ip(request, trusted_proxies=settings.trusted_proxies)
+        or request.remote
+        or "unknown"
+    )
     key = f"{action}:{ip_address}:{int(user_id)}"
     buckets: Dict[str, deque[float]] = request.app["webapp_rate_limit_buckets"]
     lock: asyncio.Lock = request.app["webapp_rate_limit_lock"]
@@ -728,10 +731,14 @@ async def _enforce_webapp_rate_limit(
             buckets.pop(key, None)
             bucket = buckets.setdefault(key, deque())
         if len(bucket) >= WEBAPP_RATE_LIMIT_MAX_REQUESTS:
-            retry_after = max(
-                1,
-                int(WEBAPP_RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])),
-            ) if bucket else WEBAPP_RATE_LIMIT_WINDOW_SECONDS
+            retry_after = (
+                max(
+                    1,
+                    int(WEBAPP_RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])),
+                )
+                if bucket
+                else WEBAPP_RATE_LIMIT_WINDOW_SECONDS
+            )
             return web.json_response(
                 {
                     "ok": False,
@@ -749,9 +756,7 @@ async def _enforce_webapp_rate_limit(
 async def js_asset_route(request: web.Request) -> web.Response:
     asset_hash = request.match_info.get("asset_hash")
     filename = (
-        f"subscription_webapp.min.{asset_hash}.js"
-        if asset_hash
-        else "subscription_webapp.js"
+        f"subscription_webapp.min.{asset_hash}.js" if asset_hash else "subscription_webapp.js"
     )
     response = await _serve_template_asset(
         request,
@@ -799,7 +804,7 @@ async def index_route(request: web.Request) -> web.Response:
     html = html.replace(
         WEBAPP_CONFIG_PLACEHOLDER,
         (
-            f"<script id=\"webapp-config\" type=\"application/json\" nonce=\"{nonce}\">"
+            f'<script id="webapp-config" type="application/json" nonce="{nonce}">'
             + json.dumps(config, ensure_ascii=False, separators=(",", ":"))
             + "</script>"
         ),
@@ -807,7 +812,7 @@ async def index_route(request: web.Request) -> web.Response:
     html = html.replace(
         WEBAPP_I18N_PLACEHOLDER,
         (
-            f"<script id=\"i18n\" type=\"application/json\" nonce=\"{nonce}\">"
+            f'<script id="i18n" type="application/json" nonce="{nonce}">'
             + json.dumps(i18n_payload, ensure_ascii=False, separators=(",", ":"))
             + "</script>"
         ),
@@ -1062,7 +1067,7 @@ def _strip_marked_block(html: str, start_marker: str, end_marker: str) -> str:
     end = html.find(end_marker, start)
     if end == -1:
         return html[:start]
-    return html[:start] + html[end + len(end_marker):]
+    return html[:start] + html[end + len(end_marker) :]
 
 
 async def auth_token_route(request: web.Request) -> web.Response:
@@ -1110,7 +1115,7 @@ async def auth_token_route(request: web.Request) -> web.Response:
                 )
             authenticated_user_id = int(db_user.user_id)
             await session.commit()
-        except Exception as exc:
+        except Exception:
             await session.rollback()
             logger.exception("WebApp auth failed")
             return _json_error(500, "auth_failed", "Auth failed")
@@ -1216,7 +1221,7 @@ async def email_auth_verify_route(request: web.Request) -> web.Response:
                 return _json_error(403, "banned", "Access denied")
 
             await session.commit()
-        except Exception as exc:
+        except Exception:
             await session.rollback()
             logger.exception("Email WebApp auth failed")
             return _json_error(500, "auth_failed", "Auth failed")
@@ -1441,8 +1446,7 @@ async def account_email_verify_route(request: web.Request) -> web.Response:
                 await session.rollback()
                 return _json_error(403, "access_denied", "Access denied")
             should_notify_email_linked = (
-                bool(_telegram_id_for_user(current_user))
-                and not current_user.email
+                bool(_telegram_id_for_user(current_user)) and not current_user.email
             )
 
             existing_email_user = await user_dal.get_user_by_email(session, email)
@@ -1473,9 +1477,7 @@ async def account_email_verify_route(request: web.Request) -> web.Response:
             if merge_notice:
                 merge_end_date_raw = merge_notice.get("final_end_date")
                 merge_end_date = (
-                    datetime.fromisoformat(merge_end_date_raw)
-                    if merge_end_date_raw
-                    else None
+                    datetime.fromisoformat(merge_end_date_raw) if merge_end_date_raw else None
                 )
                 await _sync_panel_identity_for_user(
                     request,
@@ -1484,7 +1486,9 @@ async def account_email_verify_route(request: web.Request) -> web.Response:
                 )
                 # Best-effort cleanup of the removed panel account after the DB merge.
                 if source_panel_uuid and final_panel_uuid and source_panel_uuid != final_panel_uuid:
-                    subscription_service: SubscriptionService = request.app.get("subscription_service")
+                    subscription_service: SubscriptionService = request.app.get(
+                        "subscription_service"
+                    )
                     if subscription_service and subscription_service.panel_service:
                         try:
                             await subscription_service.panel_service.delete_user_from_panel(
@@ -1525,7 +1529,7 @@ async def account_email_verify_route(request: web.Request) -> web.Response:
         except UserMergeConflictError as exc:
             await session.rollback()
             return _json_error(409, "account_merge_conflict", str(exc))
-        except Exception as exc:
+        except Exception:
             await session.rollback()
             logger.exception("Email account link failed")
             return _json_error(500, "link_failed", "Link failed")
@@ -1582,10 +1586,9 @@ async def account_telegram_link_route(request: web.Request) -> web.Response:
             if not current_user_before_link or current_user_before_link.is_banned:
                 await session.rollback()
                 return _json_error(403, "access_denied", "Access denied")
-            should_notify_telegram_linked = (
-                bool(current_user_before_link.email)
-                and not _telegram_id_for_user(current_user_before_link)
-            )
+            should_notify_telegram_linked = bool(
+                current_user_before_link.email
+            ) and not _telegram_id_for_user(current_user_before_link)
             source_panel_uuid = current_user_before_link.panel_user_uuid
 
             db_user = await _link_telegram_to_user(
@@ -1618,9 +1621,7 @@ async def account_telegram_link_route(request: web.Request) -> web.Response:
             if merge_notice:
                 merge_end_date_raw = merge_notice.get("final_end_date")
                 merge_end_date = (
-                    datetime.fromisoformat(merge_end_date_raw)
-                    if merge_end_date_raw
-                    else None
+                    datetime.fromisoformat(merge_end_date_raw) if merge_end_date_raw else None
                 )
                 await _sync_panel_identity_for_user(
                     request,
@@ -1629,7 +1630,9 @@ async def account_telegram_link_route(request: web.Request) -> web.Response:
                 )
                 # Best-effort cleanup of the removed panel account after the DB merge.
                 if source_panel_uuid and final_panel_uuid and source_panel_uuid != final_panel_uuid:
-                    subscription_service: SubscriptionService = request.app.get("subscription_service")
+                    subscription_service: SubscriptionService = request.app.get(
+                        "subscription_service"
+                    )
                     if subscription_service and subscription_service.panel_service:
                         try:
                             await subscription_service.panel_service.delete_user_from_panel(
@@ -1670,7 +1673,7 @@ async def account_telegram_link_route(request: web.Request) -> web.Response:
         except UserMergeConflictError as exc:
             await session.rollback()
             return _json_error(409, "account_merge_conflict", str(exc))
-        except Exception as exc:
+        except Exception:
             await session.rollback()
             logger.exception("Telegram account link failed")
             return _json_error(500, "link_failed", "Link failed")
@@ -1802,7 +1805,7 @@ async def apply_promo_route(request: web.Request) -> web.Response:
                     "end_date_text": end_date.strftime("%d.%m.%Y %H:%M") if end_date else None,
                 }
             )
-        except Exception as exc:
+        except Exception:
             await session.rollback()
             logger.exception("WebApp promo apply failed")
             return _json_error(500, "promo_apply_failed", "Promo apply failed")
@@ -1840,16 +1843,24 @@ async def create_payment_route(request: web.Request) -> web.Response:
         except Exception:
             return _json_error(400, "invalid_plan", "Tariff is not available")
         try:
-            device_count = int(float(
-                payment_payload.device_count
-                if payment_payload.device_count is not None
-                else payment_payload.months
-            ))
+            device_count = int(
+                float(
+                    payment_payload.device_count
+                    if payment_payload.device_count is not None
+                    else payment_payload.months
+                )
+            )
         except (TypeError, ValueError):
             return _json_error(400, "invalid_plan", "Invalid device package")
         packages = tariff.hwid_device_packages
-        rub_packages = {int(package.count): float(package.price) for package in (packages.rub if packages else [])}
-        stars_packages = {int(package.count): int(float(package.price)) for package in (packages.stars if packages else [])}
+        rub_packages = {
+            int(package.count): float(package.price)
+            for package in (packages.rub if packages else [])
+        }
+        stars_packages = {
+            int(package.count): int(float(package.price))
+            for package in (packages.stars if packages else [])
+        }
         price = rub_packages.get(device_count)
         stars_price = stars_packages.get(device_count)
         if price is None and method != "stars":
@@ -1879,12 +1890,20 @@ async def create_payment_route(request: web.Request) -> web.Response:
             if requested_sale_mode == "premium_topup"
             else tariffs_config.topup_packages_for(tariff)
         )
-        rub_packages = {float(package.gb): float(package.price) for package in (packages.rub if packages else [])}
-        stars_packages = {float(package.gb): int(float(package.price)) for package in (packages.stars if packages else [])}
+        rub_packages = {
+            float(package.gb): float(package.price)
+            for package in (packages.rub if packages else [])
+        }
+        stars_packages = {
+            float(package.gb): int(float(package.price))
+            for package in (packages.stars if packages else [])
+        }
         package_key = _resolve_numeric_option_key(rub_packages, traffic_gb)
         stars_package_key = _resolve_numeric_option_key(stars_packages, traffic_gb)
         price = rub_packages.get(package_key) if package_key is not None else None
-        stars_price = stars_packages.get(stars_package_key) if stars_package_key is not None else None
+        stars_price = (
+            stars_packages.get(stars_package_key) if stars_package_key is not None else None
+        )
         if price is None and method != "stars":
             return _json_error(400, "invalid_plan", "Traffic package is not available")
         if method == "stars" and (stars_price is None or int(stars_price) <= 0):
@@ -1924,9 +1943,7 @@ async def create_payment_route(request: web.Request) -> web.Response:
             stars_package_key = _resolve_numeric_option_key(stars_packages, traffic_gb)
             price = rub_packages.get(package_key) if package_key is not None else None
             stars_price = (
-                stars_packages.get(stars_package_key)
-                if stars_package_key is not None
-                else None
+                stars_packages.get(stars_package_key) if stars_package_key is not None else None
             )
             if price is None and method != "stars":
                 return _json_error(400, "invalid_plan", "Traffic package is not available")
@@ -1963,7 +1980,9 @@ async def create_payment_route(request: web.Request) -> web.Response:
         if traffic_gb <= 0:
             return _json_error(400, "invalid_plan", "Invalid traffic package")
         package_key = _resolve_numeric_option_key(cached["traffic_packages"], traffic_gb)
-        stars_package_key = _resolve_numeric_option_key(cached["stars_traffic_packages"], traffic_gb)
+        stars_package_key = _resolve_numeric_option_key(
+            cached["stars_traffic_packages"], traffic_gb
+        )
         price = cached["traffic_packages"].get(package_key) if package_key is not None else None
         stars_price = (
             cached["stars_traffic_packages"].get(stars_package_key)
@@ -2052,7 +2071,11 @@ async def activate_trial_route(request: web.Request) -> web.Response:
         i18n_instance = request.app.get("i18n")
         if settings.LOG_TRIAL_ACTIVATIONS and i18n_instance:
             try:
-                notification_service = NotificationService(request.app["bot"], settings, i18n_instance)
+                from bot.services.notification_service import NotificationService
+
+                notification_service = NotificationService(
+                    request.app["bot"], settings, i18n_instance
+                )
                 await notification_service.notify_trial_activation(user_id, end_date)
             except Exception:
                 logger.exception("Failed to send WebApp trial activation notification")
@@ -2072,7 +2095,9 @@ async def activate_trial_route(request: web.Request) -> web.Response:
                 "activated": True,
                 "days": activation_result.get("days", settings.TRIAL_DURATION_DAYS),
                 "end_date": end_date.isoformat() if isinstance(end_date, datetime) else None,
-                "end_date_text": _format_webapp_datetime(end_date) if isinstance(end_date, datetime) else None,
+                "end_date_text": _format_webapp_datetime(end_date)
+                if isinstance(end_date, datetime)
+                else None,
                 "traffic_gb": activation_result.get("traffic_gb", settings.TRIAL_TRAFFIC_LIMIT_GB),
                 "config_link": config_link,
                 "connect_url": connect_url or config_link,
@@ -2095,9 +2120,13 @@ async def tariff_topup_options_route(request: web.Request) -> web.Response:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or db_user.is_banned:
             return _json_error(403, "access_denied", "Access denied")
-        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        sub = await subscription_dal.get_active_subscription_by_user_id(
+            session, user_id, db_user.panel_user_uuid
+        )
         if not sub or not sub.tariff_key:
-            return _json_error(400, "subscription_required", "Active tariff subscription is required")
+            return _json_error(
+                400, "subscription_required", "Active tariff subscription is required"
+            )
         lang = db_user.language_code or settings.DEFAULT_LANGUAGE
         tariff = config.require(sub.tariff_key)
         plans = (
@@ -2105,14 +2134,18 @@ async def tariff_topup_options_route(request: web.Request) -> web.Response:
             if topup_kind in {"all", "regular"}
             else []
         )
-        premium_plans = _serialize_topup_packages(
-            settings,
-            tariff,
-            tariff.premium_topup_packages,
-            lang,
-            sale_mode="premium_topup",
-            title_prefix=f"{tariff.premium_name(lang)} ",
-        ) if topup_kind in {"all", "premium"} and tariff.premium_squad_uuids else []
+        premium_plans = (
+            _serialize_topup_packages(
+                settings,
+                tariff,
+                tariff.premium_topup_packages,
+                lang,
+                sale_mode="premium_topup",
+                title_prefix=f"{tariff.premium_name(lang)} ",
+            )
+            if topup_kind in {"all", "premium"} and tariff.premium_squad_uuids
+            else []
+        )
         premium_bonus_bytes = int(getattr(sub, "premium_bonus_bytes", 0) or 0)
         premium_unlimited_override = bool(getattr(sub, "premium_unlimited_override", False))
         premium_limit_bytes = (
@@ -2129,8 +2162,12 @@ async def tariff_topup_options_route(request: web.Request) -> web.Response:
                 "tariff_name": tariff.name(lang),
                 "topup_kind": topup_kind,
                 "premium_title": tariff.premium_name(lang),
-                "traffic_percent": _traffic_percent(sub.traffic_used_bytes, sub.traffic_limit_bytes),
-                "premium_traffic_percent": 0 if premium_unlimited_override else _traffic_percent(
+                "traffic_percent": _traffic_percent(
+                    sub.traffic_used_bytes, sub.traffic_limit_bytes
+                ),
+                "premium_traffic_percent": 0
+                if premium_unlimited_override
+                else _traffic_percent(
                     sub.premium_used_bytes,
                     premium_limit_bytes,
                 ),
@@ -2163,9 +2200,13 @@ async def tariff_change_options_route(request: web.Request) -> web.Response:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or db_user.is_banned:
             return _json_error(403, "access_denied", "Access denied")
-        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        sub = await subscription_dal.get_active_subscription_by_user_id(
+            session, user_id, db_user.panel_user_uuid
+        )
         if not sub or not sub.tariff_key:
-            return _json_error(400, "subscription_required", "Active tariff subscription is required")
+            return _json_error(
+                400, "subscription_required", "Active tariff subscription is required"
+            )
         lang = db_user.language_code or settings.DEFAULT_LANGUAGE
         current = config.require(sub.tariff_key)
         targets = []
@@ -2241,14 +2282,20 @@ async def tariff_change_payment_route(request: web.Request) -> web.Response:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or db_user.is_banned:
             return _json_error(403, "access_denied", "Access denied")
-        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        sub = await subscription_dal.get_active_subscription_by_user_id(
+            session, user_id, db_user.panel_user_uuid
+        )
         if not sub:
-            return _json_error(400, "subscription_required", "Active tariff subscription is required")
+            return _json_error(
+                400, "subscription_required", "Active tariff subscription is required"
+            )
         target = config.require(tariff_key)
         options = subscription_service.calculate_tariff_switch_options(sub, target)
         price = float(options.get("paid_diff_rub") or 0)
         if price <= 0:
-            return _json_error(400, "payment_not_required", "Payment is not required for this tariff change")
+            return _json_error(
+                400, "payment_not_required", "Payment is not required for this tariff change"
+            )
         return await _create_subscription_payment(
             request=request,
             session=session,
@@ -2299,7 +2346,9 @@ async def devices_route(request: web.Request) -> web.Response:
             "current_devices": len(devices),
             "max_devices": max_devices,
             "max_devices_label": _format_devices_limit(max_devices),
-            "devices": [_serialize_device(device, index) for index, device in enumerate(devices, start=1)],
+            "devices": [
+                _serialize_device(device, index) for index, device in enumerate(devices, start=1)
+            ],
         }
     )
 
@@ -2319,7 +2368,9 @@ async def disconnect_device_route(request: web.Request) -> web.Response:
         return _json_error(404, "devices_disabled", "Devices section is disabled")
 
     payload = await _read_json(request)
-    disconnect_payload, validation_error = _validate_model_payload(WebAppDeviceDisconnectPayload, payload)
+    disconnect_payload, validation_error = _validate_model_payload(
+        WebAppDeviceDisconnectPayload, payload
+    )
     if validation_error:
         return validation_error
     token = str(disconnect_payload.token or "").strip()
@@ -2379,9 +2430,13 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or db_user.is_banned:
             return _json_error(403, "access_denied", "Access denied")
-        sub = await subscription_dal.get_active_subscription_by_user_id(session, user_id, db_user.panel_user_uuid)
+        sub = await subscription_dal.get_active_subscription_by_user_id(
+            session, user_id, db_user.panel_user_uuid
+        )
         if not sub or not sub.tariff_key:
-            return _json_error(400, "subscription_required", "Active tariff subscription is required")
+            return _json_error(
+                400, "subscription_required", "Active tariff subscription is required"
+            )
         tariff = config.require(sub.tariff_key)
         active = await subscription_service.get_active_subscription_details(session, user_id)
         plans = _serialize_hwid_device_packages(
@@ -2448,7 +2503,11 @@ def _validation_error_response(exc: ValidationError) -> web.Response:
         message_lower = message.lower()
 
         if field == "email":
-            if ("too_long" in message_lower or "too long" in message_lower or error_type == "string_too_long"):
+            if (
+                "too_long" in message_lower
+                or "too long" in message_lower
+                or error_type == "string_too_long"
+            ):
                 return _json_error(400, "email_too_long", "Email is too long")
             return _json_error(400, "invalid_email", "Invalid email")
 
@@ -2541,7 +2600,7 @@ def _extract_authenticated_user_id(request: web.Request) -> Optional[int]:
     header = request.headers.get("Authorization", "")
     prefix = "Bearer "
     if header.startswith(prefix):
-        user_id = verify_webapp_session_token(settings, header[len(prefix):].strip())
+        user_id = verify_webapp_session_token(settings, header[len(prefix) :].strip())
         if user_id:
             return user_id
 
@@ -2595,7 +2654,7 @@ async def _request_email_code(
                 )
             await session.commit()
             return web.json_response({"ok": True})
-        except Exception as exc:
+        except Exception:
             await session.rollback()
             logger.exception("Failed to send email verification code")
             return _json_error(502, "email_send_failed", "Failed to send email")
@@ -2716,7 +2775,9 @@ def _telegram_avatar_is_stale(avatar: Optional[UserTelegramAvatar]) -> bool:
     updated_at = avatar.updated_at
     if updated_at.tzinfo is None:
         updated_at = updated_at.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - updated_at).total_seconds() >= WEBAPP_TELEGRAM_AVATAR_REFRESH_SECONDS
+    return (
+        datetime.now(timezone.utc) - updated_at
+    ).total_seconds() >= WEBAPP_TELEGRAM_AVATAR_REFRESH_SECONDS
 
 
 def _telegram_avatar_etag(avatar: UserTelegramAvatar) -> str:
@@ -2730,7 +2791,11 @@ def _telegram_avatar_url(avatar: Optional[UserTelegramAvatar]) -> str:
     updated_at = avatar.updated_at
     if updated_at and updated_at.tzinfo is None:
         updated_at = updated_at.replace(tzinfo=timezone.utc)
-    version = int(updated_at.timestamp()) if updated_at else hashlib.sha256(bytes(avatar.image_bytes)).hexdigest()[:8]
+    version = (
+        int(updated_at.timestamp())
+        if updated_at
+        else hashlib.sha256(bytes(avatar.image_bytes)).hexdigest()[:8]
+    )
     return f"/api/account/avatar?v={version}"
 
 
@@ -2742,7 +2807,8 @@ def _select_compact_telegram_photo_size(sizes: List[Any]) -> Optional[Any]:
     return min(
         candidates,
         key=lambda size: (
-            int(getattr(size, "file_size", 0) or 0) or int(getattr(size, "width", 0) or 0) * int(getattr(size, "height", 0) or 0),
+            int(getattr(size, "file_size", 0) or 0)
+            or int(getattr(size, "width", 0) or 0) * int(getattr(size, "height", 0) or 0),
             int(getattr(size, "width", 0) or 0),
         ),
     )
@@ -2757,7 +2823,9 @@ def _telegram_file_content_type(file_path: Optional[str]) -> str:
     return "image/jpeg"
 
 
-async def _fetch_compact_telegram_avatar(bot: Bot, telegram_id: int) -> Optional[Tuple[bytes, str, Optional[str]]]:
+async def _fetch_compact_telegram_avatar(
+    bot: Bot, telegram_id: int
+) -> Optional[Tuple[bytes, str, Optional[str]]]:
     photos = await bot.get_user_profile_photos(user_id=telegram_id, limit=1)
     if not photos or not photos.photos:
         return None
@@ -2772,7 +2840,11 @@ async def _fetch_compact_telegram_avatar(bot: Bot, telegram_id: int) -> Optional
     body = destination.getvalue()
     if not body or len(body) > WEBAPP_TELEGRAM_AVATAR_MAX_BYTES:
         return None
-    return body, _telegram_file_content_type(file_info.file_path), getattr(photo_size, "file_unique_id", None)
+    return (
+        body,
+        _telegram_file_content_type(file_info.file_path),
+        getattr(photo_size, "file_unique_id", None),
+    )
 
 
 async def _ensure_cached_telegram_avatar(
@@ -2815,7 +2887,9 @@ def _apply_telegram_profile_to_user(
     telegram_user: Dict[str, Any],
     settings: Settings,
 ) -> None:
-    language_code = telegram_user.get("language_code") or user.language_code or settings.DEFAULT_LANGUAGE
+    language_code = (
+        telegram_user.get("language_code") or user.language_code or settings.DEFAULT_LANGUAGE
+    )
     if language_code not in {"ru", "en"}:
         language_code = user.language_code or settings.DEFAULT_LANGUAGE
 
@@ -2852,9 +2926,7 @@ async def _link_telegram_to_user(
             and existing_telegram_user.email
             and current_user.email != existing_telegram_user.email
         ):
-            raise UserMergeConflictError(
-                "Telegram account is already linked to a different email."
-            )
+            raise UserMergeConflictError("Telegram account is already linked to a different email.")
         merged_user = await user_dal.merge_users(
             session,
             source_user_id=current_user.user_id,
@@ -2866,7 +2938,11 @@ async def _link_telegram_to_user(
         return merged_user
 
     if not existing_telegram_user and int(current_user.user_id) < 0:
-        language_code = telegram_user.get("language_code") or current_user.language_code or settings.DEFAULT_LANGUAGE
+        language_code = (
+            telegram_user.get("language_code")
+            or current_user.language_code
+            or settings.DEFAULT_LANGUAGE
+        )
         if language_code not in {"ru", "en"}:
             language_code = current_user.language_code or settings.DEFAULT_LANGUAGE
         target_user, _ = await user_dal.create_user(
@@ -3051,11 +3127,7 @@ async def _ensure_user_from_telegram(
         setattr(db_user, "_webapp_created", bool(created))
         return db_user
 
-    changed = {
-        key: value
-        for key, value in update_data.items()
-        if getattr(db_user, key) != value
-    }
+    changed = {key: value for key, value in update_data.items() if getattr(db_user, key) != value}
     if changed:
         db_user = await user_dal.update_user(session, db_user.user_id, changed) or db_user
     return db_user
@@ -3075,9 +3147,7 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
                 content_type="application/json",
             )
 
-        active = await subscription_service.get_active_subscription_details(
-            session, user_id
-        )
+        active = await subscription_service.get_active_subscription_details(session, user_id)
         referral_code = await user_dal.ensure_referral_code(session, db_user)
         referral_service: Optional[ReferralService] = request.app.get("referral_service")
         bot_username = request.app.get("bot_username") or ""
@@ -3097,11 +3167,15 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             if referral_service
             else {"invited_count": 0, "purchased_count": 0}
         )
-        local_sub = await subscription_dal.get_active_subscription_by_user_id(
-            session,
-            user_id,
-            db_user.panel_user_uuid,
-        ) if db_user.panel_user_uuid else None
+        local_sub = (
+            await subscription_dal.get_active_subscription_by_user_id(
+                session,
+                user_id,
+                db_user.panel_user_uuid,
+            )
+            if db_user.panel_user_uuid
+            else None
+        )
         trial_available = bool(
             settings.TRIAL_ENABLED
             and settings.TRIAL_DURATION_DAYS > 0
@@ -3136,8 +3210,12 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             "webapp_link": webapp_referral_link,
             "invited_count": referral_stats.get("invited_count", 0),
             "purchased_count": referral_stats.get("purchased_count", 0),
-            "welcome_bonus_days": max(0, int(getattr(settings, "REFERRAL_WELCOME_BONUS_DAYS", 0) or 0)),
-            "one_bonus_per_referee": bool(getattr(settings, "REFERRAL_ONE_BONUS_PER_REFEREE", False)),
+            "welcome_bonus_days": max(
+                0, int(getattr(settings, "REFERRAL_WELCOME_BONUS_DAYS", 0) or 0)
+            ),
+            "one_bonus_per_referee": bool(
+                getattr(settings, "REFERRAL_ONE_BONUS_PER_REFEREE", False)
+            ),
             "bonus_details": _serialize_referral_bonus_details(settings, lang),
         },
         "plans": _serialize_plans(
@@ -3281,7 +3359,9 @@ def _serialize_subscription(
         "premium_limit_bytes": _coerce_int_or_none(active.get("premium_limit_bytes")),
         "premium_used_bytes": _coerce_int_or_none(active.get("premium_used_bytes")),
         "premium_baseline_bytes": _coerce_int_or_none(active.get("premium_baseline_bytes")),
-        "premium_topup_balance_bytes": _coerce_int_or_none(active.get("premium_topup_balance_bytes")),
+        "premium_topup_balance_bytes": _coerce_int_or_none(
+            active.get("premium_topup_balance_bytes")
+        ),
         "premium_topup_used_bytes": _coerce_int_or_none(active.get("premium_topup_used_bytes")),
         "premium_bonus_bytes": _coerce_int_or_none(active.get("premium_bonus_bytes")) or 0,
         "regular_bonus_bytes": _coerce_int_or_none(active.get("regular_bonus_bytes")) or 0,
@@ -3293,7 +3373,9 @@ def _serialize_subscription(
         "can_topup_traffic": can_topup_traffic,
         "can_topup_regular_traffic": can_topup_regular_traffic,
         "can_topup_premium_traffic": can_topup_premium_traffic,
-        "period_start_at": active.get("period_start_at").isoformat() if active.get("period_start_at") else None,
+        "period_start_at": active.get("period_start_at").isoformat()
+        if active.get("period_start_at")
+        else None,
         "is_throttled": bool(active.get("is_throttled")),
         "max_devices": _coerce_int_or_none(active.get("max_devices")),
         "base_hwid_device_limit": _coerce_int_or_none(active.get("base_hwid_device_limit")),
@@ -3357,7 +3439,9 @@ def _serialize_plans(
                 }
                 stars_packages = {
                     float(package.gb): int(float(package.price))
-                    for package in (tariff.traffic_packages.stars if tariff.traffic_packages else [])
+                    for package in (
+                        tariff.traffic_packages.stars if tariff.traffic_packages else []
+                    )
                 }
                 for traffic_gb in sorted(set(rub_packages) | set(stars_packages)):
                     price = rub_packages.get(traffic_gb)
@@ -3369,7 +3453,9 @@ def _serialize_plans(
                         **common,
                         "id": f"{tariff.key}:traffic:{_format_number_for_payload(traffic_value)}",
                         "sale_mode": "traffic_package",
-                        "months": int(traffic_value) if traffic_value.is_integer() else traffic_value,
+                        "months": int(traffic_value)
+                        if traffic_value.is_integer()
+                        else traffic_value,
                         "traffic_gb": traffic_value,
                         "price": float(price or 0),
                         "title": tariff.name(lang),
@@ -3405,7 +3491,9 @@ def _serialize_plans(
         return plans
 
     active_subscription_options = subscription_options or settings.subscription_options
-    active_stars_subscription_options = stars_subscription_options or settings.stars_subscription_options
+    active_stars_subscription_options = (
+        stars_subscription_options or settings.stars_subscription_options
+    )
     plans: List[Dict[str, Any]] = []
     for months in sorted(set(active_subscription_options) | set(active_stars_subscription_options)):
         price = active_subscription_options.get(months)
@@ -3442,8 +3530,13 @@ def _serialize_topup_packages(
     sale_mode: str = "topup",
     title_prefix: str = "",
 ) -> List[Dict[str, Any]]:
-    rub_packages = {float(package.gb): float(package.price) for package in (packages.rub if packages else [])}
-    stars_packages = {float(package.gb): int(float(package.price)) for package in (packages.stars if packages else [])}
+    rub_packages = {
+        float(package.gb): float(package.price) for package in (packages.rub if packages else [])
+    }
+    stars_packages = {
+        float(package.gb): int(float(package.price))
+        for package in (packages.stars if packages else [])
+    }
     plans: List[Dict[str, Any]] = []
     for traffic_gb in sorted(set(rub_packages) | set(stars_packages)):
         price = rub_packages.get(traffic_gb)
@@ -3462,7 +3555,9 @@ def _serialize_topup_packages(
             "price": float(price or 0),
             "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
             "title": f"{title_prefix}{_format_traffic_title(traffic_value, lang)}",
-            "subtitle": tariff.premium_name(lang) if sale_mode == "premium_topup" else tariff.name(lang),
+            "subtitle": tariff.premium_name(lang)
+            if sale_mode == "premium_topup"
+            else tariff.name(lang),
         }
         if stars_price is not None and int(stars_price) > 0:
             plan["stars_price"] = int(stars_price)
@@ -3476,8 +3571,13 @@ def _serialize_hwid_device_packages(
     packages: Optional[Any],
     lang: str,
 ) -> List[Dict[str, Any]]:
-    rub_packages = {int(package.count): float(package.price) for package in (packages.rub if packages else [])}
-    stars_packages = {int(package.count): int(float(package.price)) for package in (packages.stars if packages else [])}
+    rub_packages = {
+        int(package.count): float(package.price) for package in (packages.rub if packages else [])
+    }
+    stars_packages = {
+        int(package.count): int(float(package.price))
+        for package in (packages.stars if packages else [])
+    }
     plans: List[Dict[str, Any]] = []
     for count in sorted(set(rub_packages) | set(stars_packages)):
         price = rub_packages.get(count)
@@ -3595,19 +3695,45 @@ def _serialize_payment_methods(
     methods: List[Dict[str, Any]] = []
     for method in settings.payment_methods_order:
         method = method.lower()
-        if method == "severpay" and settings.SEVERPAY_ENABLED and _service_configured(app, "severpay_service"):
+        if (
+            method == "severpay"
+            and settings.SEVERPAY_ENABLED
+            and _service_configured(app, "severpay_service")
+        ):
             methods.append({"id": method, "name": labels[method]})
-        elif method == "freekassa" and settings.FREEKASSA_ENABLED and _service_configured(app, "freekassa_service"):
+        elif (
+            method == "freekassa"
+            and settings.FREEKASSA_ENABLED
+            and _service_configured(app, "freekassa_service")
+        ):
             methods.append({"id": method, "name": labels[method]})
-        elif method == "platega_sbp" and settings.PLATEGA_ENABLED and settings.PLATEGA_SBP_ENABLED and _service_configured(app, "platega_service"):
+        elif (
+            method == "platega_sbp"
+            and settings.PLATEGA_ENABLED
+            and settings.PLATEGA_SBP_ENABLED
+            and _service_configured(app, "platega_service")
+        ):
             methods.append({"id": method, "name": labels[method]})
-        elif method == "platega_crypto" and settings.PLATEGA_ENABLED and settings.PLATEGA_CRYPTO_ENABLED and _service_configured(app, "platega_service"):
+        elif (
+            method == "platega_crypto"
+            and settings.PLATEGA_ENABLED
+            and settings.PLATEGA_CRYPTO_ENABLED
+            and _service_configured(app, "platega_service")
+        ):
             methods.append({"id": method, "name": labels[method]})
-        elif method == "yookassa" and settings.YOOKASSA_ENABLED and _service_configured(app, "yookassa_service"):
+        elif (
+            method == "yookassa"
+            and settings.YOOKASSA_ENABLED
+            and _service_configured(app, "yookassa_service")
+        ):
             methods.append({"id": method, "name": labels[method]})
         elif method == "stars" and settings.STARS_ENABLED:
             methods.append({"id": method, "name": labels[method]})
-        elif method == "cryptopay" and settings.CRYPTOPAY_ENABLED and _service_configured(app, "cryptopay_service"):
+        elif (
+            method == "cryptopay"
+            and settings.CRYPTOPAY_ENABLED
+            and _service_configured(app, "cryptopay_service")
+        ):
             methods.append({"id": method, "name": labels[method]})
     return methods
 
@@ -3664,13 +3790,27 @@ async def _create_subscription_payment(
         if not settings.YOOKASSA_ENABLED:
             return _json_error(400, "payment_unavailable", "Payment method unavailable")
         return await _create_yookassa_payment(
-            request, session, user_id, months, price, description, sale_mode=sale_mode, traffic_gb=traffic_gb
+            request,
+            session,
+            user_id,
+            months,
+            price,
+            description,
+            sale_mode=sale_mode,
+            traffic_gb=traffic_gb,
         )
     if method == "freekassa":
         if not settings.FREEKASSA_ENABLED:
             return _json_error(400, "payment_unavailable", "Payment method unavailable")
         return await _create_freekassa_payment(
-            request, session, user_id, months, price, description, sale_mode=sale_mode, traffic_gb=traffic_gb
+            request,
+            session,
+            user_id,
+            months,
+            price,
+            description,
+            sale_mode=sale_mode,
+            traffic_gb=traffic_gb,
         )
     if method in ("platega", "platega_sbp", "platega_crypto"):
         if not settings.PLATEGA_ENABLED:
@@ -3680,13 +3820,28 @@ async def _create_subscription_payment(
         if method == "platega_crypto" and not settings.PLATEGA_CRYPTO_ENABLED:
             return _json_error(400, "payment_unavailable", "Payment method unavailable")
         return await _create_platega_payment(
-            request, session, user_id, months, price, description, variant=method, sale_mode=sale_mode, traffic_gb=traffic_gb
+            request,
+            session,
+            user_id,
+            months,
+            price,
+            description,
+            variant=method,
+            sale_mode=sale_mode,
+            traffic_gb=traffic_gb,
         )
     if method == "severpay":
         if not settings.SEVERPAY_ENABLED:
             return _json_error(400, "payment_unavailable", "Payment method unavailable")
         return await _create_severpay_payment(
-            request, session, user_id, months, price, description, sale_mode=sale_mode, traffic_gb=traffic_gb
+            request,
+            session,
+            user_id,
+            months,
+            price,
+            description,
+            sale_mode=sale_mode,
+            traffic_gb=traffic_gb,
         )
     if method == "cryptopay":
         service: CryptoPayService = request.app["cryptopay_service"]
@@ -3710,7 +3865,14 @@ async def _create_subscription_payment(
         if not settings.STARS_ENABLED or stars_price is None:
             return _json_error(400, "payment_unavailable", "Payment method unavailable")
         return await _create_stars_payment(
-            request, session, user_id, months, int(stars_price), description, sale_mode=sale_mode, traffic_gb=traffic_gb
+            request,
+            session,
+            user_id,
+            months,
+            int(stars_price),
+            description,
+            sale_mode=sale_mode,
+            traffic_gb=traffic_gb,
         )
 
     return _json_error(400, "payment_unavailable", "Payment method unavailable")
@@ -3786,7 +3948,9 @@ async def _create_yookassa_payment(
         )
         metadata = {
             "user_id": str(user_id),
-            "subscription_months": str(int(float(months)) if not traffic_sale and not hwid_devices_sale else 0),
+            "subscription_months": str(
+                int(float(months)) if not traffic_sale and not hwid_devices_sale else 0
+            ),
             "payment_db_id": str(payment.payment_id),
             "sale_mode": sale_mode,
             "source": "webapp",
@@ -3831,7 +3995,7 @@ async def _create_yookassa_payment(
                 "payment_id": payment.payment_id,
             }
         )
-    except Exception as exc:
+    except Exception:
         await session.rollback()
         logger.exception("YooKassa WebApp payment failed")
         return _json_error(502, "payment_failed", "Failed to create payment")
@@ -3901,7 +4065,7 @@ async def _create_freekassa_payment(
                 "payment_id": payment.payment_id,
             }
         )
-    except Exception as exc:
+    except Exception:
         await session.rollback()
         logger.exception("FreeKassa WebApp payment failed")
         return _json_error(502, "payment_failed", "Failed to create payment")
@@ -3948,14 +4112,18 @@ async def _create_platega_payment(
             purchased_gb=float(traffic_gb or months) if traffic_sale else None,
             purchased_hwid_devices=int(float(months)) if hwid_devices_sale else None,
         )
-        months_for_provider = int(float(months)) if not traffic_sale else int(float(traffic_gb or months))
+        months_for_provider = (
+            int(float(months)) if not traffic_sale else int(float(traffic_gb or months))
+        )
         payload = json.dumps(
             {
                 "payment_db_id": payment.payment_id,
                 "user_id": user_id,
                 "months": months_for_provider if not traffic_sale else 0,
                 "sale_mode": sale_mode,
-                "traffic_gb": _format_number_for_payload(traffic_gb or months) if traffic_sale else None,
+                "traffic_gb": _format_number_for_payload(traffic_gb or months)
+                if traffic_sale
+                else None,
                 "hwid_devices": int(float(months)) if hwid_devices_sale else None,
                 "source": "webapp",
                 "platega_variant": "crypto" if variant == "platega_crypto" else "sbp",
@@ -3972,10 +4140,14 @@ async def _create_platega_payment(
             payment_method=platega_method_id,
         )
         payment_url = (
-            response_data.get("redirect")
-            or response_data.get("url")
-            or response_data.get("paymentUrl")
-        ) if success else None
+            (
+                response_data.get("redirect")
+                or response_data.get("url")
+                or response_data.get("paymentUrl")
+            )
+            if success
+            else None
+        )
         provider_id = response_data.get("transactionId") or response_data.get("id")
         if provider_id:
             await payment_dal.update_provider_payment_and_status(
@@ -3999,7 +4171,7 @@ async def _create_platega_payment(
                 "payment_id": payment.payment_id,
             }
         )
-    except Exception as exc:
+    except Exception:
         await session.rollback()
         logger.exception("Platega WebApp payment failed")
         return _json_error(502, "payment_failed", "Failed to create payment")
@@ -4047,10 +4219,14 @@ async def _create_severpay_payment(
             description=description,
         )
         payment_url = (
-            response_data.get("url")
-            or response_data.get("payment_url")
-            or response_data.get("paymentUrl")
-        ) if success else None
+            (
+                response_data.get("url")
+                or response_data.get("payment_url")
+                or response_data.get("paymentUrl")
+            )
+            if success
+            else None
+        )
         provider_id = response_data.get("id") or response_data.get("uid")
         if provider_id:
             await payment_dal.update_provider_payment_and_status(
@@ -4071,7 +4247,7 @@ async def _create_severpay_payment(
                 "payment_id": payment.payment_id,
             }
         )
-    except Exception as exc:
+    except Exception:
         await session.rollback()
         logger.exception("SeverPay WebApp payment failed")
         return _json_error(502, "payment_failed", "Failed to create payment")
@@ -4143,7 +4319,7 @@ async def _create_stars_payment(
                 "payment_id": payment.payment_id,
             }
         )
-    except Exception as exc:
+    except Exception:
         await session.rollback()
         logger.exception("Stars WebApp payment failed")
         return _json_error(502, "payment_failed", "Failed to create invoice")
