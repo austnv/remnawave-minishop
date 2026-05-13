@@ -14,11 +14,18 @@ nano .env
 | `BOT_TOKEN` | Токен Telegram-бота. |
 | `ADMIN_IDS` | Telegram ID администраторов через запятую. |
 | `DEFAULT_LANGUAGE` | Язык по умолчанию для пользователей: `ru` или `en`. |
+| `DEFAULT_CURRENCY_SYMBOL` | Символ валюты по умолчанию в интерфейсе (например `RUB`, `USD`). |
 | `SUPPORT_LINK` | Ссылка на поддержку. |
+| `SERVER_STATUS_URL` | Ссылка на страницу статуса сервиса. |
+| `TERMS_OF_SERVICE_URL` | Ссылка на условия использования (отдельно от пользовательского соглашения). |
 | `PRIVACY_POLICY_URL` | Ссылка на политику конфиденциальности в Web App. |
 | `USER_AGREEMENT_URL` | Ссылка на пользовательское соглашение в Web App. |
 | `REQUIRED_CHANNEL_ID` | ID канала, на который пользователь должен подписаться перед использованием. |
 | `REQUIRED_CHANNEL_LINK` | Ссылка на канал для кнопки проверки подписки. |
+| `WEBHOOK_BASE_URL` | Публичный базовый URL для вебхуков (Telegram, платежи, панель). **Обязателен:** без него приложение не запускается. |
+| `TRUSTED_PROXIES` | Список IP или CIDR reverse proxy, которым доверяют заголовок `X-Forwarded-For` (через запятую). |
+| `START_COMMAND_DESCRIPTION` | Текст описания команды `/start` для меню Telegram (BotFather). |
+| `DISABLE_WELCOME_MESSAGE` | Если `true`, приветственное сообщение на `/start` не отправляется. |
 
 Если используется проверка подписки на канал, добавьте бота администратором в этот канал. После первой успешной проверки пользователь продолжает работу без повторной блокировки действий.
 
@@ -44,15 +51,22 @@ nano .env
 | `PAYMENT_METHODS_ORDER` | Порядок кнопок оплаты через запятую: `severpay`, `freekassa`, `platega`, `yookassa`, `stars`, `cryptopay`. |
 | `YOOKASSA_ENABLED` | Включает YooKassa. |
 | `YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` | Данные магазина YooKassa. |
+| `YOOKASSA_RETURN_URL` | URL возврата пользователя после оплаты. |
+| `YOOKASSA_DEFAULT_RECEIPT_EMAIL` | Email по умолчанию для чеков YooKassa. |
+| `YOOKASSA_VAT_CODE` | Код НДС для чеков. |
 | `YOOKASSA_AUTOPAYMENTS_ENABLED` | Включает автопродление через сохраненные способы оплаты YooKassa. |
 | `YOOKASSA_AUTOPAYMENTS_REQUIRE_CARD_BINDING` | Управляет обязательной привязкой карты при оплате. |
 | `FREEKASSA_ENABLED` | Включает FreeKassa. |
 | `FREEKASSA_MERCHANT_ID` / `FREEKASSA_API_KEY` / `FREEKASSA_SECOND_SECRET` | Данные FreeKassa и секрет уведомлений. |
 | `FREEKASSA_PAYMENT_IP` | Внешний IP сервера для запроса оплаты FreeKassa. |
 | `FREEKASSA_PAYMENT_METHOD_ID` | ID метода оплаты FreeKassa. |
+| `FREEKASSA_TRUSTED_IPS` | Список IP источников вебхуков FreeKassa (через запятую). |
 | `PLATEGA_ENABLED` | Включает Platega. |
+| `PLATEGA_BASE_URL` | Базовый URL API Platega. |
 | `PLATEGA_MERCHANT_ID` / `PLATEGA_SECRET` | Данные Platega. |
-| `PLATEGA_PAYMENT_METHOD` | ID способа оплаты Platega. |
+| `PLATEGA_PAYMENT_METHOD` | Общий ID метода в API Platega; при отдельных кнопках СБП/крипто может использоваться как fallback для метода СБП (см. `PLATEGA_SBP_METHOD`). |
+| `PLATEGA_SBP_ENABLED` / `PLATEGA_CRYPTO_ENABLED` | Отдельные кнопки «СБП» и «крипто» в Platega. |
+| `PLATEGA_SBP_METHOD` / `PLATEGA_CRYPTO_METHOD` | ID методов Platega для СБП и крипто. |
 | `PLATEGA_RETURN_URL` / `PLATEGA_FAILED_URL` | URL возврата после оплаты или ошибки. |
 | `SEVERPAY_ENABLED` | Включает SeverPay. |
 | `SEVERPAY_MID` / `SEVERPAY_TOKEN` | Данные SeverPay. |
@@ -61,6 +75,9 @@ nano .env
 | `SEVERPAY_LIFETIME_MINUTES` | Время жизни платежной ссылки. |
 | `CRYPTOPAY_ENABLED` | Включает CryptoPay. |
 | `CRYPTOPAY_TOKEN` | Токен CryptoPay App. |
+| `CRYPTOPAY_NETWORK` | Сеть: `mainnet` или `testnet`. |
+| `CRYPTOPAY_CURRENCY_TYPE` | Тип валюты: `fiat` или `crypto`. |
+| `CRYPTOPAY_ASSET` | Актив (например `RUB`, `USDT`). |
 | `STARS_ENABLED` | Включает Telegram Stars. |
 
 Вебхуки платежных систем должны проксироваться на порт `WEB_SERVER_PORT`. Примеры маршрутов есть в [deployment.md](deployment.md).
@@ -79,7 +96,7 @@ nano .env
 
 Если файл из `TARIFFS_CONFIG_PATH` существует, бот использует каталог тарифов. Если файла нет, применяется конфигурация из переменных `.env`.
 
-В `docker-compose-dev.yml` каталог `./data` монтируется в контейнер как `/app/data`, чтобы Web App админка могла сохранять `data/tariffs.json`. Тот же каталог используется для кеша логотипа Web App (`data/webapp-logo`) и animated emoji (`data/webapp-emoji`). Если этот bind mount включен на Ubuntu-сервере, создайте подкаталоги и отдайте `data` UID `10001`, под которым работает приложение внутри контейнера:
+В штатном `docker-compose.yml` том `./data:/app/data` у сервиса приложения **закомментирован по умолчанию**. Раскомментируйте блок `volumes`, чтобы админка сохраняла `data/tariffs.json`, кеш логотипа Web App (`data/webapp-logo`) и animated emoji (`data/webapp-emoji`). Отдельный `docker-compose-dev.yml` в репозиторий не входит (может быть у вас локально); логика та же — монтирование `./data` в `/app/data`. Если bind mount включён на Ubuntu-сервере, создайте подкаталоги и отдайте `data` UID `10001`, под которым работает приложение внутри контейнера:
 
 ```bash
 mkdir -p data/webapp-logo data/webapp-emoji
@@ -90,7 +107,7 @@ chmod -R u+rwX data
 После изменения compose-файла или прав пересоздайте контейнер:
 
 ```bash
-docker compose -f docker-compose-dev.yml up -d --build --force-recreate
+docker compose up -d --build --force-recreate
 ```
 
 Переопределения из веб-админки сохраняются в БД и применяются поверх `.env` без перезапуска. Для платежных методов кнопка отображается только если соответствующий `*_ENABLED=true` и сервис настроен.
@@ -106,8 +123,14 @@ docker compose -f docker-compose-dev.yml up -d --build --force-recreate
 | `SUBSCRIPTION_MINI_APP_URL` | Публичный URL Web App. |
 | `WEBAPP_TITLE` | Заголовок Web App. |
 | `WEBAPP_PRIMARY_COLOR` | Основной цвет интерфейса. |
-| `WEBAPP_LOGO_URL` | URL логотипа Web App. |
+| `WEBAPP_LOGO_URL` | URL логотипа Web App; если пусто — показывается emoji из `WEBAPP_LOGO_EMOJI`. |
+| `WEBAPP_LOGO_EMOJI` | Emoji-заглушка вместо картинки логотипа. |
+| `WEBAPP_LOGO_EMOJI_FONT` | Набор/шрифт для отрисовки emoji (например `system`, `twemoji`, `noto-color-animated`). |
 | `WEBAPP_SESSION_SECRET` | HMAC-секрет сессий Web App. |
+| `WEBHOOK_SECRET_TOKEN` | Секретный токен, с которым Telegram шлёт обновления на вебхук. |
+| `WEBAPP_SESSION_TTL_SECONDS` | Время жизни сессии Web App. |
+| `WEBAPP_AUTH_MAX_AGE_SECONDS` | Максимальный возраст `initData` Telegram Mini App. |
+| `WEBAPP_LOGIN_TOKEN_TTL_SECONDS` | Время жизни ссылки «войти с другого устройства» / внешнего логина. |
 | `TELEGRAM_OAUTH_CLIENT_ID` / `TELEGRAM_OAUTH_CLIENT_SECRET` | Данные Telegram OAuth / OpenID Connect из BotFather. |
 | `TELEGRAM_OAUTH_REQUEST_ACCESS` | Дополнительные разрешения Telegram Login, например `write`. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FALLBACK_PORTS` | SMTP-подключение для email-кодов; резервные порты перебираются при ошибке основного. |
@@ -163,9 +186,60 @@ docker compose -f docker-compose-dev.yml up -d --build --force-recreate
 
 В режиме продажи трафика без JSON-каталога бонусы по периодам не отображаются, потому что покупка не привязана к сроку подписки.
 
+## Уведомления о подписке
+
+| Переменная | Назначение |
+| --- | --- |
+| `SUBSCRIPTION_NOTIFICATIONS_ENABLED` | Включает напоминания о подписке в Telegram. |
+| `SUBSCRIPTION_NOTIFY_ON_EXPIRE` | Уведомлять в день окончания. |
+| `SUBSCRIPTION_NOTIFY_AFTER_EXPIRE` | Уведомлять после окончания. |
+| `SUBSCRIPTION_NOTIFY_DAYS_BEFORE` | За сколько дней до окончания напоминать. |
+
+## Чеки самозанятого (LKNPD)
+
+Интеграция с API lknpd.nalog.ru использует переменные с префиксом **`NALOGO_`**:
+
+| Переменная | Назначение |
+| --- | --- |
+| `NALOGO_INN` | ИНН самозанятого. |
+| `NALOGO_PASSWORD` | Пароль для LKNPD / «Мой налог». |
+| `NALOGO_API_URL` | Базовый URL API (по умолчанию `https://lknpd.nalog.ru/api`). |
+| `NALOGO_RECEIPT_NAME_SUBSCRIPTION` | Название позиции чека для подписки; в тексте можно использовать `{months}`. |
+| `NALOGO_RECEIPT_NAME_TRAFFIC` | Название для пакета трафика; плейсхолдер `{gb}`. |
+
+Нужны **оба** поля `NALOGO_INN` и `NALOGO_PASSWORD`; иначе отправка чеков отключается (в логах будет предупреждение).
+
+## Happ crypt4 для ссылок подключения
+
+| Переменная | Назначение |
+| --- | --- |
+| `CRYPT4_ENABLED` | Включить шифрование ссылок happ crypt4. |
+| `CRYPT4_REDIRECT_URL` | Базовый URL редиректа для кнопки подключения (обёртка с query, например `?url=`). |
+
+## Логирование и уведомления в Telegram
+
+| Переменная | Назначение |
+| --- | --- |
+| `LOG_LEVEL` | Уровень логов: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
+| `LOGS_PAGE_SIZE` | Размер страницы журнала в админке. |
+| `LOG_CHAT_ID` | ID чата или группы для служебных уведомлений. |
+| `LOG_THREAD_ID` | ID топика в супергруппе (опционально). |
+| `LOG_NEW_USERS` | Уведомлять о новых регистрациях. |
+| `LOG_PAYMENTS` | Уведомлять об успешных платежах. |
+| `LOG_PROMO_ACTIVATIONS` | Уведомлять об активации промокодов. |
+| `LOG_TRIAL_ACTIVATIONS` | Уведомлять об активации пробного периода. |
+| `LOG_SUSPICIOUS_ACTIVITY` | Уведомлять о подозрительных попытках. |
+| `LOG_ADMIN_ACTIONS` | Писать в журнал админки действия пользователей из `ADMIN_IDS`. |
+
+Часть этих переключателей доступна для правки через Web App (allowlist в `bot/app/web/admin_settings_manifest.py`), см. [admin.md](admin.md).
+
+## Миниатюры inline-режима
+
+Превью для inline-результатов задаются `INLINE_REFERRAL_THUMBNAIL_URL`, `INLINE_USER_STATS_THUMBNAIL_URL`, `INLINE_FINANCIAL_STATS_THUMBNAIL_URL`, `INLINE_SYSTEM_STATS_THUMBNAIL_URL` (значения по умолчанию есть в `.env.example`).
+
 ## Секреты
 
-`WEBAPP_SESSION_SECRET` и `WEBHOOK_SECRET_TOKEN` могут генерироваться при старте, но для рабочего окружения их лучше задать явно. Иначе после рестарта сессии Web App станут невалидными, а Telegram webhook будет установлен с другим secret token.
+`WEBAPP_SESSION_SECRET` и `WEBHOOK_SECRET_TOKEN` могут генерироваться при старте, но для рабочего окружения их лучше задать явно. Иначе после рестарта сессии Web App станут невалидными, а Telegram получит новый `secret_token` для вебхука (старые запросы от API Telegram могут перестать проходить проверку до следующей переустановки вебхука).
 
 ```bash
 openssl rand -hex 32

@@ -26,7 +26,13 @@ SUBSCRIPTION_MINI_APP_URL=https://app.domain.com/
 WEBAPP_TITLE="Моя подписка"
 WEBAPP_PRIMARY_COLOR="#00fe7a"
 WEBAPP_LOGO_URL=
+WEBAPP_LOGO_EMOJI="🫥"
+WEBAPP_LOGO_EMOJI_FONT=system
 WEBAPP_SESSION_SECRET=<stable-random-secret>
+WEBHOOK_SECRET_TOKEN=<stable-random-secret>
+WEBAPP_SESSION_TTL_SECONDS=86400
+WEBAPP_AUTH_MAX_AGE_SECONDS=86400
+WEBAPP_LOGIN_TOKEN_TTL_SECONDS=600
 
 TELEGRAM_OAUTH_CLIENT_ID=<client-id-from-botfather>
 TELEGRAM_OAUTH_CLIENT_SECRET=<client-secret-from-botfather>
@@ -35,13 +41,15 @@ TELEGRAM_OAUTH_REQUEST_ACCESS=write
 SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_FALLBACK_PORTS=2525,465
+SMTP_STARTTLS=True
+SMTP_USE_SSL=False
 SMTP_USERNAME=<smtp-login>
 SMTP_PASSWORD=<smtp-password-or-key>
 SMTP_FROM_EMAIL=no-reply@domain.com
 SMTP_FROM_NAME=Remnawave Minishop
 ```
 
-Если `WEBAPP_LOGO_URL` пустой, логотип в Web App не показывается. Если SMTP-настройки не заполнены, вход по email скрывается.
+Если `WEBAPP_LOGO_URL` пустой, в шапке и на экране входа показывается запасной **emoji-логотип** (`WEBAPP_LOGO_EMOJI`) и при необходимости стиль отрисовки (`WEBAPP_LOGO_EMOJI_FONT`: например `system`, `noto-color`, `noto-color-animated`, `twemoji`). Если SMTP-настройки не заполнены, вход по email скрывается.
 
 ## Telegram-авторизация
 

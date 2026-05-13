@@ -158,7 +158,7 @@ Web App не должен проксироваться на `WEB_SERVER_PORT`.
 - `https://<webhook-domain>/webhook/cryptopay` -> `http://remnawave-minishop:<WEB_SERVER_PORT>/webhook/cryptopay`;
 - `https://<webhook-domain>/webhook/panel` -> `http://remnawave-minishop:<WEB_SERVER_PORT>/webhook/panel`.
 
-Telegram webhook устанавливается приложением, если задан `WEBHOOK_BASE_URL`. Путь формируется как `https://<webhook-domain>/<BOT_TOKEN>`.
+Telegram webhook устанавливается приложением, если задан `WEBHOOK_BASE_URL`. Полный URL — это базовый URL **без** токена в пути, с суффиксом **`/tg/webhook`** (например `https://webhook.domain.com/tg/webhook`). Прокси должен передавать на приложение POST-запросы по этому пути на `WEB_SERVER_PORT`.
 
 ## Nginx рядом с Remnawave
 
