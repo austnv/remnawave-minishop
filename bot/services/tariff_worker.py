@@ -357,25 +357,22 @@ class TariffTrafficWorker:
             should_limit = False
         else:
             should_limit = premium_used >= premium_limit
-        changed = (
-            int(sub.premium_baseline_bytes or 0) != premium_baseline
-            or int(sub.premium_topup_balance_bytes or 0) != premium_topup_balance
-            or int(getattr(sub, "premium_topup_used_bytes", 0) or 0) != premium_topup_used
-            or int(sub.premium_used_bytes or 0) != premium_used
-            or bool(sub.premium_is_limited) != should_limit
-            or getattr(sub, "premium_period_start_at", None) != premium_period_start
-        )
+        panel_needs_update = bool(sub.premium_is_limited) != should_limit
         desired_squads = self.subscription_service._panel_squads_for_tariff(
             tariff,
             include_premium=not should_limit,
         )
         desired_set = self._internal_squad_uuid_set(desired_squads)
         if isinstance(panel_user_dict, dict):
-            current_raw = panel_user_dict.get("activeInternalSquads") or panel_user_dict.get(
-                "active_internal_squads"
-            )
-            if desired_set != self._internal_squad_uuid_set(current_raw):
-                changed = True
+            current_known = False
+            current_raw = None
+            for key in ("activeInternalSquads", "active_internal_squads"):
+                if key in panel_user_dict:
+                    current_raw = panel_user_dict.get(key)
+                    current_known = True
+                    break
+            if current_known and desired_set != self._internal_squad_uuid_set(current_raw):
+                panel_needs_update = True
         sub.premium_baseline_bytes = premium_baseline
         sub.premium_topup_balance_bytes = premium_topup_balance
         sub.premium_topup_used_bytes = premium_topup_used
@@ -391,7 +388,7 @@ class TariffTrafficWorker:
                 premium_limit,
                 premium_period_start,
             )
-        if not changed:
+        if not panel_needs_update:
             return
 
         squads = desired_squads
