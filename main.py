@@ -9,6 +9,30 @@ from bot.main_bot import run_bot
 from config.settings import get_settings
 from db.database_setup import init_db, init_db_connection
 
+_STARTUP_BANNER = r"""
+              ~ ~ ~  r e m n a w a v e  ~ ~ ~
+
+  ███╗   ███╗██╗███╗   ██╗██╗███████╗██╗  ██╗ ██████╗ ██████╗
+  ████╗ ████║██║████╗  ██║██║██╔════╝██║  ██║██╔═══██╗██╔══██╗
+  ██╔████╔██║██║██╔██╗ ██║██║███████╗███████║██║   ██║██████╔╝
+  ██║╚██╔╝██║██║██║╚██╗██║██║╚════██║██╔══██║██║   ██║██╔═══╝
+  ██║ ╚═╝ ██║██║██║ ╚████║██║███████║██║  ██║╚██████╔╝██║
+  ╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝
+
+         https://github.com/3252a8/remnawave-minishop
+"""
+
+
+def _print_startup_banner() -> None:
+    # Bypass the logging formatter so the ASCII art renders without per-line
+    # timestamp/level prefixes mangling the box characters.
+    try:
+        sys.stdout.write(_STARTUP_BANNER + "\n")
+        sys.stdout.flush()
+    except Exception:
+        # Banner is purely cosmetic; never fail startup over it.
+        pass
+
 
 def _resolve_log_level(value: str) -> int:
     return getattr(logging, value.upper(), logging.INFO)
@@ -28,6 +52,7 @@ async def main():
 
 
 if __name__ == "__main__":
+    _print_startup_banner()
     load_dotenv()
     logging.basicConfig(
         level=_resolve_log_level(os.getenv("LOG_LEVEL", "INFO")),
