@@ -70,5 +70,12 @@ async def admin_settings_patch_route(request: web.Request) -> web.Response:
     if isinstance(cache, dict):
         cache["ts"] = 0.0
         cache["data"] = {}
+    if (
+        "WEBAPP_LOGO_URL" in updates
+        or "WEBAPP_LOGO_URL" in deletes
+        or "WEBAPP_LOGO_USE_EMOJI" in updates
+        or "WEBAPP_LOGO_USE_EMOJI" in deletes
+    ):
+        request.app["webapp_logo_cache"] = None
 
     return _ok({"applied": result.get("applied", 0), "reverted": result.get("reverted", 0)})

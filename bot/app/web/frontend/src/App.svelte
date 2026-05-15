@@ -87,6 +87,7 @@
     ...(MOCK ? MOCK.config : {}),
     ...(injectedConfig || {}),
   };
+  const themePreviewKey = String(CFG.themePreviewKey || query.get("theme_preview") || "").trim();
   const I18N = injectedI18n || {};
   let telegramSdkStatus = "idle";
   let telegramMiniAppInitData = "";
@@ -246,7 +247,7 @@
   $: brandEmojiFont = CFG.logoEmojiFont || "system";
   $: brand = normalizeBrand({
     title: brandTitle,
-    logoUrl: CFG.logoUrl,
+    logoUrl: CFG.logoUseEmoji ? "" : CFG.logoUrl,
     emoji: brandEmoji,
     emojiFont: brandEmojiFont,
   });
@@ -308,7 +309,11 @@
   $: user = data?.user || {};
   $: themesCatalog = data?.themes_catalog ||
     CFG.themesCatalog || { default_theme: "dark", themes: [] };
-  $: resolvedThemeKey = resolveEffectiveThemeKey(themesCatalog);
+  $: previewThemeAllowed = Boolean(themePreviewKey && (!data?.user || user?.is_admin));
+  $: previewThemeEntry = previewThemeAllowed
+    ? findThemeEntry(themesCatalog, themePreviewKey)
+    : null;
+  $: resolvedThemeKey = previewThemeEntry?.key || resolveEffectiveThemeKey(themesCatalog);
   $: activeThemeEntry = findThemeEntry(themesCatalog, resolvedThemeKey);
   $: darkThemeEntry = findThemeEntry(themesCatalog, "dark");
   $: effectiveThemeEntry =
@@ -870,12 +875,31 @@
     );
   }
 
-  async function handleAdminPersistedSaved() {
+  function adminPayloadHasLogoChange(options = {}) {
+    const keys = new Set([
+      ...Object.keys(options.updates || {}),
+      ...(Array.isArray(options.deletes) ? options.deletes : []),
+    ]);
+    return [
+      "WEBAPP_LOGO_URL",
+      "WEBAPP_LOGO_USE_EMOJI",
+      "WEBAPP_LOGO_EMOJI",
+      "WEBAPP_LOGO_EMOJI_FONT",
+    ].some((key) => keys.has(key));
+  }
+
+  async function handleAdminPersistedSaved(options = {}) {
     invalidateWebappTariffOptionCaches(billingStore);
     try {
       await loadData();
     } catch {
       // Admin save already succeeded; a later full refresh will pick up new settings or catalog.
+    }
+    const shouldReloadFrontend =
+      options?.reloadFrontend === true ||
+      (!options?.deferFrontendReload && adminPayloadHasLogoChange(options));
+    if (shouldReloadFrontend && typeof window !== "undefined") {
+      window.location.reload();
     }
   }
 

@@ -35,7 +35,7 @@
   import StatsSection from "./sections/StatsSection.svelte";
   import TariffEditorModal from "./sections/TariffEditorModal.svelte";
   import TariffsSection from "./sections/TariffsSection.svelte";
-  import ThemesSection from "./sections/ThemesSection.svelte";
+  import AppearanceSection from "./sections/AppearanceSection.svelte";
   import UserDetailModal from "./sections/UserDetailModal.svelte";
   import UsersSection from "./sections/UsersSection.svelte";
   import { createAdsStore } from "../lib/admin/stores/adsStore.js";
@@ -115,7 +115,7 @@
       label: at("nav_system", {}, "Система"),
       items: [
         { id: "tariffs", label: at("nav_tariffs", {}, "Тарифы"), icon: Coins },
-        { id: "themes", label: at("nav_themes", {}, "Темы"), icon: Paintbrush },
+        { id: "appearance", label: at("nav_appearance", {}, "Внешний вид"), icon: Paintbrush },
         { id: "settings", label: at("nav_settings", {}, "Настройки"), icon: Sliders },
       ],
     },
@@ -158,9 +158,9 @@
       title: at("section_tariffs_title", {}, "Тарифы"),
       subtitle: at("section_tariffs_subtitle", {}, "Каталог продаж, периоды, пакеты и лимиты"),
     },
-    themes: {
-      title: at("section_themes_title", {}, "Темы Web App"),
-      subtitle: at("section_themes_subtitle", {}, "Цвета, шрифты и темы оформления Mini App"),
+    appearance: {
+      title: at("section_appearance_title", {}, "Внешний вид"),
+      subtitle: at("section_appearance_subtitle", {}, "Логотип, темы и акцентные цвета Mini App"),
     },
     settings: {
       title: at("section_settings_title", {}, "Настройки приложения"),
@@ -646,8 +646,8 @@
             <TariffsSection {at} {fmtMoney} />
           {/if}
 
-          {#if active === "themes"}
-            <ThemesSection {at} {currentLang} />
+          {#if active === "appearance"}
+            <AppearanceSection {at} {currentLang} {onSettingsSaved} {brand} />
           {/if}
 
           {#if active === "settings"}

@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,22 @@ class ThemeTokens(BaseModel):
     admin_text: Optional[str] = None
     admin_muted: Optional[str] = None
     admin_dim: Optional[str] = None
+
+    @field_validator("accent")
+    @classmethod
+    def _normalize_accent_hex(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        raw = str(value).strip()
+        if not raw:
+            return None
+        match = re.fullmatch(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", raw)
+        if not match:
+            raise ValueError("accent must be a hex color (#RGB or #RRGGBB)")
+        hex_value = match.group(1).lower()
+        if len(hex_value) == 3:
+            hex_value = "".join(char * 2 for char in hex_value)
+        return f"#{hex_value}"
 
 
 class WebappTheme(BaseModel):
@@ -256,10 +272,13 @@ def _theme_sort_key(theme: WebappTheme, index: int) -> tuple[int, int]:
 
 
 def _sorted_themes(themes: List[WebappTheme]) -> List[WebappTheme]:
-    return [theme for _, theme in sorted(
-        ((_theme_sort_key(t, i), t) for i, t in enumerate(themes)),
-        key=lambda pair: pair[0],
-    )]
+    return [
+        theme
+        for _, theme in sorted(
+            ((_theme_sort_key(t, i), t) for i, t in enumerate(themes)),
+            key=lambda pair: pair[0],
+        )
+    ]
 
 
 def _themes_config_from_list(

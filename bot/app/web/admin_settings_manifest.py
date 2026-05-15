@@ -79,6 +79,7 @@ SETTINGS_MANIFEST: List[SettingField] = [
     SettingField(
         "WEBAPP_PRIMARY_COLOR", "color", "appearance", "Основной цвет", placeholder="#00fe7a"
     ),
+    SettingField("WEBAPP_LOGO_USE_EMOJI", "bool", "appearance", "Использовать эмоджи-логотип"),
     SettingField("WEBAPP_LOGO_URL", "url", "appearance", "URL логотипа"),
     SettingField("WEBAPP_LOGO_EMOJI", "string", "appearance", "Эмоджи-логотип", placeholder="🫥"),
     SettingField(

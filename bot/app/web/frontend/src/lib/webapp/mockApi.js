@@ -219,7 +219,73 @@ export async function mockApi(path, options = {}, context = {}) {
       catalog: clone(DEV_MOCK.config.themesCatalog),
     };
   }
-  if (path === "/admin/settings") return { ok: true, sections: [] };
+  if (path === "/admin/appearance/logo") {
+    return { ok: true, logo_url: "/webapp-uploaded-logo/logo-0000000000000000.png" };
+  }
+  if (path === "/admin/settings" && String(options.method || "GET").toUpperCase() === "PATCH") {
+    try {
+      const body = options?.body ? JSON.parse(String(options.body)) : {};
+      const updates = body.updates || {};
+      if (Object.prototype.hasOwnProperty.call(updates, "WEBAPP_LOGO_URL")) {
+        DEV_MOCK.config.logoUrl = updates.WEBAPP_LOGO_URL || "";
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, "WEBAPP_LOGO_USE_EMOJI")) {
+        DEV_MOCK.config.logoUseEmoji = Boolean(updates.WEBAPP_LOGO_USE_EMOJI);
+      }
+      if (updates.WEBAPP_LOGO_EMOJI) DEV_MOCK.config.logoEmoji = updates.WEBAPP_LOGO_EMOJI;
+      if (updates.WEBAPP_LOGO_EMOJI_FONT) {
+        DEV_MOCK.config.logoEmojiFont = updates.WEBAPP_LOGO_EMOJI_FONT;
+      }
+    } catch (_e) {
+      void _e;
+    }
+    return { ok: true, applied: 1, reverted: 0 };
+  }
+  if (path === "/admin/settings")
+    return {
+      ok: true,
+      sections: [
+        {
+          id: "appearance",
+          order: 2,
+          fields: [
+            {
+              key: "WEBAPP_LOGO_USE_EMOJI",
+              type: "bool",
+              section: "appearance",
+              label: "Emoji logo",
+              value: Boolean(DEV_MOCK.config.logoUseEmoji),
+            },
+            {
+              key: "WEBAPP_LOGO_URL",
+              type: "url",
+              section: "appearance",
+              label: "URL логотипа",
+              value: DEV_MOCK.config.logoUrl || "",
+            },
+            {
+              key: "WEBAPP_LOGO_EMOJI",
+              type: "string",
+              section: "appearance",
+              label: "Emoji",
+              value: DEV_MOCK.config.logoEmoji || "🫥",
+            },
+            {
+              key: "WEBAPP_LOGO_EMOJI_FONT",
+              type: "string",
+              section: "appearance",
+              label: "Emoji font",
+              value: DEV_MOCK.config.logoEmojiFont || "system",
+              choices: [
+                { value: "system", label: "Системный" },
+                { value: "noto-color", label: "Noto Color Emoji" },
+                { value: "noto-color-animated", label: "Noto Color Emoji Animated" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
   if (cleanPath.startsWith("/admin/"))
     return { ok: true, payments: [], promos: [], logs: [], campaigns: [], total: 0 };
   if (path === "/me") return clone(DEV_MOCK.data);

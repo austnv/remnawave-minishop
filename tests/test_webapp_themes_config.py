@@ -279,6 +279,35 @@ class WebappThemesConfigTests(unittest.TestCase):
         self.assertTrue(win95["use_in_admin"])
         self.assertNotIn("accent", win95["tokens"])
 
+    def test_theme_accent_is_normalized_to_hex(self):
+        cfg = WebappThemesConfig(
+            default_theme="custom",
+            themes=[
+                {
+                    "key": "custom",
+                    "enabled": True,
+                    "default": True,
+                    "tokens": {"color_scheme": "dark", "accent": "0F8"},
+                }
+            ],
+        )
+
+        self.assertEqual(cfg.theme_by_key("custom").tokens.accent, "#00ff88")
+
+    def test_theme_accent_rejects_non_hex_values(self):
+        with self.assertRaises(ValueError):
+            WebappThemesConfig(
+                default_theme="custom",
+                themes=[
+                    {
+                        "key": "custom",
+                        "enabled": True,
+                        "default": True,
+                        "tokens": {"color_scheme": "dark", "accent": "lime"},
+                    }
+                ],
+            )
+
     def test_public_payload_keeps_admin_usage_flag(self):
         cfg = WebappThemesConfig(
             default_theme="custom",

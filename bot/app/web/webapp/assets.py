@@ -5,6 +5,7 @@ from config.webapp_themes_config import (
     default_webapp_theme_asset_file,
     default_webapp_theme_css_files,
     ensure_default_webapp_theme_descriptor_files,
+    public_theme_payload,
     public_themes_catalog_payload,
 )
 
@@ -123,6 +124,9 @@ async def theme_asset_route(request: web.Request) -> web.Response:
 
 
 def _resolve_webapp_logo_url(settings: Settings) -> str:
+    if getattr(settings, "WEBAPP_LOGO_USE_EMOJI", False):
+        return ""
+
     raw_logo_url = (settings.WEBAPP_LOGO_URL or "").strip()
     if not raw_logo_url:
         return ""
@@ -173,6 +177,8 @@ def _webapp_animated_emoji_asset_path(emoji: str, ext: str = "gif") -> str:
 
 async def webapp_logo_route(request: web.Request) -> web.Response:
     settings: Settings = request.app["settings"]
+    if getattr(settings, "WEBAPP_LOGO_USE_EMOJI", False):
+        raise web.HTTPNotFound(text="webapp_logo_disabled")
     raw_logo_url = (settings.WEBAPP_LOGO_URL or "").strip()
     if not raw_logo_url:
         raise web.HTTPNotFound(text="webapp_logo_not_configured")
@@ -201,6 +207,41 @@ async def webapp_logo_route(request: web.Request) -> web.Response:
         raise web.HTTPNotFound(text="webapp_logo_unavailable")
 
     _, body, content_type = logo_cache
+    response = web.Response(body=body, content_type=content_type)
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+async def webapp_uploaded_logo_route(request: web.Request) -> web.Response:
+    settings: Settings = request.app["settings"]
+    if not settings.WEBAPP_ENABLED:
+        raise web.HTTPNotFound(text="webapp_disabled")
+
+    filename = str(request.match_info.get("filename") or "").strip()
+    if not re.fullmatch(r"logo-[0-9a-f]{16}\.(?:gif|ico|jpe?g|png|svg|webp)", filename):
+        raise web.HTTPNotFound(text="webapp_logo_not_found")
+
+    root = WEBAPP_UPLOADED_LOGO_DIR.expanduser().resolve()
+    path = (root / filename).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise web.HTTPNotFound(text="webapp_logo_not_found") from None
+
+    content_type = WEBAPP_THEME_ASSET_CONTENT_TYPES.get(path.suffix.lower())
+    if not content_type:
+        raise web.HTTPNotFound(text="webapp_logo_not_found")
+
+    try:
+        if path.stat().st_size > WEBAPP_LOGO_MAX_BYTES:
+            raise web.HTTPNotFound(text="webapp_logo_too_large")
+        body = path.read_bytes()
+    except OSError:
+        raise web.HTTPNotFound(text="webapp_logo_not_found") from None
+
+    if not body:
+        raise web.HTTPNotFound(text="webapp_logo_not_found")
+
     response = web.Response(body=body, content_type=content_type)
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
@@ -235,6 +276,8 @@ async def webapp_animated_emoji_route(request: web.Request) -> web.Response:
 
 async def _warm_webapp_logo_cache(app: web.Application) -> None:
     settings: Settings = app["settings"]
+    if getattr(settings, "WEBAPP_LOGO_USE_EMOJI", False):
+        return
     raw_logo_url = (settings.WEBAPP_LOGO_URL or "").strip()
     if not raw_logo_url or not _is_proxyable_webapp_logo_url(raw_logo_url):
         return
@@ -258,6 +301,8 @@ async def _warm_webapp_logo_cache(app: web.Application) -> None:
 
 async def _warm_webapp_animated_emoji_cache(app: web.Application) -> None:
     settings: Settings = app["settings"]
+    if not getattr(settings, "WEBAPP_LOGO_USE_EMOJI", False):
+        return
     if str(settings.WEBAPP_LOGO_EMOJI_FONT or "").strip() != "noto-color-animated":
         return
 
@@ -547,7 +592,7 @@ async def _security_headers_middleware(request: web.Request, handler):
             "frame-ancestors https://web.telegram.org https://t.me; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "  # noqa: E501
             "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:; "
-            "img-src 'self' data: https:; "
+            "img-src 'self' data: blob: https:; "
             "connect-src 'self' https://oauth.telegram.org; "
             "object-src 'none'; "
             "base-uri 'self'; "
@@ -741,16 +786,24 @@ async def index_route(request: web.Request) -> web.Response:
     html = TEMPLATE_PATH.read_text(encoding="utf-8")
     cached = _get_cached_webapp_settings(request)
     themes_catalog = settings.webapp_themes_catalog
+    primary_color = settings.WEBAPP_PRIMARY_COLOR or "#00fe7a"
+    initial_theme = _initial_theme_for_request(request, themes_catalog)
+    preview_key = str(request.query.get("theme_preview") or "").strip()
+    preview_theme = themes_catalog.theme_by_key(preview_key) if preview_key else None
+    if preview_theme is None or not preview_theme.enabled:
+        preview_key = ""
     config = {
         "title": settings.WEBAPP_TITLE,
         "primaryColor": settings.WEBAPP_PRIMARY_COLOR,
         "themesCatalog": public_themes_catalog_payload(
             themes_catalog,
-            settings.WEBAPP_PRIMARY_COLOR or "#00fe7a",
+            primary_color,
             enabled_only=True,
         ),
         "themesDir": settings.WEBAPP_THEMES_DIR,
+        "themePreviewKey": preview_key,
         "logoUrl": cached["logo_url"],
+        "logoUseEmoji": bool(settings.WEBAPP_LOGO_USE_EMOJI),
         "logoEmoji": settings.WEBAPP_LOGO_EMOJI,
         "logoEmojiFont": settings.WEBAPP_LOGO_EMOJI_FONT,
         "apiBase": "/api",
@@ -769,6 +822,9 @@ async def index_route(request: web.Request) -> web.Response:
         "appRepositoryUrl": APP_REPOSITORY_URL,
     }
     html = _strip_marked_block(html, DEV_MOCK_START_MARKER, DEV_MOCK_END_MARKER)
+    initial_theme_markup = _initial_theme_head_markup(request, initial_theme, primary_color)
+    if initial_theme_markup:
+        html = html.replace("</head>", f"{initial_theme_markup}\n</head>", 1)
     i18n_instance: Optional[object] = request.app.get("i18n")
     i18n_payload = getattr(i18n_instance, "locales_data", {}) if i18n_instance else {}
     nonce = request.get("csp_nonce", "")
@@ -793,7 +849,11 @@ async def index_route(request: web.Request) -> web.Response:
         f'<script src="/{_resolve_webapp_js_asset_name()}" defer></script>',
     )
     brand_asset_url = cached["logo_url"]
-    if not brand_asset_url and settings.WEBAPP_LOGO_EMOJI_FONT == "noto-color-animated":
+    if (
+        not brand_asset_url
+        and settings.WEBAPP_LOGO_USE_EMOJI
+        and settings.WEBAPP_LOGO_EMOJI_FONT == "noto-color-animated"
+    ):
         brand_asset_url = _webapp_animated_emoji_asset_path(settings.WEBAPP_LOGO_EMOJI)
     if brand_asset_url:
         html = html.replace(
@@ -841,6 +901,95 @@ def _resolve_webapp_js_asset_name() -> str:
         minified_assets.sort(reverse=True)
         return minified_assets[0][1]
     return "subscription_webapp.js"
+
+
+_INITIAL_THEME_TOKEN_CSS_MAP = {
+    "accent": "--accent",
+    "bg": "--bg",
+    "panel": "--panel",
+    "panel_2": "--panel-2",
+    "panel_3": "--panel-3",
+    "border": "--border",
+    "border_strong": "--border-strong",
+    "text": "--text",
+    "muted": "--muted",
+    "dim": "--dim",
+    "danger": "--danger",
+    "blue": "--blue",
+    "radius": "--radius",
+    "font_sans": "--font-sans",
+    "font_logo": "--font-logo",
+    "font_mono": "--font-mono",
+    "admin_bg": "--admin-bg",
+    "admin_surface": "--admin-surface",
+    "admin_surface_2": "--admin-surface-2",
+    "admin_elev": "--admin-elev",
+    "admin_border": "--admin-border",
+    "admin_border_strong": "--admin-border-strong",
+    "admin_text": "--admin-text",
+    "admin_muted": "--admin-muted",
+    "admin_dim": "--admin-dim",
+}
+
+
+def _theme_css_href_for_html(theme: Any) -> str:
+    css_file = str(getattr(theme, "css_file", "") or "").strip()
+    key = str(getattr(theme, "key", "") or "").strip()
+    if not css_file or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", key):
+        return ""
+    parts = [part for part in css_file.replace("\\", "/").split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        return ""
+    themed_path = "/".join([key, *parts])
+    encoded = "/".join(quote(part, safe="") for part in themed_path.split("/"))
+    return f"/webapp-theme-css/{encoded}" if encoded else ""
+
+
+def _initial_theme_for_request(request: web.Request, catalog: Any) -> Any:
+    preview_key = str(request.query.get("theme_preview") or "").strip()
+    if preview_key:
+        preview_theme = catalog.theme_by_key(preview_key)
+        if preview_theme is not None and preview_theme.enabled:
+            return preview_theme
+
+    theme = catalog.theme_by_key(catalog.default_theme)
+    if theme is not None:
+        return theme
+    return catalog.enabled_themes()[0] if catalog.enabled_themes() else None
+
+
+def _initial_theme_head_markup(request: web.Request, theme: Any, primary_color: str) -> str:
+    if theme is None:
+        return ""
+
+    payload = public_theme_payload(theme, primary_color)
+    tokens = payload.get("tokens") if isinstance(payload, dict) else {}
+    tokens = tokens if isinstance(tokens, dict) else {}
+    declarations = []
+    for token_key, css_name in _INITIAL_THEME_TOKEN_CSS_MAP.items():
+        value = str(tokens.get(token_key) or "").strip()
+        if value:
+            declarations.append(f"{css_name}:{value}")
+
+    scheme = "light" if tokens.get("color_scheme") == "light" else "dark"
+    bg = str(tokens.get("bg") or "").strip()
+    css_rules = [f"html{{color-scheme:{scheme};}}"]
+    if bg:
+        css_rules.append(f"body{{background-color:{bg};}}")
+    if declarations:
+        css_rules.append(f".app-shell{{{';'.join(declarations)}}}")
+
+    nonce = html.escape(str(request.get("csp_nonce", "")), quote=True)
+    style_tag = (
+        f'<style id="webapp-initial-theme" nonce="{nonce}">' + "".join(css_rules) + "</style>"
+    )
+    href = _theme_css_href_for_html(theme)
+    if not href:
+        return style_tag
+    return (
+        f'<link rel="stylesheet" href="{html.escape(href, quote=True)}" '
+        f'data-initial-theme-css="{html.escape(str(theme.key), quote=True)}">\n' + style_tag
+    )
 
 
 def _strip_marked_block(html: str, start_marker: str, end_marker: str) -> str:

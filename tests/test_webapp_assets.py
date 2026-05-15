@@ -11,6 +11,7 @@ from unittest.mock import patch
 from bot.app.web import subscription_webapp
 from bot.app.web.webapp import assets as webapp_assets
 from config.settings import Settings
+from config.webapp_themes_config import builtin_webapp_themes_config
 
 
 class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
@@ -90,6 +91,36 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             subscription_webapp._resolve_webapp_logo_url(settings),
             r"^/webapp-logo\?v=[0-9a-f]{12}$",
         )
+
+    def test_uploaded_webapp_logo_url_is_served_directly(self):
+        settings = SimpleNamespace(
+            WEBAPP_LOGO_URL="/webapp-uploaded-logo/logo-abcdef1234567890.png"
+        )
+
+        self.assertEqual(
+            subscription_webapp._resolve_webapp_logo_url(settings),
+            "/webapp-uploaded-logo/logo-abcdef1234567890.png",
+        )
+
+    def test_webapp_logo_is_hidden_when_emoji_logo_is_enabled(self):
+        settings = SimpleNamespace(
+            WEBAPP_LOGO_USE_EMOJI=True,
+            WEBAPP_LOGO_URL="/webapp-uploaded-logo/logo-abcdef1234567890.png",
+        )
+
+        self.assertEqual(subscription_webapp._resolve_webapp_logo_url(settings), "")
+
+    def test_initial_theme_head_markup_includes_css_and_tokens(self):
+        cfg = builtin_webapp_themes_config("#123456")
+        theme = cfg.theme_by_key("light")
+        request = SimpleNamespace(get=lambda key, default="": "nonce-value")
+
+        markup = subscription_webapp._initial_theme_head_markup(request, theme, "#123456")
+
+        self.assertIn("/webapp-theme-css/light/style.css", markup)
+        self.assertIn('nonce="nonce-value"', markup)
+        self.assertIn("--accent:#123456", markup)
+        self.assertIn("color-scheme:light", markup)
 
     def test_animated_emoji_asset_path_uses_same_origin_route(self):
         self.assertEqual(
@@ -364,7 +395,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             logo_url = "https://cdn.example.com/logo.png"
             logo = (b"cached-logo", "image/png")
             app = {
-                "settings": SimpleNamespace(WEBAPP_LOGO_URL=logo_url),
+                "settings": SimpleNamespace(WEBAPP_LOGO_URL=logo_url, WEBAPP_LOGO_USE_EMOJI=False),
                 "webapp_logo_cache": None,
                 "webapp_logo_cache_lock": asyncio.Lock(),
             }
@@ -403,6 +434,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             app = {
                 "settings": SimpleNamespace(
+                    WEBAPP_LOGO_USE_EMOJI=True,
                     WEBAPP_LOGO_EMOJI="🤩",
                     WEBAPP_LOGO_EMOJI_FONT="noto-color-animated",
                 ),

@@ -34,7 +34,7 @@ export const ADMIN_SECTIONS = new Set([
   "broadcast",
   "logs",
   "tariffs",
-  "themes",
+  "appearance",
   "settings",
 ]);
 export const TELEGRAM_WEBAPP_SCRIPT_URL = "https://telegram.org/js/telegram-web-app.js";

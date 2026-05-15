@@ -92,6 +92,7 @@ class WebAppSettings(BaseModel):
     title: str
     primary_color: str
     logo_url: Optional[str]
+    logo_use_emoji: bool
     logo_emoji: str
     logo_emoji_font: str
     session_ttl_seconds: int
@@ -369,6 +370,7 @@ class Settings(BaseSettings):
         ),
     )
     WEBAPP_LOGO_URL: Optional[str] = Field(default=None)
+    WEBAPP_LOGO_USE_EMOJI: bool = Field(default=False)
     WEBAPP_LOGO_EMOJI: str = Field(default="🫥")
     WEBAPP_LOGO_EMOJI_FONT: str = Field(
         default="system",
@@ -545,6 +547,7 @@ class Settings(BaseSettings):
             title=self.WEBAPP_TITLE,
             primary_color=self.WEBAPP_PRIMARY_COLOR,
             logo_url=self.WEBAPP_LOGO_URL,
+            logo_use_emoji=self.WEBAPP_LOGO_USE_EMOJI,
             logo_emoji=self.WEBAPP_LOGO_EMOJI,
             logo_emoji_font=self.WEBAPP_LOGO_EMOJI_FONT,
             session_ttl_seconds=self.WEBAPP_SESSION_TTL_SECONDS,
@@ -835,6 +838,31 @@ class Settings(BaseSettings):
             env_default_theme=self.WEBAPP_DEFAULT_THEME,
             theme_dir=self.WEBAPP_THEMES_DIR,
         )
+
+    @field_validator("WEBAPP_PRIMARY_COLOR", mode="before")
+    @classmethod
+    def ignore_deprecated_webapp_primary_color_env(cls, _value):
+        return "#00fe7a"
+
+    @field_validator("WEBAPP_LOGO_URL", mode="before")
+    @classmethod
+    def ignore_deprecated_webapp_logo_url_env(cls, _value):
+        return None
+
+    @field_validator("WEBAPP_LOGO_USE_EMOJI", mode="before")
+    @classmethod
+    def ignore_deprecated_webapp_logo_use_emoji_env(cls, _value):
+        return False
+
+    @field_validator("WEBAPP_LOGO_EMOJI", mode="before")
+    @classmethod
+    def ignore_deprecated_webapp_logo_emoji_env(cls, _value):
+        return "🫥"
+
+    @field_validator("WEBAPP_LOGO_EMOJI_FONT", mode="before")
+    @classmethod
+    def ignore_deprecated_webapp_logo_emoji_font_env(cls, _value):
+        return "system"
 
     @computed_field
     @property

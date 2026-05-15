@@ -27,6 +27,7 @@ export const DEV_MOCK = {
     title: "/minishop",
     primaryColor: "#00fe7a",
     logoUrl: "",
+    logoUseEmoji: false,
     logoEmoji: "🫥",
     logoEmojiFont: "system",
     apiBase: "/api",

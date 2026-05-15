@@ -1,8 +1,10 @@
+import asyncio
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from aiohttp import web
+from aiohttp.test_utils import make_mocked_request
 
 from bot.app.web import admin_api, subscription_webapp
 from bot.app.web.admin_api_impl import auth as admin_auth_routes
@@ -57,6 +59,7 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("GET", "/auth/telegram/callback"): "telegram_oauth_callback_route",
             ("GET", "/health"): "health_route",
             ("GET", "/webapp-logo"): "webapp_logo_route",
+            ("GET", "/webapp-uploaded-logo/{filename}"): "webapp_uploaded_logo_route",
             ("GET", "/webapp-emoji/{codepoints}/512.{ext}"): "webapp_animated_emoji_route",
             ("GET", "/subscription_webapp.css"): "css_asset_route",
             ("GET", "/webapp-theme-css/{path}"): "theme_css_asset_route",
@@ -139,11 +142,30 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("PUT", "/api/admin/tariffs"): "admin_tariffs_save_route",
             ("GET", "/api/admin/themes"): "admin_themes_get_route",
             ("PUT", "/api/admin/themes"): "admin_themes_save_route",
+            ("POST", "/api/admin/appearance/logo"): "admin_appearance_logo_upload_route",
             ("GET", "/api/admin/panel/internal-squads"): "admin_panel_internal_squads_route",
         }
 
         for key, handler_name in expected.items():
             self.assertEqual(routes.get(key), handler_name, key)
+
+    def test_admin_themes_page_route_is_not_registered(self):
+        app = web.Application()
+        subscription_webapp.setup_subscription_webapp_routes(app)
+
+        request = make_mocked_request("GET", "/admin/themes", app=app)
+        match_info = asyncio.run(app.router.resolve(request))
+
+        self.assertEqual(match_info.http_exception.status, 404)
+
+    def test_admin_appearance_page_route_is_registered(self):
+        app = web.Application()
+        subscription_webapp.setup_subscription_webapp_routes(app)
+
+        request = make_mocked_request("GET", "/admin/appearance", app=app)
+        match_info = asyncio.run(app.router.resolve(request))
+
+        self.assertEqual(match_info.handler.__name__, "index_route")
 
 
 class AdminApiAuthContractTests(unittest.IsolatedAsyncioTestCase):

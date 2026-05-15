@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import hashlib
+import html
 import hmac
 import io
 import ipaddress
@@ -17,7 +18,7 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import LabeledPrice
@@ -65,6 +66,8 @@ TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "templates" / "subscriptio
 ASSET_DIR = TEMPLATE_PATH.parent
 WEBAPP_LOGO_PROXY_PATH = "/webapp-logo"
 WEBAPP_LOGO_CACHE_DIR = Path(__file__).resolve().parents[4] / "data" / "webapp-logo"
+WEBAPP_UPLOADED_LOGO_DIR = WEBAPP_LOGO_CACHE_DIR / "uploads"
+WEBAPP_UPLOADED_LOGO_PATH = "/webapp-uploaded-logo"
 WEBAPP_EMOJI_CACHE_DIR = Path(__file__).resolve().parents[4] / "data" / "webapp-emoji"
 WEBAPP_CONFIG_PLACEHOLDER = "<!-- WEBAPP_CONFIG_SCRIPT -->"
 WEBAPP_I18N_PLACEHOLDER = "<!-- WEBAPP_I18N_SCRIPT -->"

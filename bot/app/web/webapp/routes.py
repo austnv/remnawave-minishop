@@ -9,12 +9,22 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/devices", index_route)
     app.router.add_get("/settings", index_route)
     app.router.add_get("/admin", index_route)
-    app.router.add_get("/admin/{section:[a-z][a-z0-9_-]*}", index_route)
+    app.router.add_get(
+        (
+            "/admin/{section:stats|users|payments|promos|ads|broadcast|logs|tariffs|"
+            "appearance|settings}"
+        ),
+        index_route,
+    )
     app.router.add_get("/admin/users/{user_id:-?[0-9]+}", index_route)
     app.router.add_get("/auth/telegram/start", telegram_oauth_start_route)
     app.router.add_get("/auth/telegram/callback", telegram_oauth_callback_route)
     app.router.add_get("/health", health_route)
     app.router.add_get(WEBAPP_LOGO_PROXY_PATH, webapp_logo_route)
+    app.router.add_get(
+        rf"{WEBAPP_UPLOADED_LOGO_PATH}/{{filename:[A-Za-z0-9_.-]+}}",
+        webapp_uploaded_logo_route,
+    )
     app.router.add_get(
         r"/webapp-emoji/{codepoints:[0-9a-f_]+}/512.{ext:gif|webp}",
         webapp_animated_emoji_route,

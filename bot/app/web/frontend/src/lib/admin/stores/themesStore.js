@@ -58,6 +58,67 @@ export function createThemesStore({ api, onThemesSaved, flash, at }) {
     }
   }
 
+  async function uploadLogoFile(file) {
+    if (!file) return null;
+    state.update((s) => ({ ...s, themesSaving: true }));
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const data = await api("/admin/appearance/logo", {
+        method: "POST",
+        body,
+      });
+      if (data?.ok) {
+        flash(
+          at(
+            "appearance_logo_uploaded_pending",
+            {},
+            "Логотип загружен. Сохраните изменения, чтобы применить его."
+          )
+        );
+        return data.logo_url || "";
+      }
+      flash(
+        data?.message ||
+          data?.error ||
+          at("appearance_logo_upload_failed", {}, "Не удалось загрузить логотип")
+      );
+      return null;
+    } finally {
+      state.update((s) => ({ ...s, themesSaving: false }));
+    }
+  }
+
+  async function uploadLogoUrl(url) {
+    const sourceUrl = String(url || "").trim();
+    if (!sourceUrl) return null;
+    state.update((s) => ({ ...s, themesSaving: true }));
+    try {
+      const data = await api("/admin/appearance/logo", {
+        method: "POST",
+        body: JSON.stringify({ url: sourceUrl }),
+      });
+      if (data?.ok) {
+        flash(
+          at(
+            "appearance_logo_uploaded_pending",
+            {},
+            "Логотип загружен. Сохраните изменения, чтобы применить его."
+          )
+        );
+        return data.logo_url || "";
+      }
+      flash(
+        data?.message ||
+          data?.error ||
+          at("appearance_logo_upload_failed", {}, "Не удалось загрузить логотип")
+      );
+      return null;
+    } finally {
+      state.update((s) => ({ ...s, themesSaving: false }));
+    }
+  }
+
   async function setCurrentTheme(key) {
     let changed = false;
     state.update((s) => ({
@@ -102,12 +163,35 @@ export function createThemesStore({ api, onThemesSaved, flash, at }) {
     }));
   }
 
+  function setThemeAccent(key, accent) {
+    state.update((s) => ({
+      ...s,
+      themesCatalog: {
+        ...s.themesCatalog,
+        themes: (s.themesCatalog.themes || []).map((theme) =>
+          theme.key === key
+            ? {
+                ...theme,
+                tokens: {
+                  ...(theme.tokens || {}),
+                  accent: String(accent || "").trim() || null,
+                },
+              }
+            : theme
+        ),
+      },
+    }));
+  }
+
   return {
     subscribe: state.subscribe,
     loadThemes,
     saveThemes,
     setCurrentTheme,
+    setThemeAccent,
     togglePrimaryAccent,
     toggleAdminUse,
+    uploadLogoFile,
+    uploadLogoUrl,
   };
 }
