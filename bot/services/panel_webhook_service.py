@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -29,6 +30,10 @@ EVENT_MAP = {
 
 
 class PanelWebhookService:
+    # Cap parallel background event handlers so an expiry burst from the panel
+    # cannot exhaust the DB pool or the YooKassa client.
+    _MAX_CONCURRENT_EVENTS = 50
+
     def __init__(
         self,
         bot: Bot,
@@ -42,6 +47,7 @@ class PanelWebhookService:
         self.i18n = i18n
         self.async_session_factory = async_session_factory
         self.panel_service = panel_service
+        self._event_semaphore = asyncio.Semaphore(self._MAX_CONCURRENT_EVENTS)
         if not self.settings.PANEL_WEBHOOK_SECRET:
             logging.error(
                 "PANEL_WEBHOOK_SECRET is not configured. Panel webhooks will be rejected."
@@ -243,8 +249,23 @@ class PanelWebhookService:
             telegram_id if telegram_id is not None else "N/A",
         )
 
-        await self.handle_event(event_name, user_data)
+        # Acknowledge immediately so the panel does not retry while we run
+        # auto-renew charges, DB lookups and SMTP. Heavy work is bounded by a
+        # semaphore to survive expiry bursts.
+        asyncio.create_task(
+            self._run_event_in_background(event_name, user_data),
+            name=f"panel_event_{event_name}",
+        )
         return web.Response(status=200, text="ok")
+
+    async def _run_event_in_background(self, event_name: str, user_payload: dict) -> None:
+        async with self._event_semaphore:
+            try:
+                await self.handle_event(event_name, user_payload)
+            except Exception:
+                logging.exception(
+                    "Panel webhook background handler failed for event %s", event_name
+                )
 
 
 async def panel_webhook_route(request: web.Request):
