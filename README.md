@@ -33,6 +33,7 @@ Remnawave Minishop - Telegram-бот и Web App (Mini App) для продажи
 - [Тарифы](docs/tariffs.md) - каталог тарифов, period- и traffic-модели, обычные и premium-докупки, premium-сквады, смена тарифа, HWID-лимиты и обработка трафика.
 - [Админ-панель](docs/admin.md) - права доступа, настройки, редактор тарифов, premium-сквады и сохранение JSON-каталога.
 - [Web App / Mini App](docs/webapp.md) - отдельный порт, домен, Telegram OAuth, email-вход и реферальные ссылки.
+- [Темы Web App](docs/webapp-themes.md) - кастомные темы, настройка внешнего вида, логотипы, CSS/ассеты и пайплайн создания новой темы.
 - [Развертывание](docs/deployment.md) - Docker Compose, reverse proxy, Nginx, Caddy, вебхуки, запуск из образа и обновление версии (`IMAGE_TAG`).
 - [Миграция с remnawave-tg-shop](docs/migration-to-minishop.md) - перенос данных из прежнего стека.
 
@@ -82,10 +83,10 @@ docker compose logs -f remnawave-minishop
 
 Для каталога тарифов используется `TARIFFS_CONFIG_PATH` со значением по умолчанию `data/tariffs.json`. Пример формата лежит в [data/tariffs.example.json](data/tariffs.example.json), подробности - в [docs/tariffs.md](docs/tariffs.md).
 
-Если в Docker Compose включаете bind mount `./data:/app/data`, заранее создайте каталог и отдайте его пользователю контейнера. Это нужно для сохранения `data/tariffs.json`, кеша логотипа Web App и animated emoji:
+Если в Docker Compose включаете bind mount `./data:/app/data`, заранее создайте каталог и отдайте его пользователю контейнера. Это нужно для сохранения `data/tariffs.json`, каталога тем `data/themes`, кеша логотипа Web App и animated emoji:
 
 ```bash
-mkdir -p data/webapp-logo data/webapp-emoji
+mkdir -p data/themes data/webapp-logo data/webapp-emoji
 chown -R 10001:10001 data
 chmod -R u+rwX data
 ```
