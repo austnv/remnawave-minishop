@@ -15,6 +15,12 @@ from db.models import PanelSyncStatus
 
 
 class PanelApiService:
+    # Status codes returned by _request_once for failures we consider transient
+    # (connect error, request timeout) and therefore worth retrying on safe methods.
+    _TRANSIENT_STATUS_CODES = (-1, -3)
+    _SAFE_METHODS = frozenset({"GET", "HEAD"})
+    _RETRY_BACKOFF_SECONDS = 0.5
+
     def __init__(self, settings: Settings):
         self.settings = settings
         self.base_url = settings.PANEL_API_URL
@@ -32,7 +38,14 @@ class PanelApiService:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=30)
+            # Separate connect/read timeouts so a stuck panel does not hold a
+            # bot worker for the full window; total caps worst-case latency.
+            timeout = aiohttp.ClientTimeout(
+                total=15,
+                connect=3,
+                sock_connect=3,
+                sock_read=10,
+            )
             self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
@@ -58,7 +71,30 @@ class PanelApiService:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
+    def _is_transient_error(self, result: Optional[Dict[str, Any]]) -> bool:
+        if not isinstance(result, dict) or not result.get("error"):
+            return False
+        code = result.get("status_code")
+        if code in self._TRANSIENT_STATUS_CODES:
+            return True
+        return isinstance(code, int) and 500 <= code < 600
+
     async def _request(
+        self, method: str, endpoint: str, log_full_response: bool = False, **kwargs
+    ) -> Optional[Dict[str, Any]]:
+        # Retry safe (idempotent) methods once on transient failures to absorb
+        # network blips and short panel restarts without surfacing errors.
+        max_attempts = 2 if method.upper() in self._SAFE_METHODS else 1
+        result: Optional[Dict[str, Any]] = None
+        for attempt in range(max_attempts):
+            result = await self._request_once(method, endpoint, log_full_response, **kwargs)
+            if attempt + 1 < max_attempts and self._is_transient_error(result):
+                await asyncio.sleep(self._RETRY_BACKOFF_SECONDS)
+                continue
+            return result
+        return result
+
+    async def _request_once(
         self, method: str, endpoint: str, log_full_response: bool = False, **kwargs
     ) -> Optional[Dict[str, Any]]:
         if not self.base_url:
