@@ -69,14 +69,17 @@ COPY --from=frontend-builder /app/backend/bot/app/web/templates/subscription_web
 COPY --from=frontend-builder /app/backend/bot/app/web/templates/subscription_webapp.js /usr/share/nginx/html/subscription_webapp.js
 COPY --from=frontend-builder /app/backend/bot/app/web/templates/subscription_webapp.min.*.js /usr/share/nginx/html/
 
-RUN sed -i \
+RUN set -eu; \
+    HASHED=$(ls /usr/share/nginx/html/subscription_webapp.min.*.js 2>/dev/null | sort | tail -n1 | xargs -n1 basename || true); \
+    JS_NAME="${HASHED:-subscription_webapp.js}"; \
+    sed -i \
       -e '/WEBAPP_I18N_SCRIPT/d' \
       -e '/WEBAPP_CONFIG_SCRIPT/d' \
-      -e '/WEBAPP_JS_SCRIPT/c\  <script src="/subscription_webapp.js" type="module"></script>' \
+      -e "/WEBAPP_JS_SCRIPT/c\\  <script src=\"/${JS_NAME}\" type=\"module\"></script>" \
       -e '/WEBAPP_DEV_MOCK_START/d' \
       -e '/WEBAPP_DEV_MOCK_END/d' \
       -e '/subscription_webapp.js" defer/d' \
-      /usr/share/nginx/html/index.html \
-    && chmod +x /docker-entrypoint.d/00-startup-banner.sh
+      /usr/share/nginx/html/index.html; \
+    chmod +x /docker-entrypoint.d/00-startup-banner.sh
 
 EXPOSE 80
