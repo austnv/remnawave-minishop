@@ -12,7 +12,7 @@ from config.settings import get_settings
 
 async def main() -> None:
     settings = get_settings()
-    await run_bot(settings, run_web=True, run_tariff_worker=False)
+    await run_bot(settings)
 
 
 if __name__ == "__main__":

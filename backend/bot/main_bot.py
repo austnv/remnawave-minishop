@@ -15,7 +15,6 @@ from bot.middlewares.i18n import JsonI18n
 from bot.routers import build_root_router
 from bot.services.panel_api_service import PanelApiService
 from bot.services.settings_override_service import load_overrides_from_db
-from bot.services.tariff_worker import TariffTrafficWorker
 from bot.utils.message_queue import init_queue_manager
 from config.settings import Settings
 from db.database_setup import init_db_connection
@@ -223,12 +222,7 @@ async def on_shutdown_configured(dispatcher: Dispatcher):
     logging.info("SHUTDOWN: Bot on_shutdown_configured completed.")
 
 
-async def run_bot(
-    settings_param: Settings,
-    *,
-    run_web: bool = True,
-    run_tariff_worker: bool = False,
-):
+async def run_bot(settings_param: Settings):
     local_async_session_factory = init_db_connection(settings_param)
     if local_async_session_factory is None:
         logging.critical("Failed to initialize database connection and session factory. Exiting.")
@@ -263,17 +257,6 @@ async def run_bot(
         dp[key] = service
     dp["panel_service"] = services["panel_service"]
     dp["async_session_factory"] = local_async_session_factory
-    tariff_worker = None
-    if run_tariff_worker:
-        tariff_worker = TariffTrafficWorker(
-            settings_param,
-            local_async_session_factory,
-            services["panel_service"],
-            services["subscription_service"],
-            bot,
-            i18n_instance,
-        )
-        dp["tariff_worker"] = tariff_worker
 
     # Wrap startup/shutdown handlers to satisfy aiogram event signature (no args passed)
     async def _on_startup_wrapper():
@@ -287,36 +270,21 @@ async def run_bot(
 
     await register_all_routers(dp, settings_param)
 
-    tg_webhook_base = settings_param.WEBHOOK_BASE_URL
-
-    # Webhook mode is now required - exit if not configured
-    if not tg_webhook_base:
+    if not settings_param.WEBHOOK_BASE_URL:
         logging.error("WEBHOOK_BASE_URL is required. Polling mode is disabled. Exiting.")
         await dp.emit_shutdown()
         raise SystemExit("WEBHOOK_BASE_URL is required. Polling mode is disabled.")
 
-    logging.info("--- Bot Run Mode Decision ---")
-    logging.info(f"Configured WEBHOOK_BASE_URL: '{tg_webhook_base}' -> Webhook Mode: ENABLED")
-    logging.info(f"YooKassa webhook path: '{settings_param.yookassa_webhook_path}'")
-    logging.info("Decision: Run AIOHTTP server: ENABLED (required for webhooks)")
-    logging.info("--- End Bot Run Mode Decision ---")
+    logging.info(
+        "Starting AIOHTTP server: webhook_base=%s yookassa_path=%s",
+        settings_param.WEBHOOK_BASE_URL,
+        settings_param.yookassa_webhook_path,
+    )
 
-    web_app_runner = None
-    main_tasks = []
-
-    # Only run AIOHTTP server for webhook mode
     async def web_server_task():
         await build_and_start_web_app(dp, bot, settings_param, local_async_session_factory)
 
-    if run_web:
-        main_tasks.append(asyncio.create_task(web_server_task(), name="AIOHTTPServerTask"))
-    if run_tariff_worker and tariff_worker and settings_param.tariffs_config:
-        main_tasks.append(asyncio.create_task(tariff_worker.run(), name="TariffTrafficWorker"))
-
-    # Recurring billing moved to panel webhook (24h before expiry). No periodic task needed here.
-
-    logging.info("Starting bot runtime...")
-    logging.info(f"Starting bot with main tasks: {[task.get_name() for task in main_tasks]}")
+    main_tasks = [asyncio.create_task(web_server_task(), name="AIOHTTPServerTask")]
 
     try:
         await asyncio.gather(*main_tasks)
@@ -336,10 +304,6 @@ async def run_bot(
                         f"Error during cancellation of task '{task.get_name()}': {e_task_cancel}",
                         exc_info=True,
                     )
-
-        if web_app_runner:
-            await web_app_runner.cleanup()
-            logging.info("AIOHTTP AppRunner cleaned up.")
 
         await dp.emit_shutdown()
         logging.info("Dispatcher shutdown sequence emitted.")
