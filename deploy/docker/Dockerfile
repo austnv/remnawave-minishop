@@ -1,3 +1,35 @@
+# Resolve the application version from .git at build time and emit a single
+# tiny ``.build-version`` file. The .git tree is consumed in this throwaway
+# stage and never copied into the runtime image — only the resulting one-line
+# version string ships. This matches the runtime fallback chain in
+# ``_resolve_app_version`` (REMNAWAVE_MINISHOP_VERSION env > .build-version
+# file > live git > "dev+unknown") so the admin sidebar always shows a tag /
+# sha even though the runtime images have no git tooling and no .git tree.
+FROM alpine:3.20 AS version-builder
+RUN apk add --no-cache git
+WORKDIR /repo
+COPY .git ./.git
+RUN set -eu; \
+    git config --global --add safe.directory /repo; \
+    tag=$(git describe --tags --abbrev=0 2>/dev/null || true); \
+    sha=$(git rev-parse --short HEAD 2>/dev/null || true); \
+    dirty=$(git status --porcelain 2>/dev/null | head -c1 || true); \
+    if [ -n "$tag" ] && [ -n "$sha" ]; then \
+        commits_since_tag=$(git rev-list "$tag..HEAD" --count 2>/dev/null || true); \
+        if [ -n "$commits_since_tag" ] && [ "$commits_since_tag" != "0" ]; then \
+            version="${tag}+${commits_since_tag}.g${sha}"; \
+        else \
+            version="$tag"; \
+        fi; \
+    elif [ -n "$sha" ]; then \
+        version="dev+g${sha}"; \
+    else \
+        version="dev+unknown"; \
+    fi; \
+    if [ -n "$dirty" ]; then version="${version}-dirty"; fi; \
+    printf '%s' "$version" > /build-version
+
+
 FROM python:3.12-slim AS python-base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -15,6 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY backend ./backend
 COPY locales ./locales
 COPY data ./data
+COPY --from=version-builder /build-version /app/.build-version
 RUN mkdir -p /app/logs /app/data && chown -R appuser:appuser /app/logs /app/data
 
 USER appuser
