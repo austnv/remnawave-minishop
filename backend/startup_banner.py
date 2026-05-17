@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
 _BANNER_TEMPLATE = """
@@ -16,10 +17,23 @@ _BANNER_TEMPLATE = """
 {details}
          https://github.com/3252a8/remnawave-minishop
 """
+_APP_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _env(name: str, default: str = "-") -> str:
     return os.getenv(name) or default
+
+
+def _build_commit() -> str:
+    for env_name in ("REMNAWAVE_MINISHOP_COMMIT", "GIT_COMMIT", "COMMIT_SHA"):
+        value = os.getenv(env_name)
+        if value:
+            return value.strip()[:40] or "-"
+    try:
+        value = (_APP_ROOT / ".build-commit").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "-"
+    return value[:40] or "-"
 
 
 def _bool_env(name: str) -> str:
@@ -55,7 +69,11 @@ def _detail_line(text: str) -> str:
 def _service_details(service: str) -> str:
     image_tag = _env("IMAGE_TAG", "local")
     log_level = _env("LOG_LEVEL", "INFO")
-    common = [f"image tag :: {image_tag}", f"log level :: {log_level}"]
+    common = [
+        f"image tag :: {image_tag}",
+        f"commit :: {_build_commit()}",
+        f"log level :: {log_level}",
+    ]
     if service == "backend":
         lines = [
             *common,

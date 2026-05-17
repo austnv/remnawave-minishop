@@ -27,7 +27,8 @@ RUN set -eu; \
         version="dev+unknown"; \
     fi; \
     if [ -n "$dirty" ]; then version="${version}-dirty"; fi; \
-    printf '%s' "$version" > /build-version
+    printf '%s' "$version" > /build-version; \
+    printf '%s' "${sha:-unknown}" > /build-commit
 
 
 FROM python:3.12-slim AS python-base
@@ -48,6 +49,7 @@ COPY backend ./backend
 COPY locales ./locales
 COPY data ./data
 COPY --from=version-builder /build-version /app/.build-version
+COPY --from=version-builder /build-commit /app/.build-commit
 RUN mkdir -p /app/logs /app/data && chown -R appuser:appuser /app/logs /app/data
 
 USER appuser
@@ -97,12 +99,14 @@ LABEL org.opencontainers.image.source="https://github.com/3252a8/remnawave-minis
 
 COPY deploy/docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY deploy/docker/frontend/00-startup-banner.sh /docker-entrypoint.d/00-startup-banner.sh
+COPY --from=version-builder /build-commit /build-commit
 COPY backend/bot/app/web/templates/subscription_webapp.html /usr/share/nginx/html/index.html
 COPY --from=frontend-builder /app/backend/bot/app/web/templates/subscription_webapp.css /usr/share/nginx/html/subscription_webapp.css
 COPY --from=frontend-builder /app/backend/bot/app/web/templates/subscription_webapp.js /usr/share/nginx/html/subscription_webapp.js
 COPY --from=frontend-builder /app/backend/bot/app/web/templates/subscription_webapp.min.*.js /usr/share/nginx/html/
 
 RUN set -eu; \
+    find /docker-entrypoint.d -type f -name '*.sh' -exec sed -i 's/\r$//' {} +; \
     HASHED=$(ls /usr/share/nginx/html/subscription_webapp.min.*.js 2>/dev/null | sort | tail -n1 | xargs -n1 basename || true); \
     JS_NAME="${HASHED:-subscription_webapp.js}"; \
     sed -i \

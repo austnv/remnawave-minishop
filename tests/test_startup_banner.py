@@ -22,6 +22,7 @@ class StartupBannerTests(unittest.TestCase):
                     service,
                     {
                         "IMAGE_TAG": "test-tag",
+                        "REMNAWAVE_MINISHOP_COMMIT": "abc1234",
                         "POSTGRES_HOST": "postgres",
                         "POSTGRES_DB": "postgres",
                         "REDIS_URL": "redis://redis:6379/0",
@@ -29,6 +30,7 @@ class StartupBannerTests(unittest.TestCase):
                 )
                 self.assertIn(f"container :: {service.upper()}", output)
                 self.assertIn("image tag :: test-tag", output)
+                self.assertIn("commit :: abc1234", output)
                 self.assertIn("remnawave-minishop", output)
                 self.assertIn("███", output)
                 self.assertNotIn("в", output)

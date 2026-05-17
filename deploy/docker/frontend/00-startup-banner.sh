@@ -1,5 +1,10 @@
 #!/bin/sh
 PUBLISHED="${FRONTEND_PUBLIC:-127.0.0.1:${FRONTEND_PORT:-8082}->80}"
+BUILD_COMMIT="${REMNAWAVE_MINISHOP_COMMIT:-${GIT_COMMIT:-${COMMIT_SHA:-}}}"
+if [ -z "$BUILD_COMMIT" ] && [ -r /build-commit ]; then
+  BUILD_COMMIT="$(cat /build-commit)"
+fi
+BUILD_COMMIT="${BUILD_COMMIT:-unknown}"
 
 cat <<EOF
 
@@ -14,6 +19,7 @@ cat <<EOF
 
               container :: FRONTEND
               image tag :: ${IMAGE_TAG:-local}
+              commit :: ${BUILD_COMMIT}
               listen :: :80
               published :: ${PUBLISHED}
               upstream :: backend:8081
