@@ -52,8 +52,7 @@ def create_subscription_webapp_application(
         if hasattr(dp, "workflow_data") and key in dp.workflow_data:  # type: ignore[attr-defined]
             app[key] = dp.workflow_data[key]  # type: ignore[index]
 
-    # type: ignore[attr-defined]
-    if hasattr(dp, "workflow_data") and "bot_username" in dp.workflow_data:
+    if hasattr(dp, "workflow_data") and "bot_username" in dp.workflow_data:  # type: ignore[attr-defined]
         app["bot_username"] = dp.workflow_data["bot_username"]  # type: ignore[index]
 
     setup_subscription_webapp_routes(app)
