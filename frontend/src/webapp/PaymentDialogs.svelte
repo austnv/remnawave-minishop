@@ -158,19 +158,17 @@
       {:else}
         <EmptyCard>{t("wa_no_tariff_change_options")}</EmptyCard>
       {/if}
-    {:else}
-      {#if tariffMode}
-        {#if !singleTariffMode && !(subscription?.active && subscription?.tariff_key && tariffCatalog.some((t) => t.key === subscription.tariff_key))}
-          <button class="back-inline" type="button" onclick={backToTariffList}>
-            <ArrowLeft size={16} />
-            {t("wa_back_to_tariffs")}
-          </button>
-        {/if}
-        {#if hasMultipleTariffs && selectedTariff}
-          <p class="tariff-step-caption">
-            {t("wa_selected_tariff", { tariff: selectedTariff.title })}
-          </p>
-        {/if}
+    {:else if tariffMode}
+      {#if !singleTariffMode && !(subscription?.active && subscription?.tariff_key && tariffCatalog.some((t) => t.key === subscription.tariff_key))}
+        <button class="back-inline" type="button" onclick={backToTariffList}>
+          <ArrowLeft size={16} />
+          {t("wa_back_to_tariffs")}
+        </button>
+      {/if}
+      {#if hasMultipleTariffs && selectedTariff}
+        <p class="tariff-step-caption">
+          {t("wa_selected_tariff", { tariff: selectedTariff.title })}
+        </p>
       {/if}
       {#if selectedTariffPlans.length}
         <div class="period-grid period-grid-two-columns">
@@ -215,8 +213,13 @@
       {:else}
         <EmptyCard>{t("wa_no_tariff_change_options")}</EmptyCard>
       {/if}
-    {/if}
-    {#if !tariffMode}
+    {:else}
+      <!--
+        Legacy / non-tariff mode (no JSON tariffs catalog OR traffic-only).
+        Previously this block was also reached *in addition* to the tariff
+        branch above, so users on legacy mode saw the period grid, payment
+        method grid and pay button duplicated.
+      -->
       <div class="period-grid period-grid-two-columns">
         {#each plans as plan}
           <button
