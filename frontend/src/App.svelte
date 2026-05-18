@@ -421,8 +421,15 @@
   ) {
     billingStore.update((s) => ({ ...s, selectedPlan: selectedTariffPlans[0] || null }));
   }
-  $: if (!$billingStore.selectedMethod && methods.length) {
-    billingStore.update((s) => ({ ...s, selectedMethod: methods[0].id }));
+  $: if (methods.length) {
+    const selectedMethodAvailable = methods.some(
+      (method) => method.id === $billingStore.selectedMethod
+    );
+    if (!$billingStore.selectedMethod || !selectedMethodAvailable) {
+      billingStore.update((s) => ({ ...s, selectedMethod: methods[0].id }));
+    }
+  } else if ($billingStore.selectedMethod) {
+    billingStore.update((s) => ({ ...s, selectedMethod: "" }));
   }
   $: {
     const emailKey = normalizedEmail(user?.email);

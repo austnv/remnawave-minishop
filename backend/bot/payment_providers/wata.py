@@ -263,7 +263,15 @@ class WataService(HttpClientMixin):
         client_ip = request_client_ip(request, trusted_proxies=self.settings.trusted_proxies)
         trusted = self.config.trusted_ips_list
         if trusted and not ip_in_allowlist(client_ip, trusted):
-            logging.warning("Wata webhook denied from unauthorized IP source.")
+            logging.warning(
+                "Wata webhook denied from unauthorized IP source "
+                "(client_ip=%s remote=%s x_forwarded_for=%s trusted_ips=%s trusted_proxies=%s).",
+                client_ip,
+                request.remote,
+                request.headers.get("X-Forwarded-For"),
+                trusted,
+                self.settings.trusted_proxies,
+            )
             return web.Response(status=403, text="forbidden")
 
         raw_body = await request.read()

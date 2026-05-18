@@ -861,7 +861,15 @@ async def yookassa_webhook_route(request: web.Request):
 
     client_ip = request_client_ip(request, trusted_proxies=settings.trusted_proxies)
     if not ip_in_allowlist(client_ip, YOOKASSA_WEBHOOK_ALLOWED_IPS):
-        logging.warning("YooKassa webhook denied from unauthorized IP source.")
+        logging.warning(
+            "YooKassa webhook denied from unauthorized IP source "
+            "(client_ip=%s remote=%s x_forwarded_for=%s trusted_ips=%s trusted_proxies=%s).",
+            client_ip,
+            request.remote,
+            request.headers.get("X-Forwarded-For"),
+            YOOKASSA_WEBHOOK_ALLOWED_IPS,
+            settings.trusted_proxies,
+        )
         return web.Response(status=403)
 
     try:

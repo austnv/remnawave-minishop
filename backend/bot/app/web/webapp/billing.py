@@ -655,7 +655,13 @@ async def _create_subscription_payment(
 
     provider_spec = get_provider_spec(method)
     if provider_spec and provider_spec.create_webapp_payment:
-        if not provider_spec.is_enabled(settings):
+        if not provider_spec.is_visible(settings, request.app):
+            logger.warning(
+                "WebApp payment method unavailable: method=%s enabled=%s configured=%s",
+                method,
+                provider_spec.is_enabled(settings),
+                provider_spec.is_service_configured(request.app),
+            )
             return _json_error(400, "payment_unavailable", "Payment method unavailable")
         return await provider_spec.create_webapp_payment(
             WebAppPaymentContext(

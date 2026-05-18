@@ -274,7 +274,18 @@ class FreeKassaService(HttpClientMixin):
 
         try:
             client_ip = request_client_ip(request, trusted_proxies=self.settings.trusted_proxies)
-            if not ip_in_allowlist(client_ip, self.config.trusted_ips_list):
+            trusted = self.config.trusted_ips_list
+            if not ip_in_allowlist(client_ip, trusted):
+                logging.warning(
+                    "FreeKassa webhook denied from unauthorized IP source "
+                    "(client_ip=%s remote=%s x_forwarded_for=%s trusted_ips=%s "
+                    "trusted_proxies=%s).",
+                    client_ip,
+                    request.remote,
+                    request.headers.get("X-Forwarded-For"),
+                    trusted,
+                    self.settings.trusted_proxies,
+                )
                 return web.Response(status=403)
 
             raw_body = await request.read()
