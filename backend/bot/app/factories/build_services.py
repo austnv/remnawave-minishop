@@ -2,7 +2,11 @@ from aiogram import Bot
 from sqlalchemy.orm import sessionmaker
 
 from bot.middlewares.i18n import JsonI18n
-from bot.payment_providers import ServiceFactoryContext, build_provider_services
+from bot.payment_providers import (
+    ServiceFactoryContext,
+    build_provider_configs,
+    build_provider_services,
+)
 from bot.services.lknpd_service import LknpdService
 from bot.services.panel_api_service import PanelApiService
 from bot.services.panel_webhook_service import PanelWebhookService
@@ -26,6 +30,7 @@ def build_core_services(
     panel_webhook_service = PanelWebhookService(
         bot, settings, i18n, async_session_factory, panel_service
     )
+    provider_configs = build_provider_configs()
     payment_services = build_provider_services(
         ServiceFactoryContext(
             settings=settings,
@@ -35,6 +40,7 @@ def build_core_services(
             bot_username_for_default_return=bot_username_for_default_return,
             subscription_service=subscription_service,
             referral_service=referral_service,
+            provider_configs=provider_configs,
         )
     )
     lknpd_service = LknpdService(

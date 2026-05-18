@@ -76,18 +76,6 @@ class PaymentSettings(BaseModel):
     cryptopay_network: str
     cryptopay_currency_type: str
     cryptopay_asset: str
-    heleket_enabled: bool
-    heleket_merchant_id: Optional[str]
-    heleket_api_key: Optional[str]
-    heleket_base_url: str
-    heleket_currency: str
-    heleket_to_currency: Optional[str]
-    heleket_network: Optional[str]
-    heleket_return_url: Optional[str]
-    heleket_success_url: Optional[str]
-    heleket_lifetime_seconds: int
-    heleket_verify_webhook_signature: bool
-    heleket_trusted_ips: List[str]
 
 
 class EmailSettings(BaseModel):
@@ -295,34 +283,6 @@ class Settings(BaseSettings):
         description="Comma-separated Wata webhook IP allowlist.",
     )
 
-    HELEKET_ENABLED: bool = Field(default=False)
-    HELEKET_MERCHANT_ID: Optional[str] = None
-    HELEKET_API_KEY: Optional[str] = None
-    HELEKET_BASE_URL: str = Field(default="https://api.heleket.com")
-    HELEKET_CURRENCY: str = Field(
-        default="RUB",
-        description="Invoice currency (fiat or crypto code).",
-    )
-    HELEKET_TO_CURRENCY: Optional[str] = Field(
-        default=None,
-        description="Optional target cryptocurrency for conversion (e.g. USDT).",
-    )
-    HELEKET_NETWORK: Optional[str] = Field(
-        default=None,
-        description="Optional blockchain network code (e.g. tron, bsc).",
-    )
-    HELEKET_RETURN_URL: Optional[str] = None
-    HELEKET_SUCCESS_URL: Optional[str] = None
-    HELEKET_LIFETIME_SECONDS: int = Field(
-        default=3600,
-        description="Invoice lifetime in seconds (300-43200).",
-    )
-    HELEKET_VERIFY_WEBHOOK_SIGNATURE: bool = Field(default=True)
-    HELEKET_TRUSTED_IPS: str = Field(
-        default="31.133.220.8",
-        description="Comma-separated Heleket webhook IP allowlist.",
-    )
-
     YOOKASSA_ENABLED: bool = Field(default=True)
     STARS_ENABLED: bool = Field(default=True)
     PAYMENT_METHODS_ORDER: Optional[str] = Field(
@@ -377,12 +337,6 @@ class Settings(BaseSettings):
     PAYMENT_CRYPTOPAY_TELEGRAM_LABEL_RU: Optional[str] = None
     PAYMENT_CRYPTOPAY_TELEGRAM_LABEL_EN: Optional[str] = None
     PAYMENT_CRYPTOPAY_TELEGRAM_EMOJI: Optional[str] = None
-    PAYMENT_HELEKET_WEBAPP_LABEL_RU: Optional[str] = None
-    PAYMENT_HELEKET_WEBAPP_LABEL_EN: Optional[str] = None
-    PAYMENT_HELEKET_WEBAPP_ICON: Optional[str] = None
-    PAYMENT_HELEKET_TELEGRAM_LABEL_RU: Optional[str] = None
-    PAYMENT_HELEKET_TELEGRAM_LABEL_EN: Optional[str] = None
-    PAYMENT_HELEKET_TELEGRAM_EMOJI: Optional[str] = None
 
     MONTH_1_ENABLED: bool = Field(default=True, alias="1_MONTH_ENABLED")
     MONTH_3_ENABLED: bool = Field(default=True, alias="3_MONTHS_ENABLED")
@@ -668,18 +622,6 @@ class Settings(BaseSettings):
             cryptopay_network=self.CRYPTOPAY_NETWORK,
             cryptopay_currency_type=self.CRYPTOPAY_CURRENCY_TYPE,
             cryptopay_asset=self.CRYPTOPAY_ASSET,
-            heleket_enabled=self.HELEKET_ENABLED,
-            heleket_merchant_id=self.HELEKET_MERCHANT_ID,
-            heleket_api_key=self.HELEKET_API_KEY,
-            heleket_base_url=self.HELEKET_BASE_URL,
-            heleket_currency=self.HELEKET_CURRENCY,
-            heleket_to_currency=self.HELEKET_TO_CURRENCY,
-            heleket_network=self.HELEKET_NETWORK,
-            heleket_return_url=self.HELEKET_RETURN_URL,
-            heleket_success_url=self.HELEKET_SUCCESS_URL,
-            heleket_lifetime_seconds=self.HELEKET_LIFETIME_SECONDS,
-            heleket_verify_webhook_signature=self.HELEKET_VERIFY_WEBHOOK_SIGNATURE,
-            heleket_trusted_ips=self.heleket_trusted_ips,
         )
 
     @computed_field
@@ -879,24 +821,6 @@ class Settings(BaseSettings):
     @property
     def wata_trusted_ips(self) -> List[str]:
         return _split_csv(self.WATA_TRUSTED_IPS)
-
-    @computed_field
-    @property
-    def heleket_webhook_path(self) -> str:
-        return "/webhook/heleket"
-
-    @computed_field
-    @property
-    def heleket_full_webhook_url(self) -> Optional[str]:
-        base = self.WEBHOOK_BASE_URL
-        if base:
-            return f"{base.rstrip('/')}{self.heleket_webhook_path}"
-        return None
-
-    @computed_field
-    @property
-    def heleket_trusted_ips(self) -> List[str]:
-        return _split_csv(self.HELEKET_TRUSTED_IPS)
 
     @computed_field
     @property
@@ -1245,12 +1169,6 @@ class Settings(BaseSettings):
         "WATA_FAILED_URL",
         "WATA_API_TOKEN",
         "WATA_PUBLIC_KEY",
-        "HELEKET_MERCHANT_ID",
-        "HELEKET_API_KEY",
-        "HELEKET_RETURN_URL",
-        "HELEKET_SUCCESS_URL",
-        "HELEKET_TO_CURRENCY",
-        "HELEKET_NETWORK",
         "CRYPT4_REDIRECT_URL",
         "PRIVACY_POLICY_URL",
         "USER_AGREEMENT_URL",
@@ -1292,17 +1210,6 @@ class Settings(BaseSettings):
         except (TypeError, ValueError):
             return 3
         return min(30, max(1, value))
-
-    @field_validator("HELEKET_LIFETIME_SECONDS", mode="before")
-    @classmethod
-    def validate_heleket_lifetime(cls, v):
-        if isinstance(v, str):
-            v = v.strip()
-        try:
-            value = int(v)
-        except (TypeError, ValueError):
-            return 3600
-        return min(43200, max(300, value))
 
     # Notification types
     LOG_NEW_USERS: bool = Field(
@@ -1399,14 +1306,6 @@ def get_settings() -> Settings:
                 if not _settings_instance.WATA_API_TOKEN:
                     logging.warning(
                         "CRITICAL: Wata is enabled but WATA_API_TOKEN is missing. Wata payments will not work."  # noqa: E501
-                    )
-            if _settings_instance.HELEKET_ENABLED:
-                if (
-                    not _settings_instance.HELEKET_MERCHANT_ID
-                    or not _settings_instance.HELEKET_API_KEY
-                ):
-                    logging.warning(
-                        "CRITICAL: Heleket is enabled but HELEKET_MERCHANT_ID or HELEKET_API_KEY is missing. Heleket payments will not work."  # noqa: E501
                     )
 
         except ValidationError as e:

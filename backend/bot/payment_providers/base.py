@@ -1,7 +1,57 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Mapping, Optional, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable, List, Mapping, Optional, Sequence, Type
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ProviderEnvConfig(BaseSettings):
+    """Base class for per-provider env-config models.
+
+    Subclasses declare their own ``env_prefix`` (e.g. ``HELEKET_``) and
+    fields, so the provider module is the single source of truth for the
+    env vars it consumes — no edits in the global ``Settings`` required.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+
+@dataclass(frozen=True)
+class ProviderConfigBundle:
+    """Functional config + presentation overrides for a single provider."""
+
+    config: Optional[ProviderEnvConfig] = None
+    presentation: Optional[ProviderEnvConfig] = None
+
+
+@dataclass(frozen=True)
+class ProviderManifestField:
+    """Self-contained manifest entry declared by a provider module.
+
+    Aggregated by the registry into the admin settings manifest, so the
+    admin UI gets per-provider fields without anyone editing
+    ``admin_settings_manifest.py``.
+    """
+
+    key: str
+    type: str
+    label: str
+    description: str = ""
+    placeholder: str = ""
+    secret: bool = False
+    optional: bool = True
+    min: Optional[float] = None
+    max: Optional[float] = None
+    choices: Optional[Sequence[tuple[str, str]]] = None
+    subsection: Optional[str] = None
+    target: str = "config"  # "config" or "presentation" — which bundle slot it writes to
+    attr: Optional[str] = None  # attribute name on the target model; defaults to key without env_prefix
 
 
 @dataclass(frozen=True)
@@ -13,6 +63,12 @@ class ServiceFactoryContext:
     bot_username_for_default_return: str
     subscription_service: Any
     referral_service: Any
+    provider_configs: Mapping[str, ProviderConfigBundle] = field(default_factory=dict)
+
+    def config_for(self, service_key: Optional[str]) -> Optional[ProviderConfigBundle]:
+        if not service_key:
+            return None
+        return self.provider_configs.get(service_key)
 
 
 @dataclass(frozen=True)
@@ -60,6 +116,9 @@ class PaymentProviderSpec:
     emoji: str = "💳"
     webapp_icon: Optional[str] = None
     telegram_emoji: Optional[str] = None
+    config_class: Optional[Type[ProviderEnvConfig]] = None
+    presentation_class: Optional[Type[ProviderEnvConfig]] = None
+    manifest_fields: Sequence[ProviderManifestField] = ()
 
     @property
     def settings_key(self) -> str:
@@ -73,8 +132,17 @@ class PaymentProviderSpec:
     def method_ids(self) -> tuple[str, ...]:
         return (self.id, *tuple(self.aliases))
 
-    def is_enabled(self, settings: Any) -> bool:
-        return bool(self.enabled(settings))
+    def is_enabled(self, source: Any) -> bool:
+        # If this spec carries a provider-local config_class, prefer the live
+        # config bundle so callers can pass plain Settings without having to
+        # know about provider-local env layouts.
+        if self.config_class is not None and self.service_key:
+            from .registry import get_provider_bundle
+
+            bundle = get_provider_bundle(self.service_key)
+            if bundle and bundle.config is not None:
+                return bool(self.enabled(bundle.config))
+        return bool(self.enabled(source))
 
     def is_service_configured(self, app: Any) -> bool:
         if not self.requires_configured_service:
@@ -84,8 +152,8 @@ class PaymentProviderSpec:
         service = app.get(self.service_key) if hasattr(app, "get") else None
         return bool(service and getattr(service, "configured", False))
 
-    def is_visible(self, settings: Any, app: Any) -> bool:
-        return self.is_enabled(settings) and self.is_service_configured(app)
+    def is_visible(self, source: Any, app: Any) -> bool:
+        return self.is_enabled(source) and self.is_service_configured(app)
 
     def load_router(self) -> Any:
         return self.router

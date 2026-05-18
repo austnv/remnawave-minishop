@@ -60,7 +60,41 @@ def _resolve_attribute_name(settings: Settings, key: str) -> Optional[str]:
     return None
 
 
+def _apply_to_provider_bundle(key: str, value: Any) -> bool:
+    """Route an override into the matching provider config/presentation model.
+
+    Provider modules own their env-config via BaseSettings subclasses; here
+    we look up which one owns ``key`` and write the value into the right
+    attribute on the right model.
+    """
+    from bot.payment_providers import (
+        find_manifest_owner,
+        get_provider_bundle,
+    )
+
+    owner = find_manifest_owner(key)
+    if owner is None:
+        return False
+    spec, manifest_field = owner
+    bundle = get_provider_bundle(spec.service_key)
+    if bundle is None:
+        return False
+    target = bundle.presentation if manifest_field.target == "presentation" else bundle.config
+    if target is None:
+        return False
+    attr_name = manifest_field.attr or key
+    try:
+        setattr(target, attr_name, value)
+        return True
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Failed to apply provider override %s=%r: %s", key, value, exc)
+        return False
+
+
 def _apply_value(settings: Settings, key: str, value: Any) -> bool:
+    # Provider-owned keys go to provider models, not the central Settings.
+    if _apply_to_provider_bundle(key, value):
+        return True
     attr_name = _resolve_attribute_name(settings, key)
     if not attr_name:
         return False
@@ -233,12 +267,41 @@ async def update_overrides(
                 await app_settings_dal.delete_override(session, key)
 
     # Apply locally; deletes need an env-default fallback. We re-read the env
-    # default by instantiating a fresh Settings() (cheap; just a few ms) and
-    # copying the matching attributes back over.
+    # default by instantiating a fresh Settings() / provider-config model
+    # (cheap; just a few ms) and copying the matching attributes back over.
     if valid_deletes:
+        from bot.payment_providers import find_manifest_owner, get_provider_bundle
+
         try:
             env_only = Settings()
             for key in valid_deletes:
+                owner = find_manifest_owner(key)
+                if owner is not None:
+                    spec, manifest_field = owner
+                    bundle = get_provider_bundle(spec.service_key)
+                    if bundle is None:
+                        continue
+                    target = (
+                        bundle.presentation
+                        if manifest_field.target == "presentation"
+                        else bundle.config
+                    )
+                    if target is None:
+                        continue
+                    cls = type(target)
+                    try:
+                        fresh = cls()
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to reload provider env defaults for %s: %s",
+                            key,
+                            exc,
+                        )
+                        continue
+                    attr = manifest_field.attr or key
+                    if hasattr(fresh, attr):
+                        setattr(target, attr, getattr(fresh, attr))
+                    continue
                 attr_name = _resolve_attribute_name(env_only, key) or key
                 if hasattr(env_only, attr_name):
                     setattr(settings, attr_name, getattr(env_only, attr_name))

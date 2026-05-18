@@ -3,7 +3,13 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from . import cryptopay, freekassa, heleket, platega, severpay, stars, wata, yookassa
-from .base import PaymentProviderPresentation, PaymentProviderSpec, ServiceFactoryContext
+from .base import (
+    PaymentProviderPresentation,
+    PaymentProviderSpec,
+    ProviderConfigBundle,
+    ProviderManifestField,
+    ServiceFactoryContext,
+)
 
 PAYMENT_PROVIDER_SPECS: tuple[PaymentProviderSpec, ...] = (
     freekassa.SPEC,
@@ -18,6 +24,13 @@ PAYMENT_PROVIDER_SPECS: tuple[PaymentProviderSpec, ...] = (
 )
 
 
+# Provider configs (env-loaded BaseSettings models) live here as a process-wide
+# singleton populated by build_provider_configs() on startup. Modules that need
+# to read provider configs without changing call signatures (e.g. presentation
+# resolution from arbitrary callers) can look them up via current_provider_configs().
+_provider_configs: Dict[str, ProviderConfigBundle] = {}
+
+
 def iter_provider_specs() -> Iterable[PaymentProviderSpec]:
     return PAYMENT_PROVIDER_SPECS
 
@@ -30,10 +43,44 @@ def get_provider_spec(method: str) -> Optional[PaymentProviderSpec]:
     return None
 
 
-def _setting_value(settings: Any, key: str) -> Optional[str]:
-    if settings is None:
+def build_provider_configs() -> Dict[str, ProviderConfigBundle]:
+    """Instantiate per-provider BaseSettings models declared on each SPEC.
+
+    Returns a mapping ``service_key`` → ``ProviderConfigBundle(config, presentation)``.
+    Specs with neither ``config_class`` nor ``presentation_class`` are skipped.
+    The result is cached as the process-wide bundle.
+    """
+    bundles: Dict[str, ProviderConfigBundle] = {}
+    seen: set[str] = set()
+    for spec in PAYMENT_PROVIDER_SPECS:
+        if not spec.service_key or spec.service_key in seen:
+            continue
+        if spec.config_class is None and spec.presentation_class is None:
+            continue
+        seen.add(spec.service_key)
+        bundles[spec.service_key] = ProviderConfigBundle(
+            config=spec.config_class() if spec.config_class else None,
+            presentation=spec.presentation_class() if spec.presentation_class else None,
+        )
+    _provider_configs.clear()
+    _provider_configs.update(bundles)
+    return bundles
+
+
+def current_provider_configs() -> Mapping[str, ProviderConfigBundle]:
+    return _provider_configs
+
+
+def get_provider_bundle(service_key: Optional[str]) -> Optional[ProviderConfigBundle]:
+    if not service_key:
         return None
-    value = getattr(settings, key, None)
+    return _provider_configs.get(service_key)
+
+
+def _setting_value(source: Any, key: str) -> Optional[str]:
+    if source is None:
+        return None
+    value = getattr(source, key, None)
     if value is None:
         return None
     value = str(value).strip()
@@ -50,16 +97,56 @@ def _normalize_language(language: Optional[str], settings: Any = None) -> str:
     return normalized or "ru"
 
 
+def _presentation_attr(suffix: str, language: Optional[str] = None) -> str:
+    """Attribute name on a provider's presentation BaseSettings model.
+
+    Mirrors the legacy ``PAYMENT_<ID>_<suffix>`` env name, but without the
+    ``PAYMENT_<ID>_`` prefix (which is supplied by env_prefix on the model).
+    """
+    if language:
+        return f"{suffix}_{language.upper()}"
+    return suffix
+
+
+def _provider_presentation_value(
+    spec: PaymentProviderSpec,
+    suffix: str,
+    *,
+    language: Optional[str] = None,
+) -> Optional[str]:
+    bundle = _provider_configs.get(spec.service_key) if spec.service_key else None
+    if not bundle or not bundle.presentation:
+        return None
+    attr = _presentation_attr(suffix, language=language)
+    return _setting_value(bundle.presentation, attr)
+
+
 def _localized_setting_value(
     settings: Any,
     spec: PaymentProviderSpec,
     suffix: str,
     language: str,
 ) -> Optional[str]:
+    # 1) Per-provider presentation model (new pattern) takes priority.
+    provider_value = _provider_presentation_value(spec, suffix, language=language)
+    if provider_value is not None:
+        return provider_value
+    # 2) Legacy: PAYMENT_<ID>_<suffix>_<LANG> on the global Settings.
     return _setting_value(
         settings,
         _presentation_setting(spec, f"{suffix}_{language.upper()}"),
     )
+
+
+def _bare_setting_value(
+    settings: Any,
+    spec: PaymentProviderSpec,
+    suffix: str,
+) -> Optional[str]:
+    provider_value = _provider_presentation_value(spec, suffix)
+    if provider_value is not None:
+        return provider_value
+    return _setting_value(settings, _presentation_setting(spec, suffix))
 
 
 def _localized_default(
@@ -91,7 +178,7 @@ def resolve_provider_presentation(
         or spec.label
     )
     webapp_icon = (
-        _setting_value(settings, _presentation_setting(spec, "WEBAPP_ICON"))
+        _bare_setting_value(settings, spec, "WEBAPP_ICON")
         or spec.webapp_icon
     )
     telegram_label_override = _localized_setting_value(
@@ -100,9 +187,7 @@ def resolve_provider_presentation(
         "TELEGRAM_LABEL",
         lang,
     )
-    telegram_emoji_override = _setting_value(
-        settings, _presentation_setting(spec, "TELEGRAM_EMOJI")
-    )
+    telegram_emoji_override = _bare_setting_value(settings, spec, "TELEGRAM_EMOJI")
     telegram_label = (
         telegram_label_override
         or _localized_default(spec.telegram_labels, lang, None)
@@ -200,3 +285,18 @@ def pending_statuses() -> List[str]:
         if spec.pending_status not in statuses:
             statuses.append(spec.pending_status)
     return statuses
+
+
+def iter_provider_manifest_fields() -> Iterable[tuple[PaymentProviderSpec, ProviderManifestField]]:
+    """Yield (spec, manifest_field) for every fragment declared on a provider SPEC."""
+    for spec in PAYMENT_PROVIDER_SPECS:
+        for field in spec.manifest_fields:
+            yield spec, field
+
+
+def find_manifest_owner(key: str) -> Optional[tuple[PaymentProviderSpec, ProviderManifestField]]:
+    """Find which provider owns a manifest key (if any)."""
+    for spec, field in iter_provider_manifest_fields():
+        if field.key == key:
+            return spec, field
+    return None

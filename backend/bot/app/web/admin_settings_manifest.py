@@ -568,15 +568,44 @@ SETTINGS_MANIFEST: List[SettingField] = [
 ]
 
 
+def _provider_field_to_setting_field(
+    spec: Any, manifest_field: Any
+) -> SettingField:
+    return SettingField(
+        key=manifest_field.key,
+        type=manifest_field.type,
+        section="payments",
+        label=manifest_field.label,
+        description=manifest_field.description,
+        placeholder=manifest_field.placeholder,
+        optional=manifest_field.optional,
+        secret=manifest_field.secret,
+        min=manifest_field.min,
+        max=manifest_field.max,
+        choices=tuple(manifest_field.choices) if manifest_field.choices else None,
+        subsection=manifest_field.subsection,
+    )
+
+
+def aggregated_manifest() -> List[SettingField]:
+    """SETTINGS_MANIFEST + per-provider fragments declared in provider SPECs."""
+    from bot.payment_providers import iter_provider_manifest_fields  # local to avoid cycle
+
+    fields: List[SettingField] = list(SETTINGS_MANIFEST)
+    for spec, manifest_field in iter_provider_manifest_fields():
+        fields.append(_provider_field_to_setting_field(spec, manifest_field))
+    return fields
+
+
 def get_field_by_key(key: str) -> Optional[SettingField]:
-    for field in SETTINGS_MANIFEST:
+    for field in aggregated_manifest():
         if field.key == key:
             return field
     return None
 
 
 def manifest_keys() -> List[str]:
-    return [f.key for f in SETTINGS_MANIFEST]
+    return [f.key for f in aggregated_manifest()]
 
 
 def coerce_value(field: SettingField, raw: Any) -> Any:
@@ -635,7 +664,7 @@ def manifest_payload() -> List[dict]:
         "devices": 8,
     }
     items: List[dict] = []
-    for field in SETTINGS_MANIFEST:
+    for field in aggregated_manifest():
         auto_label_i18n_key = f"settings_field_{field.key.lower()}_label"
         auto_description_i18n_key = f"settings_field_{field.key.lower()}_description"
         item = {

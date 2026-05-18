@@ -3,10 +3,12 @@ import hashlib
 import hmac
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from aiogram import Bot, F, Router, types
 from aiohttp import web
+from pydantic import Field, field_validator
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -17,7 +19,13 @@ from bot.utils.request_security import ip_in_allowlist, request_client_ip
 from config.settings import Settings
 from db.dal import payment_dal
 
-from .base import PaymentProviderSpec, ServiceFactoryContext, WebAppPaymentContext
+from .base import (
+    PaymentProviderSpec,
+    ProviderEnvConfig,
+    ProviderManifestField,
+    ServiceFactoryContext,
+    WebAppPaymentContext,
+)
 from .shared import (
     HttpClientMixin,
     PaymentSuccessRequest,
@@ -48,6 +56,82 @@ _SUCCESS_STATUSES = {"paid", "paid_over"}
 _FAILED_STATUSES = {"fail", "wrong_amount", "cancel", "system_fail"}
 
 
+class HeleketConfig(ProviderEnvConfig):
+    """All Heleket-specific env vars. Lives inside the provider module."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="HELEKET_",
+        extra="ignore",
+    )
+
+    ENABLED: bool = Field(default=False)
+    MERCHANT_ID: Optional[str] = None
+    API_KEY: Optional[str] = None
+    BASE_URL: str = Field(default="https://api.heleket.com")
+    CURRENCY: str = Field(default="RUB")
+    TO_CURRENCY: Optional[str] = None
+    NETWORK: Optional[str] = None
+    RETURN_URL: Optional[str] = None
+    SUCCESS_URL: Optional[str] = None
+    LIFETIME_SECONDS: int = Field(default=3600)
+    VERIFY_WEBHOOK_SIGNATURE: bool = Field(default=True)
+    TRUSTED_IPS: str = Field(default="31.133.220.8")
+
+    @field_validator("LIFETIME_SECONDS", mode="before")
+    @classmethod
+    def _clamp_lifetime(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+        try:
+            value = int(v)
+        except (TypeError, ValueError):
+            return 3600
+        return min(43200, max(300, value))
+
+    @field_validator(
+        "MERCHANT_ID", "API_KEY", "TO_CURRENCY", "NETWORK", "RETURN_URL", "SUCCESS_URL",
+        mode="before",
+    )
+    @classmethod
+    def _strip_optional(cls, v):
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @property
+    def webhook_path(self) -> str:
+        return "/webhook/heleket"
+
+    def full_webhook_url(self, base: Optional[str]) -> Optional[str]:
+        if not base:
+            return None
+        return f"{base.rstrip('/')}{self.webhook_path}"
+
+    @property
+    def trusted_ips_list(self) -> List[str]:
+        return [item.strip() for item in (self.TRUSTED_IPS or "").split(",") if item.strip()]
+
+
+class HeleketPresentation(ProviderEnvConfig):
+    """Admin-tunable button text/icon overrides for Heleket."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="PAYMENT_HELEKET_",
+        extra="ignore",
+    )
+
+    WEBAPP_LABEL_RU: Optional[str] = None
+    WEBAPP_LABEL_EN: Optional[str] = None
+    WEBAPP_ICON: Optional[str] = None
+    TELEGRAM_LABEL_RU: Optional[str] = None
+    TELEGRAM_LABEL_EN: Optional[str] = None
+    TELEGRAM_EMOJI: Optional[str] = None
+
+
 def _serialize_for_signature(payload: Dict[str, Any]) -> str:
     """Serialize JSON exactly the way Heleket signs it.
 
@@ -72,6 +156,7 @@ class HeleketService(HttpClientMixin):
         *,
         bot: Bot,
         settings: Settings,
+        config: HeleketConfig,
         i18n: JsonI18n,
         async_session_factory: sessionmaker,
         subscription_service: SubscriptionService,
@@ -80,25 +165,26 @@ class HeleketService(HttpClientMixin):
     ):
         self.bot = bot
         self.settings = settings
+        self.config = config
         self.i18n = i18n
         self.async_session_factory = async_session_factory
         self.subscription_service = subscription_service
         self.referral_service = referral_service
 
-        self.base_url = (settings.HELEKET_BASE_URL or "https://api.heleket.com").rstrip("/")
-        self.merchant_id = settings.HELEKET_MERCHANT_ID or ""
-        self.api_key = settings.HELEKET_API_KEY or ""
-        self.currency = (settings.HELEKET_CURRENCY or "RUB").upper()
-        self.to_currency = (settings.HELEKET_TO_CURRENCY or "").strip() or None
-        self.network = (settings.HELEKET_NETWORK or "").strip() or None
-        self.return_url = settings.HELEKET_RETURN_URL or f"https://t.me/{default_return_url}"
-        self.success_url = settings.HELEKET_SUCCESS_URL or self.return_url
-        self.lifetime_seconds = settings.HELEKET_LIFETIME_SECONDS
-        self.verify_webhook_signature = settings.HELEKET_VERIFY_WEBHOOK_SIGNATURE
+        self.base_url = (config.BASE_URL or "https://api.heleket.com").rstrip("/")
+        self.merchant_id = config.MERCHANT_ID or ""
+        self.api_key = config.API_KEY or ""
+        self.currency = (config.CURRENCY or "RUB").upper()
+        self.to_currency = (config.TO_CURRENCY or "").strip() or None
+        self.network = (config.NETWORK or "").strip() or None
+        self.return_url = config.RETURN_URL or f"https://t.me/{default_return_url}"
+        self.success_url = config.SUCCESS_URL or self.return_url
+        self.lifetime_seconds = config.LIFETIME_SECONDS
+        self.verify_webhook_signature = config.VERIFY_WEBHOOK_SIGNATURE
 
         self._init_http_client(total_timeout=20)
         self.configured: bool = bool(
-            settings.HELEKET_ENABLED and self.merchant_id and self.api_key
+            config.ENABLED and self.merchant_id and self.api_key
         )
         if not self.configured:
             logging.warning(
@@ -184,9 +270,8 @@ class HeleketService(HttpClientMixin):
             return web.Response(status=503, text="heleket_disabled")
 
         client_ip = request_client_ip(request, trusted_proxies=self.settings.trusted_proxies)
-        if self.settings.heleket_trusted_ips and not ip_in_allowlist(
-            client_ip, self.settings.heleket_trusted_ips
-        ):
+        trusted = self.config.trusted_ips_list
+        if trusted and not ip_in_allowlist(client_ip, trusted):
             logging.warning("Heleket webhook denied from unauthorized IP source.")
             return web.Response(status=403, text="forbidden")
 
@@ -386,7 +471,7 @@ async def pay_heleket_callback_handler(
         amount=parts.price,
         currency=currency_code,
         description=payment_description,
-        url_callback=settings.heleket_full_webhook_url,
+        url_callback=heleket_service.config.full_webhook_url(settings.WEBHOOK_BASE_URL),
     )
     result = response_data.get("result") if isinstance(response_data, dict) else None
     await render_link_or_fail(
@@ -424,7 +509,7 @@ async def create_webapp_payment(ctx: WebAppPaymentContext) -> web.Response:
             amount=ctx.price,
             currency=currency,
             description=ctx.description,
-            url_callback=settings.heleket_full_webhook_url,
+            url_callback=service.config.full_webhook_url(settings.WEBHOOK_BASE_URL),
         )
     except Exception:
         await ctx.session.rollback()
@@ -448,15 +533,78 @@ async def heleket_webhook_route(request: web.Request) -> web.Response:
 
 
 def create_service(ctx: ServiceFactoryContext) -> HeleketService:
+    bundle = ctx.config_for("heleket_service")
+    config = bundle.config if bundle and isinstance(bundle.config, HeleketConfig) else HeleketConfig()
     return HeleketService(
         bot=ctx.bot,
         settings=ctx.settings,
+        config=config,
         i18n=ctx.i18n,
         async_session_factory=ctx.async_session_factory,
         subscription_service=ctx.subscription_service,
         referral_service=ctx.referral_service,
         default_return_url=ctx.bot_username_for_default_return,
     )
+
+
+_PRESENTATION_MANIFEST = tuple(
+    ProviderManifestField(
+        key=key,
+        type=type_,
+        label=label,
+        description=description,
+        placeholder=placeholder,
+        subsection="Heleket",
+        target="presentation",
+        attr=attr,
+    )
+    for key, type_, label, description, placeholder, attr in (
+        ("PAYMENT_HELEKET_WEBAPP_LABEL_RU", "string", "WebApp button text (RU)",
+         "Custom Russian text shown in the Web App payment method button.", "", "WEBAPP_LABEL_RU"),
+        ("PAYMENT_HELEKET_WEBAPP_LABEL_EN", "string", "WebApp button text (EN)",
+         "Custom English text shown in the Web App payment method button.", "", "WEBAPP_LABEL_EN"),
+        ("PAYMENT_HELEKET_WEBAPP_ICON", "icon", "WebApp button icon",
+         "Lucide icon name rendered inside the Web App payment method button.", "Bitcoin", "WEBAPP_ICON"),
+        ("PAYMENT_HELEKET_TELEGRAM_LABEL_RU", "string", "Telegram button text (RU)",
+         "Custom Russian text shown in Telegram bot payment buttons.", "", "TELEGRAM_LABEL_RU"),
+        ("PAYMENT_HELEKET_TELEGRAM_LABEL_EN", "string", "Telegram button text (EN)",
+         "Custom English text shown in Telegram bot payment buttons.", "", "TELEGRAM_LABEL_EN"),
+        ("PAYMENT_HELEKET_TELEGRAM_EMOJI", "string", "Telegram button emoji",
+         "Emoji prepended to the Telegram bot payment button when customized.", "🪙", "TELEGRAM_EMOJI"),
+    )
+)
+
+
+_CONFIG_MANIFEST = (
+    ProviderManifestField("HELEKET_ENABLED", "bool", "Enabled", subsection="Heleket", attr="ENABLED"),
+    ProviderManifestField("HELEKET_MERCHANT_ID", "string", "Merchant ID", subsection="Heleket",
+                          secret=True, attr="MERCHANT_ID"),
+    ProviderManifestField("HELEKET_API_KEY", "string", "Payment API key", subsection="Heleket",
+                          secret=True, attr="API_KEY"),
+    ProviderManifestField("HELEKET_BASE_URL", "url", "Base URL",
+                          placeholder="https://api.heleket.com", subsection="Heleket", attr="BASE_URL"),
+    ProviderManifestField("HELEKET_CURRENCY", "string", "Invoice currency",
+                          description="Fiat or crypto code (RUB, USD, USDT).",
+                          placeholder="RUB", subsection="Heleket", attr="CURRENCY"),
+    ProviderManifestField("HELEKET_TO_CURRENCY", "string", "Target crypto",
+                          description="Optional target cryptocurrency for conversion.",
+                          subsection="Heleket", attr="TO_CURRENCY"),
+    ProviderManifestField("HELEKET_NETWORK", "string", "Blockchain network",
+                          description="Optional blockchain network code (tron, bsc, eth).",
+                          subsection="Heleket", attr="NETWORK"),
+    ProviderManifestField("HELEKET_RETURN_URL", "url", "Return URL", subsection="Heleket",
+                          attr="RETURN_URL"),
+    ProviderManifestField("HELEKET_SUCCESS_URL", "url", "Success URL", subsection="Heleket",
+                          attr="SUCCESS_URL"),
+    ProviderManifestField("HELEKET_LIFETIME_SECONDS", "int", "Invoice lifetime (seconds)",
+                          description="300..43200; Heleket defaults to 3600.",
+                          subsection="Heleket", min=300, max=43200, attr="LIFETIME_SECONDS"),
+    ProviderManifestField("HELEKET_VERIFY_WEBHOOK_SIGNATURE", "bool", "Verify webhook signature",
+                          subsection="Heleket", attr="VERIFY_WEBHOOK_SIGNATURE"),
+    ProviderManifestField("HELEKET_TRUSTED_IPS", "string", "Trusted IPs",
+                          description="Comma-separated IP addresses accepted for Heleket webhooks.",
+                          subsection="Heleket", attr="TRUSTED_IPS"),
+)
 
 
 SPEC = PaymentProviderSpec(
@@ -469,13 +617,16 @@ SPEC = PaymentProviderSpec(
     telegram_labels={"ru": "Heleket", "en": "Heleket"},
     telegram_emoji="🪙",
     pending_status="pending_heleket",
-    enabled=lambda settings: settings.HELEKET_ENABLED,
+    enabled=lambda config: bool(getattr(config, "ENABLED", False)),
     service_key="heleket_service",
     callback_prefix="pay_heleket",
     router=router,
     create_service=create_service,
-    webhook_path=lambda settings: settings.heleket_webhook_path,
+    webhook_path=lambda source: "/webhook/heleket",
     webhook_route=heleket_webhook_route,
     create_webapp_payment=create_webapp_payment,
     emoji="🪙",
+    config_class=HeleketConfig,
+    presentation_class=HeleketPresentation,
+    manifest_fields=_CONFIG_MANIFEST + _PRESENTATION_MANIFEST,
 )
