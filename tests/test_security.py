@@ -10,6 +10,7 @@ from aiohttp import web
 
 from bot.app.web import admin_api, subscription_webapp
 from bot.app.web.admin_api_impl import settings as admin_settings_routes
+from bot.app.web.webapp import account as account_routes
 from bot.app.web.webapp_auth import (
     create_telegram_oauth_nonce,
     create_webapp_session_token,
@@ -19,8 +20,10 @@ from bot.payment_providers.cryptopay import CryptoPayService
 from bot.payment_providers.freekassa import FreeKassaService
 from bot.payment_providers.heleket import HeleketConfig, HeleketService, _compute_signature
 from bot.payment_providers.yookassa import yookassa_webhook_route
+from bot.services.email_templates import render_login_code
 from bot.utils.request_security import request_client_ip
 from config.settings import Settings
+from db.dal import security_dal
 from db.database_setup import redacted_database_url
 
 
@@ -197,6 +200,25 @@ class HeleketServiceTests(unittest.TestCase):
 
 
 class WebAppSecurityTests(unittest.IsolatedAsyncioTestCase):
+    class _AsyncSessionFactory:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+        async def flush(self):
+            return None
+
     def test_auth_response_sets_cookies_and_does_not_return_session_token(self):
         settings = SimpleNamespace(
             WEBAPP_SESSION_SECRET="session-secret",
@@ -305,6 +327,208 @@ class WebAppSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(model)
         self.assertEqual(response.status, 400)
         self.assertIn("email_too_long", response.text)
+
+    def test_email_password_hash_round_trips_without_plaintext(self):
+        password = "correct horse battery staple"
+
+        stored_hash = subscription_webapp._hash_email_password(password)
+
+        self.assertNotIn(password, stored_hash)
+        self.assertTrue(subscription_webapp._verify_email_password(password, stored_hash))
+        self.assertFalse(subscription_webapp._verify_email_password("wrong-password", stored_hash))
+
+    def test_set_password_email_code_copy_mentions_password_creation(self):
+        settings = SimpleNamespace(
+            DEFAULT_LANGUAGE="ru",
+            EMAIL_CODE_TTL_SECONDS=600,
+            WEBAPP_LOGO_URL="",
+            WEBAPP_LOGO_USE_EMOJI=False,
+            WEBAPP_PRIMARY_COLOR="#00fe7a",
+            WEBAPP_TITLE="Remnawave",
+        )
+
+        content = render_login_code(
+            settings,
+            code="123456",
+            language_code="ru",
+            magic_link="https://example.com/login",
+            purpose="set_password",
+        )
+
+        self.assertIn("создания пароля", content.subject)
+        self.assertIn("создание пароля", content.html)
+        self.assertIn("код для создания пароля", content.text)
+        self.assertNotIn("Подтвердите вход", content.html)
+        self.assertNotIn("https://example.com/login", content.text)
+
+    async def test_email_password_login_success_sets_session_cookie(self):
+        settings = SimpleNamespace(
+            WEBAPP_SESSION_SECRET="session-secret",
+            WEBAPP_SESSION_TTL_SECONDS=3600,
+            email_auth_configured=True,
+            BRUTE_FORCE_MAX_FAILURES=5,
+            BRUTE_FORCE_WINDOW_SECONDS=60,
+            BRUTE_FORCE_LOCK_SECONDS=300,
+        )
+        stored_hash = subscription_webapp._hash_email_password("secret-password")
+        db_user = SimpleNamespace(
+            user_id=42,
+            email_verified_at=object(),
+            password_hash=stored_hash,
+            is_banned=False,
+            telegram_id=None,
+        )
+        request = SimpleNamespace(
+            app={"settings": settings, "async_session_factory": self._AsyncSessionFactory()},
+            json=AsyncMock(
+                return_value={"email": "user@example.com", "password": "secret-password"}
+            ),
+        )
+
+        with (
+            patch.object(
+                subscription_webapp.security_dal,
+                "check_throttle",
+                AsyncMock(return_value=security_dal.ThrottleDecision(locked=False)),
+            ),
+            patch.object(
+                subscription_webapp.security_dal,
+                "clear_throttle_state",
+                AsyncMock(return_value=None),
+            ),
+            patch.object(
+                subscription_webapp.user_dal,
+                "get_user_by_email",
+                AsyncMock(return_value=db_user),
+            ),
+        ):
+            response = await subscription_webapp.email_password_auth_route(request)
+
+        payload = json.loads(response.text)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["user_id"], 42)
+        self.assertIn("rw_webapp_session", response.cookies)
+
+    async def test_email_password_login_failures_use_same_fallback_error(self):
+        settings = SimpleNamespace(
+            email_auth_configured=True,
+            BRUTE_FORCE_MAX_FAILURES=5,
+            BRUTE_FORCE_WINDOW_SECONDS=60,
+            BRUTE_FORCE_LOCK_SECONDS=300,
+        )
+        cases = [
+            None,
+            SimpleNamespace(
+                user_id=42,
+                email_verified_at=object(),
+                password_hash=None,
+                is_banned=False,
+            ),
+            SimpleNamespace(
+                user_id=42,
+                email_verified_at=object(),
+                password_hash=subscription_webapp._hash_email_password("other-password"),
+                is_banned=False,
+            ),
+        ]
+
+        for db_user in cases:
+            request = SimpleNamespace(
+                app={"settings": settings, "async_session_factory": self._AsyncSessionFactory()},
+                json=AsyncMock(
+                    return_value={"email": "user@example.com", "password": "secret-password"}
+                ),
+            )
+            with (
+                patch.object(
+                    subscription_webapp.security_dal,
+                    "check_throttle",
+                    AsyncMock(return_value=security_dal.ThrottleDecision(locked=False)),
+                ),
+                patch.object(
+                    subscription_webapp.security_dal,
+                    "record_throttle_failure",
+                    AsyncMock(return_value=security_dal.ThrottleDecision(locked=False)),
+                ),
+                patch.object(
+                    subscription_webapp.user_dal,
+                    "get_user_by_email",
+                    AsyncMock(return_value=db_user),
+                ),
+            ):
+                response = await subscription_webapp.email_password_auth_route(request)
+
+            payload = json.loads(response.text)
+            self.assertEqual(response.status, 401)
+            self.assertEqual(payload["error"], "password_login_failed")
+            self.assertEqual(payload["fallback"], "email_code")
+
+    async def test_account_password_confirm_requires_matching_passwords(self):
+        request = SimpleNamespace(
+            app={},
+            json=AsyncMock(
+                return_value={
+                    "password": "secret-password",
+                    "password_confirm": "other-password",
+                    "code": "123456",
+                }
+            ),
+        )
+
+        with patch.object(account_routes, "_require_user_id", return_value=42):
+            response = await account_routes.account_password_confirm_route(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertIn("password_mismatch", response.text)
+
+    async def test_account_password_confirm_sets_hash_after_email_code(self):
+        settings = SimpleNamespace(
+            REDIS_URL=None,
+            REDIS_KEY_PREFIX="test",
+        )
+        db_user = SimpleNamespace(
+            user_id=42,
+            email="user@example.com",
+            email_verified_at=object(),
+            is_banned=False,
+            password_hash=None,
+            password_set_at=None,
+        )
+        email_service = SimpleNamespace(
+            verify_code=AsyncMock(
+                return_value=SimpleNamespace(ok=True, error=None, retry_after=None)
+            )
+        )
+        request = SimpleNamespace(
+            app={
+                "settings": settings,
+                "email_auth_service": email_service,
+                "async_session_factory": self._AsyncSessionFactory(),
+            },
+            json=AsyncMock(
+                return_value={
+                    "password": "secret-password",
+                    "password_confirm": "secret-password",
+                    "code": "123456",
+                }
+            ),
+        )
+
+        with (
+            patch.object(account_routes, "_require_user_id", return_value=42),
+            patch.object(
+                account_routes.user_dal,
+                "get_user_by_id",
+                AsyncMock(return_value=db_user),
+            ),
+        ):
+            response = await account_routes.account_password_confirm_route(request)
+
+        self.assertEqual(response.status, 200)
+        self.assertTrue(
+            subscription_webapp._verify_email_password("secret-password", db_user.password_hash)
+        )
+        self.assertIsNotNone(db_user.password_set_at)
 
     def test_payment_payload_rejects_overlong_description(self):
         model, response = subscription_webapp._validate_model_payload(

@@ -29,6 +29,8 @@ class User(Base):
     username = Column(String, nullable=True, index=True)
     email = Column(String, nullable=True, unique=True, index=True)
     email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    password_hash = Column(String, nullable=True)
+    password_set_at = Column(DateTime(timezone=True), nullable=True)
     telegram_id = Column(BigInteger, nullable=True, unique=True, index=True)
     telegram_photo_url = Column(Text, nullable=True)
     first_name = Column(String, nullable=True)

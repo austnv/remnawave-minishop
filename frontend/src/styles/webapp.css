@@ -1290,6 +1290,22 @@ a {
   background: var(--success-soft);
 }
 
+.settings-row-linked-with-action {
+  grid-template-columns: 28px minmax(0, 1fr) max-content;
+}
+
+.settings-inline-action {
+  justify-self: end;
+  min-height: 34px;
+  max-width: 132px;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 .settings-row-linked > svg:first-child {
   color: var(--success-text);
 }
@@ -1603,8 +1619,23 @@ a {
 }
 
 .auth-card {
+  box-sizing: content-box;
   display: grid;
-  gap: 14px;
+  align-content: start;
+  overflow: hidden;
+  transition: height 0.22s ease;
+  will-change: height;
+}
+
+.auth-mode-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  animation: auth-mode-enter 0.18s ease-out both;
+}
+
+.auth-mode-panel-password {
+  padding-top: 2px;
 }
 
 .auth-pane {
@@ -1659,6 +1690,38 @@ a {
   border-top-color: #fff;
   border-radius: 999px;
   animation: telegram-button-spin 0.72s linear infinite;
+}
+
+.password-switch-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.password-switch-stack {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  margin-top: -3px;
+}
+
+.password-switch-button,
+.auth-code-fallback {
+  width: fit-content;
+  justify-self: center;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+@keyframes auth-mode-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes telegram-button-spin {
@@ -2027,8 +2090,13 @@ a {
   .language-select-content,
   .dialog-backdrop,
   .dialog-card,
+  .auth-mode-panel,
   .toast {
     animation: none !important;
+  }
+
+  .auth-card {
+    transition: none !important;
   }
 }
 

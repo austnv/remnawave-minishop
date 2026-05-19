@@ -37,6 +37,13 @@ def _validation_error_response(exc: ValidationError) -> web.Response:
         if field in {"description", "comment", "note"} and error_type == "string_too_long":
             return _json_error(400, f"{field}_too_long", f"{field.capitalize()} is too long")
 
+        if field in {"password", "password_confirm"}:
+            if error_type == "string_too_short":
+                return _json_error(400, "password_too_short", "Password is too short")
+            if error_type == "string_too_long":
+                return _json_error(400, "password_too_long", "Password is too long")
+            return _json_error(400, "invalid_password", "Invalid password")
+
         if error_type == "string_too_long":
             return _json_error(400, "text_too_long", "Text is too long")
 

@@ -52,6 +52,16 @@
   export let selectedTariff = null;
   export let selectedTariffKey = "";
   export let selectedTariffPlans = [];
+  export let setPasswordBusy = false;
+  export let setPasswordCode = "";
+  export let setPasswordConfirm = "";
+  export let setPasswordEmail = "";
+  export let setPasswordIsError = false;
+  export let setPasswordOpen = false;
+  export let setPasswordPending = false;
+  export let setPasswordResendCooldown = 0;
+  export let setPasswordStatus = "";
+  export let setPasswordValue = "";
   export let singleTariffMode = false;
   export let subscription = {};
   export let tariffCatalog = [];
@@ -104,13 +114,16 @@
   export let closeDeviceDisconnectDialog = () => {};
   export let closeLinkEmailDialog = () => {};
   export let closePaymentModal = () => {};
+  export let closeSetPasswordDialog = () => {};
   export let backToTariffList = () => {};
   export let continueWithSelectedTariff = () => {};
   export let requestLinkEmailCode = () => {};
+  export let requestSetPasswordCode = () => {};
   export let selectTariff = () => {};
   export let t = (key) => key;
   export let termUnitLabel = () => "";
   export let verifyLinkEmailCode = () => {};
+  export let confirmSetPassword = () => {};
 </script>
 
 <Dialog
@@ -298,6 +311,101 @@
     </Button>
   </div>
 </Dialog>
+
+<Dialog
+  open={setPasswordOpen && !setPasswordPending}
+  title={t("wa_password_modal_title")}
+  description={t("wa_password_modal_desc")}
+  closeLabel={t("wa_close")}
+  onclose={closeSetPasswordDialog}
+  class="payment-dialog-card"
+>
+  <div class="payment-dialog-body">
+    <Input
+      bind:value={setPasswordValue}
+      type="password"
+      placeholder={t("wa_password_new_placeholder")}
+      autocomplete="new-password"
+    />
+    <Input
+      bind:value={setPasswordConfirm}
+      type="password"
+      placeholder={t("wa_password_confirm_placeholder")}
+      autocomplete="new-password"
+      on:keydown={(event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        requestSetPasswordCode();
+      }}
+    />
+    <Button
+      class="wide bottom-action payment-submit-button"
+      onclick={requestSetPasswordCode}
+      disabled={setPasswordBusy}
+    >
+      <LockKeyhole size={17} />
+      {t("wa_password_send_code_action")}
+    </Button>
+    {#if setPasswordStatus}
+      <StatusMessage error={setPasswordIsError}>{setPasswordStatus}</StatusMessage>
+    {/if}
+  </div>
+</Dialog>
+
+{#if setPasswordOpen && setPasswordPending}
+  <div class="password-code-fullscreen" role="dialog" aria-modal="true">
+    <div class="phone-screen auth-screen">
+      <header class="screen-head center-title">
+        <Button
+          variant="icon"
+          size="icon"
+          onclick={closeSetPasswordDialog}
+          aria-label={t("wa_back")}
+        >
+          <ArrowLeft size={19} />
+        </Button>
+        <div>
+          <h1>{t("wa_email_verification_title")}</h1>
+          <p>{t("wa_email_sent_to", { email: setPasswordEmail || "" })}</p>
+        </div>
+        <span></span>
+      </header>
+      <div class="otp-wrap">
+        <label class="otp-input-wrap">
+          <input
+            bind:value={setPasswordCode}
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            aria-label={t("wa_email_code_aria")}
+          />
+          <span class="otp-slots" aria-hidden="true">
+            {#each Array.from({ length: 6 }) as _, index}
+              <span class:filled={setPasswordCode[index]}>{setPasswordCode[index] || ""}</span>
+            {/each}
+          </span>
+        </label>
+        <Button class="wide" onclick={confirmSetPassword} disabled={setPasswordBusy}>
+          {t("wa_confirm")}
+        </Button>
+        {#if setPasswordStatus}
+          <StatusMessage error={setPasswordIsError}>{setPasswordStatus}</StatusMessage>
+        {/if}
+        <button
+          class="link-button"
+          type="button"
+          onclick={requestSetPasswordCode}
+          disabled={setPasswordBusy || setPasswordResendCooldown > 0}
+        >
+          <RefreshCw size={15} />
+          {setPasswordResendCooldown > 0
+            ? t("wa_auth_resend_wait", { seconds: setPasswordResendCooldown })
+            : t("wa_resend_code")}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <Dialog
   open={linkEmailOpen}

@@ -39,6 +39,7 @@
   export let openAdminPanel = () => {};
   export let openExternalLink = () => {};
   export let openLinkEmailDialog = () => {};
+  export let openSetPasswordDialog = () => {};
   export let setLanguageMenuOpen = () => {};
   export let t = (key) => key;
   export let updateAccountLanguage = () => {};
@@ -100,12 +101,24 @@
       </Button>
     {/if}
     {#if user?.email}
-      <div class="settings-row settings-row-linked">
+      <div class="settings-row settings-row-linked settings-row-linked-with-action">
         <CheckCircle2 size={21} />
         <span>
           <strong>{t("wa_settings_email_linked_title")}</strong>
           <small>{user?.email}</small>
         </span>
+        {#if user?.email_verified}
+          <Button
+            variant="secondary"
+            size="sm"
+            class="settings-inline-action"
+            onclick={openSetPasswordDialog}
+          >
+            {user?.password_auth_enabled
+              ? t("wa_settings_change_password_action")
+              : t("wa_settings_set_password_action")}
+          </Button>
+        {/if}
       </div>
     {:else}
       <button

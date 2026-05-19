@@ -84,6 +84,7 @@ export const DEV_MOCK = {
       username: "username",
       email: "user@example.com",
       email_verified: true,
+      password_auth_enabled: false,
       telegram_id: 100200300,
       telegram_linked: true,
       telegram_photo_url: "",

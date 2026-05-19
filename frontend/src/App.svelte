@@ -203,6 +203,8 @@
     telegramLoginBusy,
     loginEmailFieldError,
     loginEmailTooltipOpen,
+    passwordLoginFallback,
+    passwordLoginMode,
     authResendCooldown,
     pendingEmail,
   } = $authStore);
@@ -239,6 +241,12 @@
     linkEmailStatus,
     linkEmailIsError,
     linkEmailResendCooldown,
+    setPasswordBusy,
+    setPasswordIsError,
+    setPasswordOpen,
+    setPasswordPending,
+    setPasswordResendCooldown,
+    setPasswordStatus,
     languageBusy,
   } = $accountStore);
 
@@ -388,7 +396,8 @@
       changeConfirmOpen ||
       topupModalOpen ||
       deviceTopupModalOpen ||
-      linkEmailOpen
+      linkEmailOpen ||
+      setPasswordOpen
   );
   $: if (!tariffMode && !$billingStore.selectedPlan && plans.length) {
     billingStore.update((s) => ({ ...s, selectedPlan: plans[Math.min(1, plans.length - 1)] }));
@@ -451,6 +460,11 @@
     };
     const onPopState = () => {
       const section = sectionFromPath(window.location.pathname);
+      if (mode === "login") {
+        setPasswordLoginMode(isPasswordLoginPath(), true);
+        screen = "login";
+        return;
+      }
       if (mode === "app") {
         if (section === "admin" && isAdmin) {
           screen = "admin";
@@ -471,6 +485,7 @@
       authStore.stopTelegramLoginWatchdog();
       authStore.clearCooldownTimer();
       accountStore.clearLinkEmailResendTimer();
+      accountStore.clearSetPasswordResendTimer();
       clearLanguageClickGuard();
       syncBodyScrollLock(false);
     };
@@ -580,6 +595,34 @@
     window.history.replaceState(null, "", `${u.pathname}${qs}${u.hash}`);
   }
 
+  function isPasswordLoginPath(pathname = window.location.pathname) {
+    return (
+      String(pathname || "")
+        .replace(/\/+$/, "")
+        .toLowerCase() === "/login/password"
+    );
+  }
+
+  function syncPasswordLoginPath(enabled, replace = false) {
+    if (typeof window === "undefined" || window.location.protocol === "file:") return;
+    const targetPath = enabled ? "/login/password" : "/";
+    if (window.location.pathname === targetPath) return;
+    const nextUrl = `${targetPath}${window.location.search}${window.location.hash}`;
+    window.history[replace ? "replaceState" : "pushState"](null, "", nextUrl);
+  }
+
+  function setPasswordLoginMode(enabled, replace = false) {
+    const nextEnabled = Boolean(enabled);
+    authStore.update((s) => ({
+      ...s,
+      passwordLoginMode: nextEnabled,
+      passwordLoginFallback: false,
+      authStatus: "",
+      authIsError: false,
+    }));
+    syncPasswordLoginPath(nextEnabled, replace);
+  }
+
   async function loadData() {
     const payload = await api("/me");
     if (!payload.ok) throw new Error(payload.error || "load_failed");
@@ -646,6 +689,7 @@
     mode = "login";
     screen = "login";
     activeTab = "home";
+    setPasswordLoginMode(isPasswordLoginPath(), true);
   }
 
   async function api(path, options = {}) {
@@ -960,6 +1004,7 @@
             {brandTitle}
             {brand}
             bind:email={$authStore.email}
+            bind:emailPassword={$authStore.emailPassword}
             bind:emailCode={$authStore.emailCode}
             {pendingEmail}
             {authStatus}
@@ -968,6 +1013,8 @@
             {authResendCooldown}
             {loginEmailFieldError}
             {loginEmailTooltipOpen}
+            {passwordLoginFallback}
+            {passwordLoginMode}
             {telegramLoginBusy}
             {telegramLoginUnavailable}
             {telegramLoginChecking}
@@ -977,6 +1024,7 @@
             {userAgreementUrl}
             {t}
             requestEmailCode={() => authStore.requestEmailCode((s) => (screen = s))}
+            loginWithEmailPassword={authStore.loginWithEmailPassword}
             verifyEmailCode={authStore.verifyEmailCode}
             openTelegramLogin={() =>
               authStore.openTelegramLogin(telegramOAuthClientId, () => telegramMiniAppInitData)}
@@ -987,6 +1035,7 @@
               loginEmailFieldError = "";
               loginEmailTooltipOpen = false;
             }}
+            setPasswordLoginMode={(enabled) => setPasswordLoginMode(enabled)}
           />
         {:else if screen === "admin" && isAdmin}
           <AdminPanel
@@ -1109,6 +1158,7 @@
                 {openAdminPanel}
                 {openExternalLink}
                 openLinkEmailDialog={accountStore.openLinkEmailDialog}
+                openSetPasswordDialog={accountStore.openSetPasswordDialog}
                 {setLanguageMenuOpen}
                 {t}
                 updateAccountLanguage={accountStore.updateAccountLanguage}
@@ -1125,6 +1175,10 @@
             bind:selectedMethod={$billingStore.selectedMethod}
             bind:selectedPlan={$billingStore.selectedPlan}
             bind:selectedTariffKey={$billingStore.selectedTariffKey}
+            bind:setPasswordCode={$accountStore.setPasswordCode}
+            bind:setPasswordConfirm={$accountStore.setPasswordConfirm}
+            bind:setPasswordValue={$accountStore.setPasswordValue}
+            setPasswordEmail={user?.email || ""}
             createPayment={billingStore.createPayment}
             {deviceConfirmOpen}
             {deviceDisconnectBusy}
@@ -1136,6 +1190,12 @@
             {linkEmailPending}
             {linkEmailResendCooldown}
             {linkEmailStatus}
+            {setPasswordBusy}
+            {setPasswordIsError}
+            {setPasswordOpen}
+            {setPasswordPending}
+            {setPasswordResendCooldown}
+            {setPasswordStatus}
             {hasMultipleTariffs}
             {methods}
             {payBusy}
@@ -1149,13 +1209,16 @@
             closeDeviceDisconnectDialog={devicesStore.closeDeviceDisconnectDialog}
             closeLinkEmailDialog={accountStore.closeLinkEmailDialog}
             closePaymentModal={billingStore.closePaymentModal}
+            closeSetPasswordDialog={accountStore.closeSetPasswordDialog}
             {backToTariffList}
             {continueWithSelectedTariff}
             requestLinkEmailCode={accountStore.requestLinkEmailCode}
+            requestSetPasswordCode={accountStore.requestSetPasswordCode}
             {selectTariff}
             {t}
             {termUnitLabel}
             verifyLinkEmailCode={accountStore.verifyLinkEmailCode}
+            confirmSetPassword={accountStore.confirmSetPassword}
           />
 
           <TariffDialogs

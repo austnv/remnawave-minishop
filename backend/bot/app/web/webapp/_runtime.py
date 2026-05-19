@@ -41,7 +41,7 @@ from bot.app.web.webapp_auth import (
     verify_telegram_oauth_nonce,
     verify_webapp_session_token,
 )
-from bot.infra.redis import cache_get_json, cache_set_json, get_redis, redis_key
+from bot.infra.redis import cache_delete, cache_get_json, cache_set_json, get_redis, redis_key
 from bot.services.email_auth_service import EmailAuthService, normalize_email
 from bot.services.email_templates import render_account_merged
 from bot.services.promo_code_service import PromoCodeService
@@ -51,7 +51,7 @@ from bot.utils.config_link import prepare_config_links
 from bot.utils.request_security import parse_ip_entries, request_client_ip
 from bot.utils.text_sanitizer import sanitize_display_name, sanitize_username
 from config.settings import Settings
-from db.dal import payment_dal, subscription_dal, user_dal
+from db.dal import payment_dal, security_dal, subscription_dal, user_dal
 from db.dal.user_dal import UserMergeConflictError
 from db.models import Payment, User, UserTelegramAvatar
 
@@ -103,6 +103,7 @@ WEBAPP_CSRF_EXEMPT_PATHS = {
     "/api/auth/email/request",
     "/api/auth/email/verify",
     "/api/auth/email/magic",
+    "/api/auth/email/password",
     "/api/auth/logout",
 }
 

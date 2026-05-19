@@ -4,6 +4,7 @@ from ._runtime import *  # noqa: F403,F405
 
 def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/", index_route)
+    app.router.add_get("/login/password", index_route)
     app.router.add_get("/home", index_route)
     app.router.add_get("/invite", index_route)
     app.router.add_get("/devices", index_route)
@@ -43,6 +44,7 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_post("/api/auth/email/request", email_auth_request_route)
     app.router.add_post("/api/auth/email/verify", email_auth_verify_route)
     app.router.add_post("/api/auth/email/magic", email_auth_magic_route)
+    app.router.add_post("/api/auth/email/password", email_password_auth_route)
     app.router.add_post("/api/auth/logout", logout_route)
     app.router.add_get("/api/bootstrap", bootstrap_route)
     app.router.add_get("/api/me", me_route)
@@ -50,6 +52,8 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_post("/api/account/language", account_language_route)
     app.router.add_post("/api/account/email/request", account_email_request_route)
     app.router.add_post("/api/account/email/verify", account_email_verify_route)
+    app.router.add_post("/api/account/password/request", account_password_request_route)
+    app.router.add_post("/api/account/password/confirm", account_password_confirm_route)
     app.router.add_post("/api/account/telegram/link", account_telegram_link_route)
     app.router.add_post("/api/promo/apply", apply_promo_route)
     app.router.add_post("/api/trial/activate", activate_trial_route)

@@ -744,6 +744,16 @@ def _migration_0022_add_indexes_for_admin_reports(connection: Connection) -> Non
     )
 
 
+def _migration_0023_add_email_password_auth_fields(connection: Connection) -> None:
+    inspector = inspect(connection)
+    columns: Set[str] = {col["name"] for col in inspector.get_columns("users")}
+
+    if "password_hash" not in columns:
+        connection.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR"))
+    if "password_set_at" not in columns:
+        connection.execute(text("ALTER TABLE users ADD COLUMN password_set_at TIMESTAMPTZ"))
+
+
 MIGRATIONS: List[Migration] = [
     Migration(
         id="0001_add_channel_subscription_fields",
@@ -865,6 +875,11 @@ MIGRATIONS: List[Migration] = [
         id="0022_add_indexes_for_admin_reports",
         description="Indexes to speed up financial stats and admin log queries",
         upgrade=_migration_0022_add_indexes_for_admin_reports,
+    ),
+    Migration(
+        id="0023_add_email_password_auth_fields",
+        description="Store hashed passwords for optional email password login",
+        upgrade=_migration_0023_add_email_password_auth_fields,
     ),
 ]
 

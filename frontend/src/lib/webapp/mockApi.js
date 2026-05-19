@@ -231,7 +231,7 @@ export async function mockApi(path, options = {}, context = {}) {
       ok: true,
       favicon_url: "/webapp-favicon/1111111111111111/icon-180.png",
       variants: {
-        "32": "/webapp-favicon/1111111111111111/icon-32.png",
+        32: "/webapp-favicon/1111111111111111/icon-32.png",
         apple_touch: "/webapp-favicon/1111111111111111/apple-touch-icon.png",
       },
     };
@@ -254,7 +254,8 @@ export async function mockApi(path, options = {}, context = {}) {
         DEV_MOCK.config.faviconUrl = updates.WEBAPP_FAVICON_URL || "";
       }
       if (Object.prototype.hasOwnProperty.call(updates, "WEBAPP_LOGO_FAVICON_URL")) {
-        DEV_MOCK.config.faviconUrl = updates.WEBAPP_LOGO_FAVICON_URL || DEV_MOCK.config.faviconUrl || "";
+        DEV_MOCK.config.faviconUrl =
+          updates.WEBAPP_LOGO_FAVICON_URL || DEV_MOCK.config.faviconUrl || "";
       }
       if (Object.prototype.hasOwnProperty.call(updates, "WEBAPP_FAVICON_USE_CUSTOM")) {
         DEV_MOCK.config.faviconUseCustom = Boolean(updates.WEBAPP_FAVICON_USE_CUSTOM);
@@ -337,6 +338,9 @@ export async function mockApi(path, options = {}, context = {}) {
   if (path === "/auth/email/verify" || path === "/auth/email/magic") {
     return { ok: true, csrf_token: "local-preview-csrf" };
   }
+  if (path === "/auth/email/password") {
+    return { ok: false, error: "password_login_failed", fallback: "email_code" };
+  }
   if (path === "/auth/token") {
     return { ok: true, csrf_token: "local-preview-csrf" };
   }
@@ -402,6 +406,19 @@ export async function mockApi(path, options = {}, context = {}) {
   }
   if (path === "/account/email/verify" && String(options.method || "").toUpperCase() === "POST") {
     return { ok: true, csrf_token: "local-preview-csrf" };
+  }
+  if (
+    path === "/account/password/request" &&
+    String(options.method || "").toUpperCase() === "POST"
+  ) {
+    return { ok: true };
+  }
+  if (
+    path === "/account/password/confirm" &&
+    String(options.method || "").toUpperCase() === "POST"
+  ) {
+    DEV_MOCK.data.user.password_auth_enabled = true;
+    return { ok: true, password_auth_enabled: true };
   }
   if (path === "/account/telegram/link" && String(options.method || "").toUpperCase() === "POST") {
     return { ok: true, csrf_token: "local-preview-csrf" };

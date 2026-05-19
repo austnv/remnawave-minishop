@@ -67,6 +67,9 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             "username": db_user.username,
             "email": db_user.email,
             "email_verified": bool(db_user.email_verified_at),
+            "password_auth_enabled": bool(
+                db_user.email and db_user.email_verified_at and db_user.password_hash
+            ),
             "telegram_id": db_user.telegram_id,
             "telegram_linked": bool(_telegram_id_for_user(db_user)),
             "telegram_photo_url": _telegram_avatar_url(avatar),

@@ -209,6 +209,7 @@ def render_login_code(
     code: str,
     language_code: Optional[str],
     magic_link: Optional[str] = None,
+    purpose: str = "login",
     i18n: Optional[JsonI18n] = None,
 ) -> EmailContent:
     i18n = _resolve_i18n(i18n)
@@ -216,16 +217,17 @@ def render_login_code(
     minutes = _format_minutes(settings.EMAIL_CODE_TTL_SECONDS)
     accent = _safe_color(settings.WEBAPP_PRIMARY_COLOR)
     brand = _brand_title(settings)
-    safe_magic_link = (magic_link or "").strip()
+    template_prefix = "email_set_password_code" if purpose == "set_password" else "email_login_code"
+    safe_magic_link = (magic_link or "").strip() if template_prefix == "email_login_code" else ""
 
-    subject = _t_text(i18n, lang, "email_login_code_subject", code=code)
-    preheader = _t_text(i18n, lang, "email_login_code_preheader", minutes=minutes)
-    heading = _t_text(i18n, lang, "email_login_code_heading")
-    intro = _t_text(i18n, lang, "email_login_code_intro")
-    expiry_html = _t_html(i18n, lang, "email_login_code_expiry_html", minutes=minutes)
-    security = _t_text(i18n, lang, "email_login_code_security")
+    subject = _t_text(i18n, lang, f"{template_prefix}_subject", code=code)
+    preheader = _t_text(i18n, lang, f"{template_prefix}_preheader", minutes=minutes)
+    heading = _t_text(i18n, lang, f"{template_prefix}_heading")
+    intro = _t_text(i18n, lang, f"{template_prefix}_intro")
+    expiry_html = _t_html(i18n, lang, f"{template_prefix}_expiry_html", minutes=minutes)
+    security = _t_text(i18n, lang, f"{template_prefix}_security")
     footer = _t_html(i18n, lang, "email_footer_auto", brand=brand)
-    text_lines = [_t_text(i18n, lang, "email_login_code_text", code=code, minutes=minutes)]
+    text_lines = [_t_text(i18n, lang, f"{template_prefix}_text", code=code, minutes=minutes)]
     if safe_magic_link:
         text_lines.append(_t_text(i18n, lang, "email_login_code_text_magic", url=safe_magic_link))
 

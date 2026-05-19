@@ -20,6 +20,18 @@ class WebAppEmailCodePayload(WebAppEmailPayload):
     code: str = ""
 
 
+class WebAppEmailPasswordPayload(WebAppEmailPayload):
+    password: constr(min_length=1, max_length=128)
+
+
+class WebAppSetPasswordPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    password: constr(min_length=8, max_length=128)
+    password_confirm: constr(min_length=8, max_length=128)
+    code: constr(min_length=1, max_length=32)
+
+
 class WebAppEmailMagicPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

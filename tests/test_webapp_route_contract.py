@@ -48,6 +48,7 @@ class WebAppRouteContractTests(unittest.TestCase):
         routes = _route_map(app)
         expected = {
             ("GET", "/"): "index_route",
+            ("GET", "/login/password"): "index_route",
             ("GET", "/home"): "index_route",
             ("GET", "/invite"): "index_route",
             ("GET", "/devices"): "index_route",
@@ -70,12 +71,15 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("POST", "/api/auth/email/request"): "email_auth_request_route",
             ("POST", "/api/auth/email/verify"): "email_auth_verify_route",
             ("POST", "/api/auth/email/magic"): "email_auth_magic_route",
+            ("POST", "/api/auth/email/password"): "email_password_auth_route",
             ("POST", "/api/auth/logout"): "logout_route",
             ("GET", "/api/me"): "me_route",
             ("GET", "/api/account/avatar"): "account_avatar_route",
             ("POST", "/api/account/language"): "account_language_route",
             ("POST", "/api/account/email/request"): "account_email_request_route",
             ("POST", "/api/account/email/verify"): "account_email_verify_route",
+            ("POST", "/api/account/password/request"): "account_password_request_route",
+            ("POST", "/api/account/password/confirm"): "account_password_confirm_route",
             ("POST", "/api/account/telegram/link"): "account_telegram_link_route",
             ("POST", "/api/promo/apply"): "apply_promo_route",
             ("POST", "/api/trial/activate"): "activate_trial_route",
