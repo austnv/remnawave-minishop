@@ -1,5 +1,10 @@
 # ruff: noqa: F401,F403,F405,I001
+import asyncio
+
 from ._runtime import *  # noqa: F403,F405
+from bot.utils.ttl_cache import AsyncTTLCache
+
+_ADMIN_PANEL_STATS_CACHES: Dict[tuple[int, int], AsyncTTLCache] = {}
 
 
 async def admin_me_route(request: web.Request) -> web.Response:
@@ -36,47 +41,7 @@ async def admin_stats_route(request: web.Request) -> web.Response:
 
     panel_service = request.app.get("panel_service")
     if panel_service is not None:
-        try:
-            system = await panel_service.get_system_stats()
-            bandwidth = await panel_service.get_bandwidth_stats()
-            panel_body: Dict[str, Any] = {
-                "system": system or {},
-                "bandwidth": bandwidth or {},
-            }
-            try:
-                nodes = await panel_service.get_nodes_statistics()
-                panel_body["nodes"] = nodes or {}
-            except Exception as exc_nodes:  # pragma: no cover - optional endpoint
-                logger.debug("Panel nodes stats unavailable: %s", exc_nodes)
-                panel_body["nodes"] = {}
-            try:
-                today = datetime.now(timezone.utc).date()
-                start_d = today - timedelta(days=7)
-                nodes_bw = await panel_service.get_nodes_bandwidth_usage(
-                    start=start_d.isoformat(),
-                    end=today.isoformat(),
-                    top_nodes_limit=64,
-                )
-                panel_body["nodes_bandwidth"] = nodes_bw or {}
-            except Exception as exc_nb:  # pragma: no cover - optional endpoint
-                logger.debug("Panel nodes bandwidth range unavailable: %s", exc_nb)
-                panel_body["nodes_bandwidth"] = {}
-            try:
-                online_map = _panel_nodes_online_by_uuid(panel_body.get("nodes"))
-                lookups = await panel_service.get_nodes_online_lookups()
-                for k, v in lookups.get("byUuid", {}).items():
-                    online_map[k] = v
-                _enrich_bandwidth_nodes_with_online(
-                    panel_body.get("nodes_bandwidth"),
-                    online_map,
-                    lookups.get("byName") or {},
-                )
-            except Exception as exc_merge:  # pragma: no cover
-                logger.debug("Panel nodes online merge skipped: %s", exc_merge)
-            payload["panel"] = panel_body
-        except Exception as exc:
-            logger.debug("Panel stats unavailable: %s", exc)
-            payload["panel"] = {"error": "unavailable"}
+        payload["panel"] = await _load_admin_panel_stats(request, settings, panel_service)
 
     queue_manager = get_queue_manager()
     if queue_manager:
@@ -87,3 +52,81 @@ async def admin_stats_route(request: web.Request) -> web.Response:
 
     payload["currency_symbol"] = settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
     return _ok(payload)
+
+
+async def _load_admin_panel_stats(
+    request: web.Request,
+    settings: Settings,
+    panel_service,
+) -> Dict[str, Any]:
+    cache = _admin_panel_stats_cache(settings)
+    if cache is None:
+        return await _load_admin_panel_stats_uncached(panel_service)
+    return await cache.get_or_load("panel", lambda: _load_admin_panel_stats_uncached(panel_service))
+
+
+def _admin_panel_stats_cache(settings: Settings) -> Optional[AsyncTTLCache]:
+    ttl_seconds = int(getattr(settings, "ADMIN_PANEL_STATS_CACHE_TTL_SECONDS", 15) or 0)
+    if ttl_seconds <= 0:
+        return None
+    cache_key = (id(settings), ttl_seconds)
+    cache = _ADMIN_PANEL_STATS_CACHES.get(cache_key)
+    if cache is None:
+        cache = AsyncTTLCache(
+            ttl_seconds=ttl_seconds,
+            settings=settings,
+            namespace="admin:panel_stats",
+        )
+        _ADMIN_PANEL_STATS_CACHES[cache_key] = cache
+    return cache
+
+
+async def _load_admin_panel_stats_uncached(panel_service) -> Dict[str, Any]:
+    try:
+        today = datetime.now(timezone.utc).date()
+        start_d = today - timedelta(days=7)
+        system, bandwidth, nodes, nodes_bw, lookups = await asyncio.gather(
+            _safe_panel_call(panel_service.get_system_stats(), "system stats"),
+            _safe_panel_call(panel_service.get_bandwidth_stats(), "bandwidth stats"),
+            _safe_panel_call(panel_service.get_nodes_statistics(), "nodes stats"),
+            _safe_panel_call(
+                panel_service.get_nodes_bandwidth_usage(
+                    start=start_d.isoformat(),
+                    end=today.isoformat(),
+                    top_nodes_limit=64,
+                ),
+                "nodes bandwidth range",
+            ),
+            _safe_panel_call(panel_service.get_nodes_online_lookups(), "nodes online lookups"),
+        )
+
+        panel_body: Dict[str, Any] = {
+            "system": system or {},
+            "bandwidth": bandwidth or {},
+            "nodes": nodes or {},
+            "nodes_bandwidth": nodes_bw or {},
+        }
+        if isinstance(lookups, dict):
+            try:
+                online_map = _panel_nodes_online_by_uuid(panel_body.get("nodes"))
+                for k, v in lookups.get("byUuid", {}).items():
+                    online_map[k] = v
+                _enrich_bandwidth_nodes_with_online(
+                    panel_body.get("nodes_bandwidth"),
+                    online_map,
+                    lookups.get("byName") or {},
+                )
+            except Exception as exc_merge:  # pragma: no cover
+                logger.debug("Panel nodes online merge skipped: %s", exc_merge)
+        return panel_body
+    except Exception as exc:
+        logger.debug("Panel stats unavailable: %s", exc)
+        return {"error": "unavailable"}
+
+
+async def _safe_panel_call(awaitable, label: str) -> Any:
+    try:
+        return await awaitable
+    except Exception as exc:  # pragma: no cover - optional panel endpoints
+        logger.debug("Panel %s unavailable: %s", label, exc)
+        return None

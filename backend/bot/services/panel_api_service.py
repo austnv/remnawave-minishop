@@ -41,6 +41,24 @@ class PanelApiService:
             settings=settings,
             namespace="panel:hosts",
         )
+        self._users_cache: AsyncTTLCache = AsyncTTLCache(
+            ttl_seconds=max(0, int(getattr(settings, "PANEL_USER_CACHE_TTL_SECONDS", 5) or 0)),
+            settings=settings,
+            namespace="panel:users",
+        )
+        self._devices_cache: AsyncTTLCache = AsyncTTLCache(
+            ttl_seconds=max(0, int(getattr(settings, "PANEL_DEVICES_CACHE_TTL_SECONDS", 5) or 0)),
+            settings=settings,
+            namespace="panel:devices",
+        )
+        self._all_users_cache: AsyncTTLCache = AsyncTTLCache(
+            ttl_seconds=max(
+                0,
+                int(getattr(settings, "PANEL_ALL_USERS_CACHE_TTL_SECONDS", 5) or 0),
+            ),
+            settings=settings,
+            namespace="panel:all_users",
+        )
 
     async def __aenter__(self):
         """Context manager entry"""
@@ -227,6 +245,18 @@ class PanelApiService:
     async def get_all_panel_users(
         self, page_size: int = 100, log_responses: bool = False
     ) -> Optional[List[Dict[str, Any]]]:
+        if log_responses or page_size != 100 or self._all_users_cache.ttl_seconds <= 0:
+            return await self._get_all_panel_users_uncached(
+                page_size=page_size, log_responses=log_responses
+            )
+        return await self._all_users_cache.get_or_load(
+            f"page_size:{page_size}",
+            lambda: self._get_all_panel_users_uncached(page_size=page_size, log_responses=False),
+        )
+
+    async def _get_all_panel_users_uncached(
+        self, page_size: int = 100, log_responses: bool = False
+    ) -> Optional[List[Dict[str, Any]]]:
         all_users = []
         start_offset = 0
         while True:
@@ -252,6 +282,16 @@ class PanelApiService:
         return all_users
 
     async def get_user_by_uuid(
+        self, user_uuid: str, log_response: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        if log_response or self._users_cache.ttl_seconds <= 0:
+            return await self._get_user_by_uuid_uncached(user_uuid, log_response=log_response)
+        return await self._users_cache.get_or_load(
+            f"uuid:{user_uuid}",
+            lambda: self._get_user_by_uuid_uncached(user_uuid, log_response=False),
+        )
+
+    async def _get_user_by_uuid_uncached(
         self, user_uuid: str, log_response: bool = False
     ) -> Optional[Dict[str, Any]]:
         endpoint = f"/users/{user_uuid}"
@@ -422,6 +462,7 @@ class PanelApiService:
             "POST", "/users", json=payload, log_full_response=log_response
         )
         if response and not response.get("error") and "response" in response:
+            self._invalidate_all_users_cache()
             logging.info(
                 f"Panel user '{username_on_panel}' created successfully (UUID: {response.get('response', {}).get('uuid')})."  # noqa: E501
             )
@@ -443,6 +484,8 @@ class PanelApiService:
         )
         if full_response and not full_response.get("error") and "response" in full_response:
             logging.debug("User %s details updated on panel.", user_uuid)
+            self._invalidate_user_cache(user_uuid)
+            self._invalidate_all_users_cache()
             return full_response.get("response")
 
         logging.error(
@@ -458,6 +501,8 @@ class PanelApiService:
         response_data = await self._request("POST", endpoint, log_full_response=log_response)
 
         if response_data and not response_data.get("error") and "response" in response_data:
+            self._invalidate_user_cache(user_uuid)
+            self._invalidate_all_users_cache()
             actual_status = response_data.get("response", {}).get("status")
             expected_status = "ACTIVE" if enable else "DISABLED"
             if actual_status == expected_status:
@@ -494,11 +539,17 @@ class PanelApiService:
                 logging.info(
                     f"Panel user {user_uuid} already absent (errorCode {error_code}). Treating as deleted."  # noqa: E501
                 )
+                self._invalidate_user_cache(user_uuid)
+                self._invalidate_devices_cache(user_uuid)
+                self._invalidate_all_users_cache()
                 return True
             logging.error(f"Failed to delete user {user_uuid} on panel. Response: {response_data}")
             return False
 
         logging.info(f"Panel user {user_uuid} deleted successfully.")
+        self._invalidate_user_cache(user_uuid)
+        self._invalidate_devices_cache(user_uuid)
+        self._invalidate_all_users_cache()
         return True
 
     async def get_subscription_link(
@@ -513,6 +564,14 @@ class PanelApiService:
         return base_sub_url
 
     async def get_user_devices(self, user_uuid: str) -> Optional[List[Dict[str, Any]]]:
+        if self._devices_cache.ttl_seconds <= 0:
+            return await self._get_user_devices_uncached(user_uuid)
+        return await self._devices_cache.get_or_load(
+            f"user:{user_uuid}",
+            lambda: self._get_user_devices_uncached(user_uuid),
+        )
+
+    async def _get_user_devices_uncached(self, user_uuid: str) -> Optional[List[Dict[str, Any]]]:
         endpoint = f"/hwid/devices/{user_uuid}"
         response_data = await self._request("GET", endpoint, log_full_response=False)
         if response_data and not response_data.get("error") and "response" in response_data:
@@ -525,6 +584,7 @@ class PanelApiService:
         payload = {"userUuid": user_uuid, "hwid": hwid}
         response_data = await self._request("POST", endpoint, json=payload, log_full_response=False)
         if response_data and not response_data.get("error") and "response" in response_data:
+            self._invalidate_devices_cache(user_uuid)
             return True
         logging.error(
             f"Failed to disconnect device {hwid} for user {user_uuid}. Payload: {payload}, Response: {response_data}"  # noqa: E501
@@ -628,6 +688,19 @@ class PanelApiService:
 
     def _invalidate_squad_caches(self) -> None:
         self._squads_cache.invalidate()
+
+    def _invalidate_user_cache(self, user_uuid: Optional[str]) -> None:
+        if not user_uuid:
+            return
+        self._users_cache.invalidate(f"uuid:{user_uuid}")
+
+    def _invalidate_all_users_cache(self) -> None:
+        self._all_users_cache.invalidate()
+
+    def _invalidate_devices_cache(self, user_uuid: Optional[str]) -> None:
+        if not user_uuid:
+            return
+        self._devices_cache.invalidate(f"user:{user_uuid}")
 
     async def get_internal_squads(self) -> Optional[List[Dict[str, Any]]]:
         return await self._squads_cache.get_or_load("list", self._get_internal_squads_uncached)
