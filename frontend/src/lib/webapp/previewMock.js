@@ -4,6 +4,7 @@ const WINDOWS_95_THEME = {
   enabled: true,
   default: false,
   css_file: "style.css",
+  assets_version: 9,
   tokens: {
     color_scheme: "light",
     style_preset: "win95",

@@ -56,45 +56,45 @@
   --admin-text: #000000;
   --admin-muted: #202020;
   --admin-dim: #404040;
-  --win95-icon-arrow-left: url("/webapp-theme-assets/windows95/icons/arrow-left.png?v=8");
-  --win95-icon-arrow-right: url("/webapp-theme-assets/windows95/icons/arrow-right.png?v=8");
-  --win95-icon-bitcoin: url("/webapp-theme-assets/windows95/icons/bitcoin.png?v=8");
-  --win95-icon-check: url("/webapp-theme-assets/windows95/icons/check.png?v=8");
-  --win95-icon-chevrons: url("/webapp-theme-assets/windows95/icons/chevrons.png?v=8");
-  --win95-icon-coins: url("/webapp-theme-assets/windows95/icons/coins.png?v=8");
-  --win95-icon-dashboard: url("/webapp-theme-assets/windows95/icons/dashboard.png?v=8");
-  --win95-icon-database: url("/webapp-theme-assets/windows95/icons/database.png?v=8");
-  --win95-icon-download: url("/webapp-theme-assets/windows95/icons/download.png?v=8");
-  --win95-icon-error: url("/webapp-theme-assets/windows95/icons/error.png?v=8");
-  --win95-icon-file-text: url("/webapp-theme-assets/windows95/icons/file-text.png?v=8");
-  --win95-icon-folder: url("/webapp-theme-assets/windows95/icons/folder.png?v=8");
-  --win95-icon-gift: url("/webapp-theme-assets/windows95/icons/gift.png?v=8");
-  --win95-icon-globe: url("/webapp-theme-assets/windows95/icons/globe.png?v=8");
-  --win95-icon-help: url("/webapp-theme-assets/windows95/icons/help.png?v=8");
-  --win95-icon-home: url("/webapp-theme-assets/windows95/icons/home.png?v=8");
-  --win95-icon-info: url("/webapp-theme-assets/windows95/icons/info.png?v=8");
-  --win95-icon-key: url("/webapp-theme-assets/windows95/icons/key.png?v=8");
-  --win95-icon-lock: url("/webapp-theme-assets/windows95/icons/lock.png?v=8");
-  --win95-icon-megaphone: url("/webapp-theme-assets/windows95/icons/megaphone.png?v=8");
-  --win95-icon-paintbrush: url("/webapp-theme-assets/windows95/icons/paintbrush.png?v=8");
-  --win95-icon-payment-card: url("/webapp-theme-assets/windows95/icons/payment-card.png?v=8");
-  --win95-icon-print: url("/webapp-theme-assets/windows95/icons/print.png?v=8");
-  --win95-icon-refresh: url("/webapp-theme-assets/windows95/icons/refresh.png?v=8");
-  --win95-icon-save: url("/webapp-theme-assets/windows95/icons/save.png?v=8");
-  --win95-icon-search: url("/webapp-theme-assets/windows95/icons/search.png?v=8");
-  --win95-icon-send: url("/webapp-theme-assets/windows95/icons/send.png?v=8");
-  --win95-icon-settings: url("/webapp-theme-assets/windows95/icons/settings.png?v=8");
-  --win95-icon-shield: url("/webapp-theme-assets/windows95/icons/shield.png?v=8");
-  --win95-icon-smartphone: url("/webapp-theme-assets/windows95/icons/smartphone.png?v=8");
-  --win95-icon-sliders: url("/webapp-theme-assets/windows95/icons/sliders.png?v=8");
-  --win95-icon-sparkles: url("/webapp-theme-assets/windows95/icons/sparkles.png?v=8");
-  --win95-icon-tag: url("/webapp-theme-assets/windows95/icons/tag.png?v=8");
-  --win95-icon-ticket: url("/webapp-theme-assets/windows95/icons/ticket.png?v=8");
-  --win95-icon-trash: url("/webapp-theme-assets/windows95/icons/trash.png?v=8");
-  --win95-icon-user: url("/webapp-theme-assets/windows95/icons/user.png?v=8");
-  --win95-icon-users: url("/webapp-theme-assets/windows95/icons/users.png?v=8");
-  --win95-icon-warning: url("/webapp-theme-assets/windows95/icons/warning.png?v=8");
-  --win95-icon-x: url("/webapp-theme-assets/windows95/icons/x.png?v=8");
+  --win95-icon-arrow-left: url("/webapp-theme-assets/windows95/icons/arrow-left.png?v=9");
+  --win95-icon-arrow-right: url("/webapp-theme-assets/windows95/icons/arrow-right.png?v=9");
+  --win95-icon-bitcoin: url("/webapp-theme-assets/windows95/icons/bitcoin.png?v=9");
+  --win95-icon-check: url("/webapp-theme-assets/windows95/icons/check.png?v=9");
+  --win95-icon-chevrons: url("/webapp-theme-assets/windows95/icons/chevrons.png?v=9");
+  --win95-icon-coins: url("/webapp-theme-assets/windows95/icons/coins.png?v=9");
+  --win95-icon-dashboard: url("/webapp-theme-assets/windows95/icons/dashboard.png?v=9");
+  --win95-icon-database: url("/webapp-theme-assets/windows95/icons/database.png?v=9");
+  --win95-icon-download: url("/webapp-theme-assets/windows95/icons/download.png?v=9");
+  --win95-icon-error: url("/webapp-theme-assets/windows95/icons/error.png?v=9");
+  --win95-icon-file-text: url("/webapp-theme-assets/windows95/icons/file-text.png?v=9");
+  --win95-icon-folder: url("/webapp-theme-assets/windows95/icons/folder.png?v=9");
+  --win95-icon-gift: url("/webapp-theme-assets/windows95/icons/gift.png?v=9");
+  --win95-icon-globe: url("/webapp-theme-assets/windows95/icons/globe.png?v=9");
+  --win95-icon-help: url("/webapp-theme-assets/windows95/icons/help.png?v=9");
+  --win95-icon-home: url("/webapp-theme-assets/windows95/icons/home.png?v=9");
+  --win95-icon-info: url("/webapp-theme-assets/windows95/icons/info.png?v=9");
+  --win95-icon-key: url("/webapp-theme-assets/windows95/icons/key.png?v=9");
+  --win95-icon-lock: url("/webapp-theme-assets/windows95/icons/lock.png?v=9");
+  --win95-icon-megaphone: url("/webapp-theme-assets/windows95/icons/megaphone.png?v=9");
+  --win95-icon-paintbrush: url("/webapp-theme-assets/windows95/icons/paintbrush.png?v=9");
+  --win95-icon-payment-card: url("/webapp-theme-assets/windows95/icons/payment-card.png?v=9");
+  --win95-icon-print: url("/webapp-theme-assets/windows95/icons/print.png?v=9");
+  --win95-icon-refresh: url("/webapp-theme-assets/windows95/icons/refresh.png?v=9");
+  --win95-icon-save: url("/webapp-theme-assets/windows95/icons/save.png?v=9");
+  --win95-icon-search: url("/webapp-theme-assets/windows95/icons/search.png?v=9");
+  --win95-icon-send: url("/webapp-theme-assets/windows95/icons/send.png?v=9");
+  --win95-icon-settings: url("/webapp-theme-assets/windows95/icons/settings.png?v=9");
+  --win95-icon-shield: url("/webapp-theme-assets/windows95/icons/shield.png?v=9");
+  --win95-icon-smartphone: url("/webapp-theme-assets/windows95/icons/smartphone.png?v=9");
+  --win95-icon-sliders: url("/webapp-theme-assets/windows95/icons/sliders.png?v=9");
+  --win95-icon-sparkles: url("/webapp-theme-assets/windows95/icons/sparkles.png?v=9");
+  --win95-icon-tag: url("/webapp-theme-assets/windows95/icons/tag.png?v=9");
+  --win95-icon-ticket: url("/webapp-theme-assets/windows95/icons/ticket.png?v=9");
+  --win95-icon-trash: url("/webapp-theme-assets/windows95/icons/trash.png?v=9");
+  --win95-icon-user: url("/webapp-theme-assets/windows95/icons/user.png?v=9");
+  --win95-icon-users: url("/webapp-theme-assets/windows95/icons/users.png?v=9");
+  --win95-icon-warning: url("/webapp-theme-assets/windows95/icons/warning.png?v=9");
+  --win95-icon-x: url("/webapp-theme-assets/windows95/icons/x.png?v=9");
 }
 
 .theme-key-windows95.app-shell {
@@ -680,6 +680,20 @@ body:has(.theme-key-windows95) .support-select-item[data-selected] svg {
   width: 4px;
   border-radius: 0;
   background: var(--ticket-accent, var(--accent));
+}
+
+@media (min-width: 1024px) {
+  .theme-key-windows95 .support-list-card {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .theme-key-windows95 .support-conversation-card {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .theme-key-windows95 .support-conversation-card--loading {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
 }
 
 .theme-key-windows95 .ticket-message-row,
