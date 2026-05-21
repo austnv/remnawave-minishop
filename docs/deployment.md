@@ -215,15 +215,13 @@ web.example.com {
 }
 ```
 
-Для внешнего Nginx используйте DNS-имена сервисов внутри Docker network:
+Готовый пример для внешнего Nginx лежит в
+[`deploy/docker/nginx/remnawave-minishop.conf`](../deploy/docker/nginx/remnawave-minishop.conf).
+Он рассчитан на Nginx в той же Docker network, поэтому использует DNS-имена сервисов:
 
 ```nginx
 upstream remnawave_backend_webhooks {
     server backend:8080;
-}
-
-upstream remnawave_backend_webapp {
-    server backend:8081;
 }
 
 upstream remnawave_frontend {
