@@ -29,10 +29,10 @@ export function sectionFromPath(pathname) {
   return normalizeSection(section);
 }
 
-export function publicInstallShortUuidFromPath(pathname) {
+export function publicInstallTokenFromPath(pathname) {
   const normalized = String(pathname || "").trim().replace(/\/+$/, "");
-  const match = normalized.match(/^\/install\/share\/([A-Za-z0-9_-]{8,128})$/);
-  return match ? match[1] : "";
+  const match = normalized.match(/^\/s\/([a-f0-9]{32})$/i);
+  return match ? match[1].toLowerCase() : "";
 }
 
 export function adminSectionFromPath(pathname) {

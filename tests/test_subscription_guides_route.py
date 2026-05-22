@@ -160,6 +160,7 @@ class SubscriptionGuidesRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_public_route_returns_shared_config_and_subscription_payload(self):
         default_uuid = "00000000-0000-0000-0000-000000000000"
+        share_token = "8f559061460e8fede78ef18dce887236"
         panel_config = json.loads(default_subscription_guides_config_text())
         panel_service = SimpleNamespace(
             get_subscription_page_config_list=AsyncMock(
@@ -179,17 +180,18 @@ class SubscriptionGuidesRouteTests(unittest.IsolatedAsyncioTestCase):
         request = self._request(
             self._settings(SUBSCRIPTION_MINI_APP_URL="https://app.example.test/app"),
             panel_service,
-            match_info={"short_uuid": "share-short"},
+            match_info={"share_token": share_token},
         )
         local_sub = SimpleNamespace(
             panel_user_uuid="panel-user",
+            install_share_token=share_token,
             is_active=True,
             end_date=datetime.now(timezone.utc) + timedelta(days=3),
         )
 
         with patch.object(
             guides.subscription_dal,
-            "get_subscription_by_panel_subscription_uuid",
+            "get_subscription_by_install_share_token",
             AsyncMock(return_value=local_sub),
         ):
             response = await guides.public_subscription_guides_route(request)
@@ -199,8 +201,9 @@ class SubscriptionGuidesRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["subscription"]["config_link"], "https://sb.example.test/share-short")
         self.assertEqual(
             body["subscription"]["share_url"],
-            "https://app.example.test/install/share/share-short",
+            f"https://app.example.test/s/{share_token}",
         )
+        self.assertEqual(body["subscription"]["install_share_token"], share_token)
         panel_service.get_user_by_uuid.assert_awaited_once_with("panel-user")
 
 

@@ -62,8 +62,8 @@ export function createInstallGuidesStore({ api, t, showToast }) {
     return fetchGuides("/subscription-guides", force);
   }
 
-  async function loadPublic(shortUuid, force = false) {
-    const encoded = encodeURIComponent(String(shortUuid || ""));
+  async function loadPublic(shareToken, force = false) {
+    const encoded = encodeURIComponent(String(shareToken || ""));
     return fetchGuides(`/subscription-guides/public/${encoded}`, force);
   }
 

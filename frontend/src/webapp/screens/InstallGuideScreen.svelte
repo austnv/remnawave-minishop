@@ -1,5 +1,7 @@
 <script>
   import { getContext, onMount } from "svelte";
+  import { cubicOut } from "svelte/easing";
+  import { fade, fly, scale } from "svelte/transition";
   import QRCode from "qrcode";
   import {
     ArrowLeft,
@@ -346,109 +348,146 @@
     </Card>
   {:else}
 
-    {#if apps.length > 1}
-      <section class="install-selector-block" aria-label={t("wa_install_app", {}, "App")}>
-        <div class="install-section-title">
-          <span>{t("wa_install_app", {}, "App")}</span>
-        </div>
-        <div
-          class="install-apps"
-          class:apps-mobile-remainder-one={apps.length % 2 === 1}
-          class:apps-remainder-one={apps.length % 3 === 1}
-          class:apps-remainder-two={apps.length % 3 === 2}
+    {#key selectedPlatformKey}
+      {#if apps.length > 1}
+        <section
+          class="install-selector-block"
+          aria-label={t("wa_install_app", {}, "App")}
+          in:fly={{ y: 8, duration: 180, easing: cubicOut }}
+          out:fade={{ duration: 90 }}
         >
-          {#each apps as app, index}
-            <button
-              class="install-app-button attention-wrap"
-              class:active={selectedAppIndex === index}
-              class:featured={app.featured}
-              type="button"
-              onclick={() => (selectedAppIndex = index)}
-            >
-              {#if app.featured}
-                <AttentionDot class="install-feature-star" />
-              {/if}
-              {#if iconSvg(app.svgIconKey)}
-                <span class="install-svg" aria-hidden="true">{@html iconSvg(app.svgIconKey)}</span>
-              {/if}
-              <span>{app.name}</span>
-            </button>
-          {/each}
-        </div>
-      </section>
-    {/if}
+          <div class="install-section-title">
+            <span>{t("wa_install_app", {}, "App")}</span>
+          </div>
+          <div
+            class="install-apps"
+            class:apps-mobile-remainder-one={apps.length % 2 === 1}
+            class:apps-remainder-one={apps.length % 3 === 1}
+            class:apps-remainder-two={apps.length % 3 === 2}
+          >
+            {#each apps as app, index (`${selectedPlatformKey}:${app.name}:${index}`)}
+              <button
+                class="install-app-button attention-wrap"
+                class:active={selectedAppIndex === index}
+                class:featured={app.featured}
+                type="button"
+                onclick={() => (selectedAppIndex = index)}
+                in:scale={{
+                  start: 0.97,
+                  duration: 150 + Math.min(index, 5) * 18,
+                  easing: cubicOut,
+                }}
+              >
+                {#if app.featured}
+                  <AttentionDot class="install-feature-star" />
+                {/if}
+                {#if iconSvg(app.svgIconKey)}
+                  <span class="install-svg" aria-hidden="true">{@html iconSvg(app.svgIconKey)}</span>
+                {/if}
+                <span>{app.name}</span>
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/if}
+    {/key}
 
     {#if selectedApp}
-      <section class="install-steps" aria-label={selectedApp.name}>
-        {#each selectedApp.blocks as block}
-          <Card class="install-step">
-            <div class="install-step-icon" style={iconColorStyle(block.svgIconColor)} aria-hidden="true">
-              {#if iconSvg(block.svgIconKey)}
-                {@html iconSvg(block.svgIconKey)}
-              {:else}
-                <Check size={19} />
-              {/if}
-            </div>
-            <div class="install-step-body">
-              <h2>{localized(block.title)}</h2>
-              <p>{localized(block.description)}</p>
-              {#if block.buttons?.length}
-                <div class="install-actions">
-                  {#each block.buttons as button}
-                    <Button
-                      variant={button.type === "copyButton" ? "secondary" : "default"}
-                      onclick={() => handleButton(button)}
-                    >
-                      {#if button.type === "copyButton"}
-                        <Copy size={16} />
-                      {:else}
-                        <ExternalLink size={16} />
-                      {/if}
-                      {localized(button.text)}
-                    </Button>
-                  {/each}
+      {#key `${selectedPlatformKey}:${selectedAppIndex}:${selectedApp.name}`}
+        <section
+          class="install-steps"
+          aria-label={selectedApp.name}
+          in:fly={{ y: 12, duration: 190, easing: cubicOut }}
+          out:fade={{ duration: 90 }}
+        >
+          {#each selectedApp.blocks as block, blockIndex (`${selectedPlatformKey}:${selectedApp.name}:${blockIndex}:${localized(block.title)}`)}
+            <div
+              class="install-step-motion"
+              in:fly={{
+                y: 10,
+                duration: 170 + Math.min(blockIndex, 6) * 18,
+                easing: cubicOut,
+              }}
+            >
+              <Card class="install-step">
+                <div class="install-step-icon" style={iconColorStyle(block.svgIconColor)} aria-hidden="true">
+                  {#if iconSvg(block.svgIconKey)}
+                    {@html iconSvg(block.svgIconKey)}
+                  {:else}
+                    <Check size={19} />
+                  {/if}
                 </div>
-              {/if}
+                <div class="install-step-body">
+                  <h2>{localized(block.title)}</h2>
+                  <p>{localized(block.description)}</p>
+                  {#if block.buttons?.length}
+                    <div class="install-actions">
+                      {#each block.buttons as button}
+                        <Button
+                          variant={button.type === "copyButton" ? "secondary" : "default"}
+                          onclick={() => handleButton(button)}
+                        >
+                          {#if button.type === "copyButton"}
+                            <Copy size={16} />
+                          {:else}
+                            <ExternalLink size={16} />
+                          {/if}
+                          {localized(button.text)}
+                        </Button>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              </Card>
             </div>
-          </Card>
-        {/each}
-      </section>
+          {/each}
+        </section>
+      {/key}
       {#if finalSubscriptionLink && !publicMode}
-        <div class="install-qr-divider" aria-hidden="true">
+        <div
+          class="install-qr-divider"
+          aria-hidden="true"
+          in:fade={{ duration: 180 }}
+        >
           <svg viewBox="0 0 240 18" preserveAspectRatio="none">
             <path
               d="M0 9 Q 4 2 8 9 T 16 9 T 24 9 T 32 9 T 40 9 T 48 9 T 56 9 T 64 9 T 72 9 T 80 9 T 88 9 T 96 9 T 104 9 T 112 9 T 120 9 T 128 9 T 136 9 T 144 9 T 152 9 T 160 9 T 168 9 T 176 9 T 184 9 T 192 9 T 200 9 T 208 9 T 216 9 T 224 9 T 232 9 T 240 9"
             />
           </svg>
         </div>
-        <Card class="install-subscription-card">
-          <div class="install-subscription-header">
-            <div class="install-subscription-header-icon" aria-hidden="true">
-              <QrCode size={20} />
-            </div>
-            <div class="install-subscription-heading">
-              <h2>{t("wa_install_subscription_link", {}, "Subscription link")}</h2>
-              <p>{t("wa_install_subscription_link_hint", {}, "Scan the QR code or copy the link.")}</p>
-            </div>
-          </div>
-          <div class="install-subscription-body">
-            {#if qrDataUrl}
-              <div class="install-qr-wrap">
-                <img src={qrDataUrl} alt={t("wa_install_qr_alt", {}, "Subscription QR code")} />
+        <div
+          class="install-subscription-motion"
+          in:fly={{ y: 10, duration: 200, easing: cubicOut }}
+        >
+          <Card class="install-subscription-card">
+            <div class="install-subscription-header">
+              <div class="install-subscription-header-icon" aria-hidden="true">
+                <QrCode size={20} />
               </div>
-            {/if}
-            <div class="install-actions install-subscription-actions">
-              <Button variant="secondary" onclick={copySubscriptionLink}>
-                <Copy size={16} />
-                {t("wa_install_copy_subscription_link", {}, "Copy link")}
-              </Button>
-              <Button onclick={shareInstallGuide}>
-                <Share2 size={16} />
-                {t("wa_install_share", {}, "Share")}
-              </Button>
+              <div class="install-subscription-heading">
+                <h2>{t("wa_install_subscription_link", {}, "Subscription link")}</h2>
+                <p>{t("wa_install_subscription_link_hint", {}, "Scan the QR code or copy the link.")}</p>
+              </div>
             </div>
-          </div>
-        </Card>
+            <div class="install-subscription-body">
+              {#if qrDataUrl}
+                <div class="install-qr-wrap" in:scale={{ start: 0.96, duration: 180, easing: cubicOut }}>
+                  <img src={qrDataUrl} alt={t("wa_install_qr_alt", {}, "Subscription QR code")} />
+                </div>
+              {/if}
+              <div class="install-actions install-subscription-actions">
+                <Button variant="secondary" onclick={copySubscriptionLink}>
+                  <Copy size={16} />
+                  {t("wa_install_copy_subscription_link", {}, "Copy link")}
+                </Button>
+                <Button onclick={shareInstallGuide}>
+                  <Share2 size={16} />
+                  {t("wa_install_share", {}, "Share")}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
       {/if}
     {/if}
   {/if}
@@ -551,11 +590,31 @@
     padding: 10px;
     font: inherit;
     text-align: left;
+    cursor: pointer;
+    transform: translateY(0);
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease,
+      box-shadow 0.18s ease,
+      color 0.18s ease,
+      transform 0.18s ease;
   }
 
   .install-apps button.active {
     border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
     background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 12%, transparent);
+    transform: translateY(-1px);
+  }
+
+  .install-apps button:focus-visible {
+    outline: 0;
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  .install-apps button:active {
+    transform: translateY(0) scale(0.99);
   }
 
   :global(.install-platform-trigger) {
@@ -703,10 +762,24 @@
     gap: 10px;
   }
 
+  .install-step-motion {
+    min-width: 0;
+  }
+
   :global(.install-step) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 12px;
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease,
+      transform 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  :global(.install-step:hover) {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
   }
 
   .install-qr-divider {
@@ -736,6 +809,20 @@
     display: grid;
     gap: 12px;
     justify-self: stretch;
+    transition:
+      border-color 0.18s ease,
+      transform 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .install-subscription-motion {
+    display: grid;
+    min-width: 0;
+  }
+
+  :global(.install-subscription-card:hover) {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
   }
 
   .install-subscription-header {
@@ -875,6 +962,37 @@
 
     .install-apps.apps-remainder-two button:nth-last-child(-n + 2) {
       grid-column: span 3;
+    }
+  }
+
+  @media (hover: hover) {
+    .install-apps button:hover {
+      border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+      background: color-mix(in srgb, var(--text) 4%, var(--panel));
+      transform: translateY(-1px);
+    }
+
+    .install-apps button.active:hover {
+      background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+      transform: translateY(-2px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .install-apps button,
+    :global(.install-step),
+    :global(.install-subscription-card) {
+      transition: none;
+      transform: none;
+    }
+
+    .install-apps button.active,
+    .install-apps button:active,
+    .install-apps button:hover,
+    .install-apps button.active:hover,
+    :global(.install-step:hover),
+    :global(.install-subscription-card:hover) {
+      transform: none;
     }
   }
 

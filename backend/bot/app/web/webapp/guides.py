@@ -32,12 +32,14 @@ async def subscription_guides_route(request: web.Request) -> web.Response:
 
 
 async def public_subscription_guides_route(request: web.Request) -> web.Response:
-    short_uuid = _normalize_short_uuid(request.match_info.get("short_uuid"))
-    if not short_uuid:
-        return web.json_response({"ok": False, "error": "invalid_short_uuid"}, status=404)
+    share_token = subscription_dal.normalize_install_share_token(
+        request.match_info.get("share_token")
+    )
+    if not share_token:
+        return web.json_response({"ok": False, "error": "invalid_share_token"}, status=404)
 
     status = await _subscription_guides_status_shared(request.app)
-    subscription = await _public_subscription_payload(request, short_uuid)
+    subscription = await _public_subscription_payload(request, share_token)
     payload = {
         "enabled": bool(status.get("enabled")),
         "config": status.get("config") if status.get("enabled") else None,
@@ -160,19 +162,19 @@ async def _default_panel_subscription_page_config_uuid(panel_service: Any) -> st
 
 async def _public_subscription_payload(
     request: web.Request,
-    short_uuid: str,
+    share_token: str,
 ) -> Dict[str, Any]:
     settings: Settings = request.app["settings"]
     panel_service = _panel_service_from_app(request.app)
     raw_link = ""
     username = ""
-    resolved_short_uuid = short_uuid
+    resolved_short_uuid = ""
 
     async_session_factory: sessionmaker = request.app["async_session_factory"]
     async with async_session_factory() as session:
-        local_sub = await subscription_dal.get_subscription_by_panel_subscription_uuid(
+        local_sub = await subscription_dal.get_subscription_by_install_share_token(
             session,
-            short_uuid,
+            share_token,
         )
 
     if (
@@ -185,16 +187,17 @@ async def _public_subscription_payload(
         if panel_user:
             raw_link = str(panel_user.get("subscriptionUrl") or "").strip()
             username = str(panel_user.get("username") or "").strip()
-            resolved_short_uuid = str(panel_user.get("shortUuid") or short_uuid).strip()
+            resolved_short_uuid = str(panel_user.get("shortUuid") or "").strip()
 
     display_link, connect_url = await prepare_config_links(settings, raw_link)
     return {
         "active": bool(display_link),
         "config_link": display_link,
         "connect_url": connect_url or display_link,
-        "panel_short_uuid": resolved_short_uuid,
+        "panel_short_uuid": resolved_short_uuid or None,
+        "install_share_token": share_token,
         "username": username,
-        "share_url": _public_install_url(request, resolved_short_uuid),
+        "share_url": _public_install_url(request, share_token),
     }
 
 
@@ -231,14 +234,7 @@ def _local_subscription_is_publicly_active(subscription: Any) -> bool:
     )
 
 
-def _normalize_short_uuid(value: Any) -> str:
-    short_uuid = str(value or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", short_uuid):
-        return ""
-    return short_uuid
-
-
-def _public_install_url(request: web.Request, short_uuid: str) -> str:
+def _public_install_url(request: web.Request, share_token: str) -> str:
     settings: Settings = request.app["settings"]
     configured_base = str(getattr(settings, "SUBSCRIPTION_MINI_APP_URL", "") or "").strip()
     if configured_base:
@@ -255,7 +251,7 @@ def _public_install_url(request: web.Request, short_uuid: str) -> str:
         )
         proto = request.headers.get("X-Forwarded-Proto") or request.scheme or "https"
         base = f"{proto}://{host}"
-    return f"{base.rstrip('/')}/install/share/{quote(short_uuid)}"
+    return f"{base.rstrip('/')}/s/{quote(share_token)}"
 
 
 def _subscription_page_request_headers(request: web.Request) -> Dict[str, str]:

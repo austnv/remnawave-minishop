@@ -606,9 +606,13 @@ export async function mockApi(path, options = {}, context = {}) {
   if (path === "/me") return clone(DEV_MOCK.data);
   if (path === "/subscription-guides") return clone(DEV_MOCK.data.subscription_guides);
   if (cleanPath.startsWith("/subscription-guides/public/")) {
+    const shareToken = decodeURIComponent(cleanPath.split("/").pop() || "");
+    const subscription = clone(DEV_MOCK.data.subscription);
+    subscription.install_share_token = shareToken;
+    subscription.share_url = `${window.location.origin}/s/${shareToken}`;
     return {
       ...clone(DEV_MOCK.data.subscription_guides),
-      subscription: clone(DEV_MOCK.data.subscription),
+      subscription,
     };
   }
   if (path === "/auth/email/request") return { ok: true };

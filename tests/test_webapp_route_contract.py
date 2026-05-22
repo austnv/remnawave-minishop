@@ -51,7 +51,7 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("GET", "/login/password"): "index_route",
             ("GET", "/home"): "index_route",
             ("GET", "/install"): "index_route",
-            ("GET", "/install/share/{short_uuid}"): "index_route",
+            ("GET", "/s/{share_token}"): "index_route",
             ("GET", "/invite"): "index_route",
             ("GET", "/devices"): "index_route",
             ("GET", "/settings"): "index_route",
@@ -82,7 +82,7 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("GET", "/api/subscription-guides"): "subscription_guides_route",
             (
                 "GET",
-                "/api/subscription-guides/public/{short_uuid}",
+                "/api/subscription-guides/public/{share_token}",
             ): "public_subscription_guides_route",
             ("GET", "/api/account/avatar"): "account_avatar_route",
             ("POST", "/api/account/language"): "account_language_route",

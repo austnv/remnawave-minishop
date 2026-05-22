@@ -73,7 +73,7 @@
     adminSectionFromPath,
     adminUserIdFromPath,
     normalizeSection,
-    publicInstallShortUuidFromPath,
+    publicInstallTokenFromPath,
     sectionFromPath,
     supportTicketIdFromPath,
     syncSectionPath,
@@ -103,7 +103,7 @@
   let screen = "home";
   let data = isPreviewBoard ? structuredCloneSafe(DEV_MOCK.data) : null;
   let publicInstallSubscription = null;
-  let publicInstallShortUuid = "";
+  let publicInstallToken = "";
   let trialBusy = false;
   let promoCode = "";
   let promoBusy = false;
@@ -497,9 +497,9 @@
       if (mode === "login") loginEmailTooltipOpen = false;
     };
     const onPopState = () => {
-      const publicShortUuid = publicInstallShortUuidFromPath(window.location.pathname);
-      if (publicShortUuid) {
-        void loadPublicInstall(publicShortUuid);
+      const shareToken = publicInstallTokenFromPath(window.location.pathname);
+      if (shareToken) {
+        void loadPublicInstall(shareToken);
         return;
       }
       if (mode === "publicInstall") {
@@ -802,9 +802,9 @@
   }
 
   async function boot() {
-    const shareShortUuid = publicInstallShortUuidFromPath(window.location.pathname);
-    if (!MOCK && shareShortUuid) {
-      await loadPublicInstall(shareShortUuid);
+    const shareToken = publicInstallTokenFromPath(window.location.pathname);
+    if (shareToken) {
+      await loadPublicInstall(shareToken);
       return;
     }
     await runWebappBoot({
@@ -987,17 +987,16 @@
     }
   }
 
-  async function loadPublicInstall(shortUuid) {
+  async function loadPublicInstall(shareToken) {
     mode = "publicInstall";
     screen = "install";
     activeTab = "home";
-    publicInstallShortUuid = shortUuid;
+    publicInstallToken = shareToken;
     publicInstallSubscription = {
-      panel_short_uuid: shortUuid,
-      share_url:
-        typeof window !== "undefined" ? `${window.location.origin}/install/share/${shortUuid}` : "",
+      install_share_token: shareToken,
+      share_url: typeof window !== "undefined" ? `${window.location.origin}/s/${shareToken}` : "",
     };
-    const response = await installGuidesStore.loadPublic(shortUuid, true);
+    const response = await installGuidesStore.loadPublic(shareToken, true);
     publicInstallSubscription = response?.subscription || publicInstallSubscription;
   }
 
@@ -1362,7 +1361,7 @@
               {currentLang}
               telegramPlatform={tg?.platform || ""}
               user={{}}
-              subscription={publicInstallSubscription || { panel_short_uuid: publicInstallShortUuid }}
+              subscription={publicInstallSubscription || { install_share_token: publicInstallToken }}
               {goHome}
               {openConnectLink}
               {openExternalLink}

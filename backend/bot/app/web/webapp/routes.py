@@ -7,7 +7,7 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/login/password", index_route)
     app.router.add_get("/home", index_route)
     app.router.add_get("/install", index_route)
-    app.router.add_get(r"/install/share/{short_uuid:[A-Za-z0-9_-]{8,128}}", index_route)
+    app.router.add_get(r"/s/{share_token:[a-f0-9]{32}}", index_route)
     app.router.add_get("/invite", index_route)
     app.router.add_get("/devices", index_route)
     app.router.add_get("/settings", index_route)
@@ -64,7 +64,7 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/api/me", me_route)
     app.router.add_get("/api/subscription-guides", subscription_guides_route)
     app.router.add_get(
-        r"/api/subscription-guides/public/{short_uuid:[A-Za-z0-9_-]{8,128}}",
+        r"/api/subscription-guides/public/{share_token:[a-f0-9]{32}}",
         public_subscription_guides_route,
     )
     app.router.add_get("/api/account/avatar", account_avatar_route)
