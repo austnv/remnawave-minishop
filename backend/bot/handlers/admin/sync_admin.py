@@ -42,8 +42,55 @@ def _normalize_description(value: Optional[str]) -> str:
     return "\n".join((value or "").split()).strip()
 
 
+def _repair_cp1251_mojibake(value: str) -> str:
+    try:
+        return value.encode("latin1").decode("cp1251")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+
+
+def _description_variants(value: Optional[str]) -> set[str]:
+    normalized = _normalize_description(value)
+    variants = {normalized}
+    repaired = _normalize_description(_repair_cp1251_mojibake(normalized))
+    if repaired:
+        variants.add(repaired)
+    return variants
+
+
 def _description_matches(current: Optional[str], desired: str) -> bool:
-    return _normalize_description(current) == _normalize_description(desired)
+    return bool(_description_variants(current) & _description_variants(desired))
+
+
+def _panel_identity_matches_user(
+    panel_user: dict[str, Any],
+    user: User,
+    desired_description: str,
+) -> bool:
+    if desired_description and not _description_matches(
+        panel_user.get("description"),
+        desired_description,
+    ):
+        return False
+
+    if user.email and _normalize_panel_email(panel_user.get("email")) != user.email.strip().lower():
+        return False
+
+    if user.telegram_id and _coerce_panel_telegram_id(panel_user.get("telegramId")) != int(
+        user.telegram_id
+    ):
+        return False
+
+    return True
+
+
+def _panel_identity_update_payload(user: User, description_text: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {"description": description_text}
+    if user.email:
+        payload["email"] = user.email
+    if user.telegram_id:
+        payload["telegramId"] = user.telegram_id
+    return payload
 
 
 def _datetime_matches(current: Optional[datetime], desired: datetime) -> bool:
@@ -589,28 +636,15 @@ async def _perform_sync_impl(
                             if line
                         )
                         # Update description only when it differs from the current one on panel
-                        current_panel_description = (
-                            panel_user_dict.get("description") or ""
-                        ).strip()
                         desired_description = description_text.strip()
-                        if desired_description and not _description_matches(
-                            current_panel_description, desired_description
+                        if desired_description and not _panel_identity_matches_user(
+                            panel_user_dict,
+                            existing_user,
+                            desired_description,
                         ):
                             await panel_service.update_user_details_on_panel(
                                 panel_uuid,
-                                {
-                                    "description": description_text,
-                                    **(
-                                        {"email": existing_user.email}
-                                        if existing_user.email
-                                        else {}
-                                    ),
-                                    **(
-                                        {"telegramId": existing_user.telegram_id}
-                                        if existing_user.telegram_id
-                                        else {}
-                                    ),
-                                },
+                                _panel_identity_update_payload(existing_user, description_text),
                             )
                 except Exception as e_desc:
                     logging.warning(

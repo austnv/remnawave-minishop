@@ -13,6 +13,7 @@ async def admin_settings_get_route(request: web.Request) -> web.Response:
     overrides_by_key = {entry["key"]: entry for entry in overrides}
 
     fields = manifest_payload()
+    webhook_base_url = str(settings.WEBHOOK_BASE_URL or "").strip().rstrip("/")
     sections: Dict[str, Dict[str, Any]] = {}
     for field in fields:
         key = field["key"]
@@ -34,6 +35,14 @@ async def admin_settings_get_route(request: web.Request) -> web.Response:
         }
         if is_secret:
             response_field["has_value"] = bool(value)
+        webhook_path = str(response_field.get("webhook_path") or "").strip()
+        if webhook_path:
+            if not webhook_path.startswith("/"):
+                webhook_path = f"/{webhook_path}"
+            response_field["webhook_path"] = webhook_path
+            response_field["webhook_base_url_configured"] = bool(webhook_base_url)
+            if webhook_base_url:
+                response_field["webhook_url"] = f"{webhook_base_url}{webhook_path}"
         sections[section_id]["fields"].append(response_field)
 
     ordered_sections = sorted(sections.values(), key=lambda s: s["order"])
@@ -70,6 +79,12 @@ async def admin_settings_patch_route(request: web.Request) -> web.Response:
     if isinstance(cache, dict):
         cache["ts"] = 0.0
         cache["data"] = {}
+    try:
+        from bot.app.web.webapp.cache_helpers import invalidate_all_webapp_user_caches
+
+        await invalidate_all_webapp_user_caches(settings, include_devices=True)
+    except Exception:
+        logger.exception("Failed to invalidate WebApp user payload caches after settings update")
     if (
         "WEBAPP_LOGO_URL" in updates
         or "WEBAPP_LOGO_URL" in deletes
