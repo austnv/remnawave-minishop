@@ -75,15 +75,25 @@ def invalidate_local_webapp_user_payload(
 
 def invalidate_all_local_webapp_user_payloads(
     settings: Settings,
+    namespace: Optional[str] = None,
     *,
-    include_devices: bool = False,
+    include_devices: Optional[bool] = None,
 ) -> None:
-    namespaces = set(_payload_namespaces(include_devices))
+    if include_devices is not None:
+        namespaces: Optional[set[str]] = set(_payload_namespaces(include_devices))
+    elif namespace is not None:
+        namespaces = {namespace}
+    else:
+        namespaces = None
+
     for (settings_id, cache_namespace, _ttl), cache in tuple(
         _WEBAPP_USER_PAYLOAD_CACHES.items()
     ):
-        if settings_id == id(settings) and cache_namespace in namespaces:
-            cache.invalidate()
+        if settings_id != id(settings):
+            continue
+        if namespaces is not None and cache_namespace not in namespaces:
+            continue
+        cache.invalidate()
 
 
 async def invalidate_webapp_user_caches(
@@ -117,10 +127,18 @@ async def invalidate_all_webapp_user_payloads(
     *,
     include_devices: bool = False,
 ) -> None:
-    invalidate_all_local_webapp_user_payloads(settings, include_devices=include_devices)
     for namespace in _payload_namespaces(include_devices):
+        invalidate_all_local_webapp_user_payloads(settings, namespace=namespace)
         try:
             pattern = redis_key(settings, "cache", "webapp", namespace, "*")
             await cache_delete_pattern(settings, pattern)
         except Exception:
             continue
+
+
+async def invalidate_all_webapp_user_caches(
+    settings: Settings,
+    *,
+    include_devices: bool = False,
+) -> None:
+    await invalidate_all_webapp_user_payloads(settings, include_devices=include_devices)

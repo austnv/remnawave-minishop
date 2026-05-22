@@ -834,6 +834,45 @@ def _run_git_command(*args: str) -> str:
     return result.stdout.strip()
 
 
+def _normalize_version_branch(raw_branch: str) -> str:
+    branch = str(raw_branch or "").strip()
+    for prefix in ("refs/heads/", "refs/remotes/origin/", "origin/"):
+        if branch.startswith(prefix):
+            branch = branch[len(prefix) :]
+            break
+    if branch == "HEAD":
+        return ""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", branch).strip("-")[:48]
+
+
+def _resolve_version_branch() -> str:
+    for env_name in (
+        "REMNAWAVE_MINISHOP_BRANCH",
+        "GIT_BRANCH",
+        "BRANCH_NAME",
+        "GITHUB_REF_NAME",
+        "CI_COMMIT_REF_NAME",
+    ):
+        branch = _normalize_version_branch(os.getenv(env_name, ""))
+        if branch:
+            return branch
+    return _normalize_version_branch(
+        _run_git_command("branch", "--show-current")
+        or _run_git_command("symbolic-ref", "--quiet", "--short", "HEAD")
+    )
+
+
+def _format_app_version(tag: str, sha: str, branch: str) -> str:
+    branch_suffix = "" if not branch or branch == "main" else f"-{branch}"
+    if tag and sha:
+        return f"{tag}{branch_suffix}+g{sha}"
+    if sha:
+        return f"dev{branch_suffix}+g{sha}"
+    if tag:
+        return f"{tag}{branch_suffix}"
+    return f"dev{branch_suffix}+unknown"
+
+
 def _resolve_app_version() -> str:
     global _APP_VERSION_CACHE
     if _APP_VERSION_CACHE:
@@ -855,21 +894,8 @@ def _resolve_app_version() -> str:
 
     tag = _run_git_command("describe", "--tags", "--abbrev=0")
     sha = _run_git_command("rev-parse", "--short", "HEAD")
-    dirty = bool(_run_git_command("status", "--porcelain"))
-
-    if tag and sha:
-        commits_since_tag = _run_git_command("rev-list", f"{tag}..HEAD", "--count")
-        if commits_since_tag and commits_since_tag != "0":
-            version = f"{tag}+{commits_since_tag}.g{sha}"
-        else:
-            version = tag
-    elif sha:
-        version = f"dev+g{sha}"
-    else:
-        version = "dev+unknown"
-
-    if dirty:
-        version = f"{version}-dirty"
+    branch = _resolve_version_branch()
+    version = _format_app_version(tag, sha, branch)
 
     _APP_VERSION_CACHE = version
     return version
@@ -1372,10 +1398,10 @@ def _resolve_webapp_js_asset_name() -> str:
 
 
 def _resolve_webapp_admin_js_asset_name() -> str:
-    return _resolve_hashed_js_asset_name(
-        kind="admin-js",
-        base_name="subscription_webapp_admin",
-    )
+    # The admin bundle is lazy-loaded from the already running Mini App. In
+    # deployments where nginx serves static files in front of aiohttp, stale
+    # hashed admin filenames can 404 even though the runtime build asset exists.
+    return _set_cached_asset_name("admin-js", "subscription_webapp_admin.js")
 
 
 def _resolve_hashed_js_asset_name(*, kind: str, base_name: str) -> str:
@@ -1405,10 +1431,9 @@ def _resolve_webapp_css_asset_name() -> str:
 
 
 def _resolve_webapp_admin_css_asset_name() -> str:
-    return _resolve_hashed_css_asset_name(
-        kind="admin-css",
-        base_name="subscription_webapp_admin",
-    )
+    # Keep the lazy-loaded admin stylesheet on the stable build filename for
+    # the same reason as the JS bundle above.
+    return _set_cached_asset_name("admin-css", "subscription_webapp_admin.css")
 
 
 def _resolve_hashed_css_asset_name(*, kind: str, base_name: str) -> str:
