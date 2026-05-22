@@ -14,6 +14,20 @@ def test_description_match_ignores_whitespace_shape():
     assert _description_matches("email@example.com username", "email@example.com\nusername")
 
 
+def test_description_match_accepts_cp1251_mojibake_from_panel():
+    desired = "user@example.com\nalice\nАлексей\nЧерников"
+    panel_value = "user@example.com\nalice\nÀëåêñåé\n×åðíèêîâ"
+
+    assert _description_matches(panel_value, desired)
+
+
+def test_description_match_rejects_different_identity_after_mojibake_repair():
+    desired = "user@example.com\nalice\nАлексей"
+    panel_value = "other@example.com\nalice\nÀëåêñåé"
+
+    assert not _description_matches(panel_value, desired)
+
+
 def test_panel_telegram_id_is_coerced_to_int():
     assert _coerce_panel_telegram_id("12345") == 12345
     assert _coerce_panel_telegram_id("") is None
