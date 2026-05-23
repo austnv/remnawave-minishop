@@ -1,7 +1,5 @@
 <script>
-  import { getContext, onMount } from "svelte";
-  import { cubicOut } from "svelte/easing";
-  import { fade, fly, scale } from "svelte/transition";
+  import { getContext, onDestroy, onMount } from "svelte";
   import QRCode from "qrcode";
   import {
     ArrowLeft,
@@ -18,6 +16,7 @@
   import { Select } from "$components/ui/primitives.js";
   import Button from "$components/ui/button.svelte";
   import Card from "$components/ui/card.svelte";
+  import { createHeightStageAnimator } from "$lib/webapp/motion/heightStage.js";
 
   export let currentLang = "ru";
   export let telegramPlatform = "";
@@ -32,6 +31,9 @@
   export let publicMode = false;
 
   const installGuidesStore = getContext("installGuidesStore");
+  const STAGE_HEIGHT_ANIMATION_MS = 360;
+  const CARD_STAGGER_MS = 46;
+  const QR_DELAY_EXTRA_MS = 90;
   const colorTokens = {
     amber: "#f59e0b",
     blue: "#3b82f6",
@@ -61,10 +63,22 @@
   let qrDataUrl = "";
   let lastQrValue = "";
   let qrRequestId = 0;
+  let installContentStage;
+  let stageHeightStyle = "";
+  let stageHeightLocked = false;
+  let stageHeightInstant = false;
+  const installStageAnimator = createHeightStageAnimator({
+    durationMs: STAGE_HEIGHT_ANIMATION_MS,
+    getElement: () => installContentStage,
+    settleDelayMs: QR_DELAY_EXTRA_MS + 80,
+    setState: setInstallStageState,
+  });
 
   onMount(() => {
     if (!publicMode) installGuidesStore?.load();
   });
+
+  onDestroy(() => installStageAnimator.destroy());
 
   $: guideState = $installGuidesStore;
   $: config = guideState?.config || null;
@@ -94,6 +108,11 @@
   $: apps = selectedPlatform?.apps || [];
   $: if (selectedAppIndex >= apps.length) selectedAppIndex = 0;
   $: selectedApp = apps[selectedAppIndex] || apps[0] || null;
+  $: selectedBlocks = Array.isArray(selectedApp?.blocks) ? selectedApp.blocks : [];
+  $: hasAppSelector = apps.length > 1;
+  $: stepsDelayOffset = hasAppSelector ? apps.length + 1 : 0;
+  $: qrDelayIndex = stepsDelayOffset + selectedBlocks.length + 1;
+  $: installStageStyle = `${stageHeightStyle} --motion-stage-duration:${STAGE_HEIGHT_ANIMATION_MS}ms;`;
   $: guideSubscription = guideState?.subscription || subscription || {};
   $: finalSubscriptionLink =
     guideSubscription?.config_link ||
@@ -132,9 +151,30 @@
     return value ? `--install-icon-color:${value};` : "";
   }
 
+  function setInstallStageState({ instant, locked, style }) {
+    stageHeightInstant = instant;
+    stageHeightLocked = locked;
+    stageHeightStyle = style;
+  }
+
   function selectPlatform(key) {
-    selectedPlatformKey = key;
-    selectedAppIndex = 0;
+    if (key === selectedPlatformKey) return;
+    installStageAnimator.animate(() => {
+      selectedPlatformKey = key;
+      selectedAppIndex = 0;
+    });
+  }
+
+  function selectApp(index) {
+    if (index === selectedAppIndex) return;
+    installStageAnimator.animate(() => {
+      selectedAppIndex = index;
+    });
+  }
+
+  function installMotionStyle(index, extraDelay = 0) {
+    const delay = Math.max(0, index) * CARD_STAGGER_MS + Math.max(0, extraDelay);
+    return `--motion-delay:${delay}ms;`;
   }
 
   function platformFallbackIcon(key) {
@@ -359,7 +399,7 @@
 
   {#if guideState?.loading && !guideState?.loaded}
     <div
-      class="install-loading"
+      class="install-loading motion-fade-up"
       role="status"
       aria-label={t("wa_install_loading", {}, "Loading instructions...")}
     >
@@ -375,154 +415,164 @@
       </Button>
     </Card>
   {:else}
-    {#key selectedPlatformKey}
-      {#if apps.length > 1}
-        <section
-          class="install-selector-block"
-          aria-label={t("wa_install_app", {}, "App")}
-          in:fly={{ y: 8, duration: 180, easing: cubicOut }}
-          out:fade={{ duration: 90 }}
-        >
-          <div class="install-section-title">
-            <span>{t("wa_install_app", {}, "App")}</span>
+    <div
+      class="install-content-stage motion-height-stage"
+      class:motion-height-locked={stageHeightLocked}
+      class:motion-height-instant={stageHeightInstant}
+      style={installStageStyle}
+      bind:this={installContentStage}
+    >
+      {#key selectedPlatformKey}
+        {#if hasAppSelector}
+          <section
+            class="install-selector-block motion-enter-card"
+            style={installMotionStyle(0)}
+            aria-label={t("wa_install_app", {}, "App")}
+          >
+            <div class="install-section-title">
+              <span>{t("wa_install_app", {}, "App")}</span>
+            </div>
+            <div
+              class="install-apps"
+              class:apps-mobile-remainder-one={apps.length % 2 === 1}
+              class:apps-remainder-one={apps.length % 3 === 1}
+              class:apps-remainder-two={apps.length % 3 === 2}
+            >
+              {#each apps as app, index (`${selectedPlatformKey}:${app.name}:${index}`)}
+                <button
+                  class="install-app-button attention-wrap motion-enter-card"
+                  class:active={selectedAppIndex === index}
+                  class:featured={app.featured}
+                  style={installMotionStyle(index + 1)}
+                  type="button"
+                  onclick={() => selectApp(index)}
+                >
+                  {#if app.featured}
+                    <AttentionDot class="install-feature-star" />
+                  {/if}
+                  {#if iconSvg(app.svgIconKey)}
+                    <span class="install-svg" aria-hidden="true"
+                      >{@html iconSvg(app.svgIconKey)}</span
+                    >
+                  {/if}
+                  <span>{app.name}</span>
+                </button>
+              {/each}
+            </div>
+          </section>
+        {/if}
+      {/key}
+
+      {#if selectedApp}
+        {#key `${selectedPlatformKey}:${selectedAppIndex}:${selectedApp.name}`}
+          <section
+            class="install-steps"
+            aria-label={selectedApp.name}
+            style={installMotionStyle(stepsDelayOffset)}
+          >
+            {#each selectedBlocks as block, blockIndex (`${selectedPlatformKey}:${selectedApp.name}:${blockIndex}:${localized(block.title)}`)}
+              <div
+                class="install-step-motion motion-enter-card"
+                style={installMotionStyle(stepsDelayOffset + blockIndex)}
+              >
+                <Card class="install-step">
+                  <div
+                    class="install-step-icon"
+                    style={iconColorStyle(block.svgIconColor)}
+                    aria-hidden="true"
+                  >
+                    {#if iconSvg(block.svgIconKey)}
+                      {@html iconSvg(block.svgIconKey)}
+                    {:else}
+                      <Check size={19} />
+                    {/if}
+                  </div>
+                  <div class="install-step-body">
+                    <h2>{localized(block.title)}</h2>
+                    <p>{localized(block.description)}</p>
+                    {#if block.buttons?.length}
+                      <div class="install-actions">
+                        {#each block.buttons as button}
+                          <Button
+                            variant={button.type === "copyButton" ? "secondary" : "default"}
+                            onclick={() => handleButton(button)}
+                          >
+                            {#if button.type === "copyButton"}
+                              <Copy size={16} />
+                            {:else}
+                              <ExternalLink size={16} />
+                            {/if}
+                            {localized(button.text)}
+                          </Button>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                </Card>
+              </div>
+            {/each}
+          </section>
+        {/key}
+        {#if finalSubscriptionLink && !publicMode}
+          <div
+            class="install-qr-divider motion-enter-card"
+            style={installMotionStyle(qrDelayIndex, QR_DELAY_EXTRA_MS)}
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 240 18" preserveAspectRatio="none">
+              <path
+                d="M0 9 Q 4 2 8 9 T 16 9 T 24 9 T 32 9 T 40 9 T 48 9 T 56 9 T 64 9 T 72 9 T 80 9 T 88 9 T 96 9 T 104 9 T 112 9 T 120 9 T 128 9 T 136 9 T 144 9 T 152 9 T 160 9 T 168 9 T 176 9 T 184 9 T 192 9 T 200 9 T 208 9 T 216 9 T 224 9 T 232 9 T 240 9"
+              />
+            </svg>
           </div>
           <div
-            class="install-apps"
-            class:apps-mobile-remainder-one={apps.length % 2 === 1}
-            class:apps-remainder-one={apps.length % 3 === 1}
-            class:apps-remainder-two={apps.length % 3 === 2}
+            class="install-subscription-motion motion-enter-card"
+            style={installMotionStyle(qrDelayIndex + 1, QR_DELAY_EXTRA_MS)}
           >
-            {#each apps as app, index (`${selectedPlatformKey}:${app.name}:${index}`)}
-              <button
-                class="install-app-button attention-wrap"
-                class:active={selectedAppIndex === index}
-                class:featured={app.featured}
-                type="button"
-                onclick={() => (selectedAppIndex = index)}
-                in:scale={{
-                  start: 0.97,
-                  duration: 150 + Math.min(index, 5) * 18,
-                  easing: cubicOut,
-                }}
-              >
-                {#if app.featured}
-                  <AttentionDot class="install-feature-star" />
-                {/if}
-                {#if iconSvg(app.svgIconKey)}
-                  <span class="install-svg" aria-hidden="true">{@html iconSvg(app.svgIconKey)}</span
-                  >
-                {/if}
-                <span>{app.name}</span>
-              </button>
-            {/each}
-          </div>
-        </section>
-      {/if}
-    {/key}
-
-    {#if selectedApp}
-      {#key `${selectedPlatformKey}:${selectedAppIndex}:${selectedApp.name}`}
-        <section
-          class="install-steps"
-          aria-label={selectedApp.name}
-          in:fly={{ y: 12, duration: 190, easing: cubicOut }}
-          out:fade={{ duration: 90 }}
-        >
-          {#each selectedApp.blocks as block, blockIndex (`${selectedPlatformKey}:${selectedApp.name}:${blockIndex}:${localized(block.title)}`)}
-            <div
-              class="install-step-motion"
-              in:fly={{
-                y: 10,
-                duration: 170 + Math.min(blockIndex, 6) * 18,
-                easing: cubicOut,
-              }}
-            >
-              <Card class="install-step">
-                <div
-                  class="install-step-icon"
-                  style={iconColorStyle(block.svgIconColor)}
-                  aria-hidden="true"
-                >
-                  {#if iconSvg(block.svgIconKey)}
-                    {@html iconSvg(block.svgIconKey)}
+            <Card class="install-subscription-card">
+              <div class="install-subscription-header">
+                <div class="install-subscription-header-icon" aria-hidden="true">
+                  <QrCode size={20} />
+                </div>
+                <div class="install-subscription-heading">
+                  <h2>{t("wa_install_subscription_link", {}, "Subscription link")}</h2>
+                  <p>
+                    {t(
+                      "wa_install_subscription_link_hint",
+                      {},
+                      "Scan the QR code or copy the link."
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div class="install-subscription-body">
+                <div class="install-qr-wrap" class:ready={qrDataUrl}>
+                  {#if qrDataUrl}
+                    <img
+                      class="motion-scale-in"
+                      src={qrDataUrl}
+                      alt={t("wa_install_qr_alt", {}, "Subscription QR code")}
+                    />
                   {:else}
-                    <Check size={19} />
+                    <span class="install-qr-placeholder motion-shimmer" aria-hidden="true"></span>
                   {/if}
                 </div>
-                <div class="install-step-body">
-                  <h2>{localized(block.title)}</h2>
-                  <p>{localized(block.description)}</p>
-                  {#if block.buttons?.length}
-                    <div class="install-actions">
-                      {#each block.buttons as button}
-                        <Button
-                          variant={button.type === "copyButton" ? "secondary" : "default"}
-                          onclick={() => handleButton(button)}
-                        >
-                          {#if button.type === "copyButton"}
-                            <Copy size={16} />
-                          {:else}
-                            <ExternalLink size={16} />
-                          {/if}
-                          {localized(button.text)}
-                        </Button>
-                      {/each}
-                    </div>
-                  {/if}
+                <div class="install-actions install-subscription-actions">
+                  <Button variant="secondary" onclick={copySubscriptionLink}>
+                    <Copy size={16} />
+                    {t("wa_install_copy_subscription_link", {}, "Copy link")}
+                  </Button>
+                  <Button onclick={shareInstallGuide}>
+                    <Share2 size={16} />
+                    {t("wa_install_share", {}, "Share")}
+                  </Button>
                 </div>
-              </Card>
-            </div>
-          {/each}
-        </section>
-      {/key}
-      {#if finalSubscriptionLink && !publicMode}
-        <div class="install-qr-divider" aria-hidden="true" in:fade={{ duration: 180 }}>
-          <svg viewBox="0 0 240 18" preserveAspectRatio="none">
-            <path
-              d="M0 9 Q 4 2 8 9 T 16 9 T 24 9 T 32 9 T 40 9 T 48 9 T 56 9 T 64 9 T 72 9 T 80 9 T 88 9 T 96 9 T 104 9 T 112 9 T 120 9 T 128 9 T 136 9 T 144 9 T 152 9 T 160 9 T 168 9 T 176 9 T 184 9 T 192 9 T 200 9 T 208 9 T 216 9 T 224 9 T 232 9 T 240 9"
-            />
-          </svg>
-        </div>
-        <div
-          class="install-subscription-motion"
-          in:fly={{ y: 10, duration: 200, easing: cubicOut }}
-        >
-          <Card class="install-subscription-card">
-            <div class="install-subscription-header">
-              <div class="install-subscription-header-icon" aria-hidden="true">
-                <QrCode size={20} />
               </div>
-              <div class="install-subscription-heading">
-                <h2>{t("wa_install_subscription_link", {}, "Subscription link")}</h2>
-                <p>
-                  {t("wa_install_subscription_link_hint", {}, "Scan the QR code or copy the link.")}
-                </p>
-              </div>
-            </div>
-            <div class="install-subscription-body">
-              {#if qrDataUrl}
-                <div
-                  class="install-qr-wrap"
-                  in:scale={{ start: 0.96, duration: 180, easing: cubicOut }}
-                >
-                  <img src={qrDataUrl} alt={t("wa_install_qr_alt", {}, "Subscription QR code")} />
-                </div>
-              {/if}
-              <div class="install-actions install-subscription-actions">
-                <Button variant="secondary" onclick={copySubscriptionLink}>
-                  <Copy size={16} />
-                  {t("wa_install_copy_subscription_link", {}, "Copy link")}
-                </Button>
-                <Button onclick={shareInstallGuide}>
-                  <Share2 size={16} />
-                  {t("wa_install_share", {}, "Share")}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        </div>
+            </Card>
+          </div>
+        {/if}
       {/if}
-    {/if}
+    </div>
   {/if}
 </main>
 
@@ -595,11 +645,14 @@
     color: var(--muted);
     font-size: 13px;
     font-weight: 700;
-    animation: install-loader-enter 0.16s ease-out both;
   }
 
   .install-loading :global(.ui-spinner) {
     color: var(--accent);
+  }
+
+  .install-content-stage {
+    gap: 16px;
   }
 
   .install-selector-block {
@@ -924,16 +977,27 @@
   }
 
   .install-qr-wrap {
+    position: relative;
     display: grid;
     width: 60%;
     aspect-ratio: 1;
+    min-width: 172px;
+    max-width: 236px;
     place-items: center;
     justify-self: center;
     padding: 10px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: transparent;
+    background: color-mix(in srgb, var(--panel-3) 64%, transparent);
     box-sizing: border-box;
+    overflow: hidden;
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease;
+  }
+
+  .install-qr-wrap.ready {
+    background: transparent;
   }
 
   .install-qr-wrap img {
@@ -941,6 +1005,20 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+  }
+
+  .install-qr-placeholder {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--muted) 9%, transparent) 0%,
+      color-mix(in srgb, var(--muted) 18%, transparent) 42%,
+      color-mix(in srgb, var(--muted) 9%, transparent) 84%
+    );
+    background-size: 220% 100%;
   }
 
   :global(.theme-dark) .install-qr-wrap img {
@@ -1035,6 +1113,10 @@
       transform: none;
     }
 
+    :global(.install-feature-star.attention-dot) {
+      animation: none;
+    }
+
     .install-apps button.active,
     .install-apps button:active,
     .install-apps button:hover,
@@ -1094,18 +1176,6 @@
     100% {
       filter: drop-shadow(0 0 0 rgba(250, 204, 21, 0));
       transform: scale(1);
-    }
-  }
-
-  @keyframes install-loader-enter {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
     }
   }
 </style>
