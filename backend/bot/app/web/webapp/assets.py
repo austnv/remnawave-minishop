@@ -1193,6 +1193,130 @@ async def index_route(request: web.Request) -> web.Response:
     return response
 
 
+async def app_deeplink_route(request: web.Request) -> web.Response:
+    settings: Settings = request.app["settings"]
+    if not getattr(settings, "WEBAPP_ENABLED", True):
+        raise web.HTTPNotFound(text="webapp_disabled")
+
+    nonce = html.escape(str(request.get("csp_nonce", "")), quote=True)
+    title = html.escape(str(getattr(settings, "WEBAPP_TITLE", "") or "Subscription"), quote=True)
+    html_text = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{title} - Opening app</title>
+    <style nonce="{nonce}">
+      :root {{
+        color-scheme: dark light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: #0b1017;
+        color: #f7fafc;
+      }}
+
+      body {{
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }}
+
+      main {{
+        width: min(100%, 420px);
+        display: grid;
+        gap: 14px;
+        text-align: center;
+      }}
+
+      h1 {{
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.2;
+      }}
+
+      p {{
+        margin: 0;
+        color: #aeb8c5;
+        font-size: 15px;
+        line-height: 1.55;
+      }}
+
+      a.button {{
+        display: inline-flex;
+        min-height: 46px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: #14b86f;
+        color: #03120b;
+        padding: 0 18px;
+        font-weight: 800;
+        text-decoration: none;
+      }}
+
+      a.button[aria-disabled="true"] {{
+        pointer-events: none;
+        background: #344052;
+        color: #aeb8c5;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Opening app</h1>
+      <p id="status">If nothing happened, tap the button below.</p>
+      <a id="open-link" class="button" href="#" rel="noreferrer">Open app</a>
+    </main>
+    <script nonce="{nonce}">
+      (() => {{
+        const statusEl = document.getElementById("status");
+        const openLink = document.getElementById("open-link");
+        const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const target = String(params.get("url") || "").trim();
+        const isUnsafe =
+          !target ||
+          hasControlChars(target) ||
+          /^(?:javascript|data|vbscript|https?):/i.test(target);
+
+        function hasControlChars(value) {{
+          return Array.from(String(value || "")).some((char) => {{
+            const code = char.charCodeAt(0);
+            return code <= 31 || code === 127;
+          }});
+        }}
+
+        function openTarget() {{
+          if (isUnsafe) return;
+          window.location.href = target;
+        }}
+
+        if (isUnsafe) {{
+          statusEl.textContent = "The app link is unavailable.";
+          openLink.setAttribute("aria-disabled", "true");
+          openLink.removeAttribute("href");
+          return;
+        }}
+
+        openLink.href = target;
+        openLink.addEventListener("click", (event) => {{
+          event.preventDefault();
+          openTarget();
+        }});
+
+        window.setTimeout(openTarget, 80);
+      }})();
+    </script>
+  </body>
+</html>"""
+    response = web.Response(text=html_text, content_type="text/html", charset="utf-8")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 async def _serve_template_asset(
     request: web.Request,
     filename: str,

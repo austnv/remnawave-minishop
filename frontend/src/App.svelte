@@ -39,6 +39,14 @@
     readJsonScript,
     structuredCloneSafe,
   } from "./lib/webapp/browser.js";
+  import {
+    buildExternalAppLaunchUrl,
+    hasControlChars,
+    isExternalAppLaunchPath,
+    isHttpUrl,
+    openUrlWithHiddenAnchor,
+    readExternalAppLaunchTarget,
+  } from "./lib/webapp/appLinks.js";
   import { createApiClient } from "./lib/webapp/publicApi.js";
   import { createI18n } from "./lib/webapp/i18n.js";
   import { normalizedEmail, telegramName } from "./lib/webapp/formatters.js";
@@ -80,6 +88,7 @@
   } from "./lib/webapp/routes.js";
 
   const query = new URLSearchParams(window.location.search);
+  const isAppLaunchRoute = isExternalAppLaunchPath(window.location.pathname);
   applyPreviewMock(query.get("mock"));
   const isPreviewBoard = query.get("preview") === "all";
   const injectedConfig = readJsonScript("webapp-config");
@@ -98,10 +107,11 @@
   let telegramSdkStatus = "idle";
   let telegramMiniAppInitData = "";
 
-  let mode = isPreviewBoard ? "preview" : "loading";
+  let mode = isAppLaunchRoute ? "appLaunch" : isPreviewBoard ? "preview" : "loading";
   let activeTab = "home";
   let screen = "home";
   let data = isPreviewBoard ? structuredCloneSafe(DEV_MOCK.data) : null;
+  let appLaunchTarget = isAppLaunchRoute ? readExternalAppLaunchTarget() : "";
   let publicInstallSubscription = null;
   let publicInstallToken = "";
   let trialBusy = false;
@@ -493,8 +503,23 @@
     return Boolean(enabled && sub?.active);
   }
 
+  function refreshAppLaunchTarget() {
+    appLaunchTarget = readExternalAppLaunchTarget();
+    return appLaunchTarget;
+  }
+
+  function openAppLaunchTarget() {
+    const target = refreshAppLaunchTarget();
+    if (!target) return;
+    openUrlWithHiddenAnchor(target);
+  }
+
   onMount(() => {
     if (isPreviewBoard) return;
+    if (isAppLaunchRoute) {
+      window.setTimeout(openAppLaunchTarget, 80);
+      return;
+    }
     const onAnyPointerDown = () => {
       if (mode === "login") loginEmailTooltipOpen = false;
     };
@@ -1057,42 +1082,43 @@
     window.location.assign(url);
   }
 
-  function hasControlChars(value) {
-    return Array.from(String(value || "")).some((char) => {
-      const code = char.charCodeAt(0);
-      return code <= 31 || code === 127;
-    });
-  }
-
   function openAppLink(url) {
     const raw = String(url || "").trim();
     if (!raw || hasControlChars(raw) || /^(javascript|data|vbscript):/i.test(raw)) {
       return;
     }
-    if (/^https?:\/\//i.test(raw)) {
+    if (isHttpUrl(raw)) {
       openExternalLink(raw);
       return;
     }
-    if (/^tg:\/\//i.test(raw) && tg?.openTelegramLink) {
+
+    const isTelegramMiniApp = hasTelegramLaunchParams();
+    const currentTg = tg || telegramSdk.refresh();
+    const gatewayUrl = isTelegramMiniApp ? buildExternalAppLaunchUrl(raw) : "";
+    if (gatewayUrl) {
+      if (currentTg?.openLink) {
+        try {
+          tg = currentTg;
+          currentTg.openLink(gatewayUrl);
+          return;
+        } catch {
+          // Fall back to regular browser navigation below.
+        }
+      }
+      window.location.assign(gatewayUrl);
+      return;
+    }
+
+    if (/^tg:\/\//i.test(raw) && currentTg?.openTelegramLink) {
       try {
-        tg.openTelegramLink(raw);
+        tg = currentTg;
+        currentTg.openTelegramLink(raw);
         return;
       } catch {
         // Fall back to the generic deeplink path below.
       }
     }
-    try {
-      const anchor = document.createElement("a");
-      anchor.href = raw;
-      anchor.target = "_self";
-      anchor.rel = "noreferrer";
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-    } catch {
-      window.location.assign(raw);
-    }
+    openUrlWithHiddenAnchor(raw);
   }
 
   function openConnectLink() {
@@ -1399,6 +1425,40 @@
           <div class="loader">
             <BrandMark {brand} size="md" />
             <div>{t("wa_loading")}</div>
+          </div>
+        {:else if mode === "appLaunch"}
+          <div class="app-launch-shell">
+            <main class="app-launch-panel">
+              <div class="app-launch-brand" aria-hidden="true">
+                <BrandMark {brand} size="md" />
+              </div>
+              {#if appLaunchTarget}
+                <h1>{t("wa_app_launch_title", {}, "Opening app")}</h1>
+                <p>
+                  {t(
+                    "wa_app_launch_hint",
+                    {},
+                    "If the app did not open automatically, tap the button below."
+                  )}
+                </p>
+                <a
+                  class="app-launch-button"
+                  href={appLaunchTarget}
+                  rel="noreferrer"
+                  onclick={(event) => {
+                    event.preventDefault();
+                    openAppLaunchTarget();
+                  }}
+                >
+                  {t("wa_app_launch_button", {}, "Open app")}
+                </a>
+              {:else}
+                <h1>{t("wa_app_launch_unavailable_title", {}, "App link unavailable")}</h1>
+                <p>
+                  {t("wa_app_launch_unavailable_hint", {}, "Return to Telegram and try again.")}
+                </p>
+              {/if}
+            </main>
           </div>
         {:else if mode === "publicInstall"}
           <div class="public-install-shell">

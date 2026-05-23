@@ -51,6 +51,7 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("GET", "/login/password"): "index_route",
             ("GET", "/home"): "index_route",
             ("GET", "/install"): "index_route",
+            ("GET", "/open-app"): "app_deeplink_route",
             ("GET", "/s/{share_token}"): "index_route",
             ("GET", "/invite"): "index_route",
             ("GET", "/devices"): "index_route",
@@ -194,6 +195,27 @@ class WebAppRouteContractTests(unittest.TestCase):
         match_info = asyncio.run(app.router.resolve(request))
 
         self.assertEqual(match_info.handler.__name__, "webapp_favicon_route")
+
+    def test_app_deeplink_gateway_keeps_target_in_fragment(self):
+        request = _Request(
+            app={
+                "settings": SimpleNamespace(
+                    WEBAPP_ENABLED=True,
+                    WEBAPP_TITLE="/minishop",
+                )
+            }
+        )
+        request["csp_nonce"] = "nonce-value"
+
+        response = asyncio.run(subscription_webapp.app_deeplink_route(request))
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertIn('nonce="nonce-value"', response.text)
+        self.assertIn("window.location.hash", response.text)
+        self.assertIn("URLSearchParams", response.text)
+        self.assertIn("The app link is unavailable.", response.text)
+        self.assertIn(r"/^(?:javascript|data|vbscript|https?):/i", response.text)
 
 
 class AdminApiAuthContractTests(unittest.IsolatedAsyncioTestCase):
