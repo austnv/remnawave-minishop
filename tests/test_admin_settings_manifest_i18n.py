@@ -104,3 +104,15 @@ def test_payment_provider_settings_include_webhook_metadata():
     assert manifest["PAYMENT_PLATEGA_CRYPTO_WEBAPP_LABEL_RU"]["webhook_path"] == "/webhook/platega"
     assert manifest["YOOKASSA_SHOP_ID"]["webhook_requires_base_url"] is True
     assert "webhook_path" not in manifest["PAYMENT_STARS_WEBAPP_LABEL_RU"]
+
+
+def test_platega_settings_share_one_admin_subsection():
+    manifest = _manifest_by_key()
+    platega_keys = [
+        key
+        for key in manifest
+        if key.startswith("PLATEGA_") or key.startswith("PAYMENT_PLATEGA_")
+    ]
+
+    assert platega_keys
+    assert {manifest[key]["subsection"] for key in platega_keys} == {"Platega"}

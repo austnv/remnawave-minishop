@@ -749,7 +749,7 @@ SBP_SPEC = PaymentProviderSpec(
     config_class=PlategaConfig,
     presentation_class=PlategaSbpPresentation,
     manifest_fields=_CONFIG_MANIFEST
-    + _platega_presentation_manifest("Platega SBP", "CreditCard", "PLATEGA_SBP"),
+    + _platega_presentation_manifest("Platega", "CreditCard", "PLATEGA_SBP"),
 )
 
 CRYPTO_SPEC = PaymentProviderSpec(
@@ -772,7 +772,7 @@ CRYPTO_SPEC = PaymentProviderSpec(
     create_webapp_payment=create_crypto_webapp_payment,
     config_class=PlategaConfig,
     presentation_class=PlategaCryptoPresentation,
-    manifest_fields=_platega_presentation_manifest("Platega Crypto", "Bitcoin", "PLATEGA_CRYPTO"),
+    manifest_fields=_platega_presentation_manifest("Platega", "Bitcoin", "PLATEGA_CRYPTO"),
 )
 
 SPECS = (SBP_SPEC, CRYPTO_SPEC)
