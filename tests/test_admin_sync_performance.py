@@ -7,6 +7,9 @@ from bot.handlers.admin.sync_admin import (
     _absorb_duplicate_panel_identity,
     _coerce_panel_telegram_id,
     _description_matches,
+    _panel_identity_matches_user,
+    _panel_identity_needs_full_fetch,
+    _panel_identity_view_for_comparison,
     _should_update_lifetime_used_traffic,
     _subscription_update_delta,
 )
@@ -34,6 +37,108 @@ def test_description_match_rejects_different_identity_after_mojibake_repair():
 def test_panel_telegram_id_is_coerced_to_int():
     assert _coerce_panel_telegram_id("12345") == 12345
     assert _coerce_panel_telegram_id("") is None
+
+
+def test_panel_identity_match_treats_missing_list_email_as_unknown():
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=42,
+    )
+    panel_user = {
+        "description": "linked@example.com\nalice",
+        "telegramId": 42,
+    }
+
+    assert _panel_identity_matches_user(
+        panel_user,
+        user,
+        "linked@example.com\nalice",
+    )
+
+
+def test_panel_identity_match_treats_missing_full_email_as_mismatch():
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=42,
+    )
+    panel_user = {
+        "description": "linked@example.com\nalice",
+        "telegramId": 42,
+    }
+
+    assert not _panel_identity_matches_user(
+        panel_user,
+        user,
+        "linked@example.com\nalice",
+        missing_identity_fields_match=False,
+    )
+
+
+def test_panel_identity_match_rejects_different_returned_email():
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=42,
+    )
+    panel_user = {
+        "description": "linked@example.com\nalice",
+        "email": "other@example.com",
+        "telegramId": 42,
+    }
+
+    assert not _panel_identity_matches_user(
+        panel_user,
+        user,
+        "linked@example.com\nalice",
+    )
+
+
+def test_panel_identity_needs_full_fetch_for_missing_or_blank_identity_fields():
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=42,
+    )
+
+    assert _panel_identity_needs_full_fetch({"telegramId": 42}, user)
+    assert _panel_identity_needs_full_fetch({"email": "", "telegramId": 42}, user)
+    assert _panel_identity_needs_full_fetch({"email": "linked@example.com"}, user)
+    assert not _panel_identity_needs_full_fetch(
+        {"email": "linked@example.com", "telegramId": "42"},
+        user,
+    )
+
+
+def test_panel_identity_view_fetches_full_user_when_list_email_missing():
+    panel_service = SimpleNamespace(
+        get_user_by_uuid=AsyncMock(
+            return_value={
+                "uuid": "panel-1",
+                "description": "linked@example.com\nalice",
+                "email": "linked@example.com",
+                "telegramId": 42,
+            }
+        )
+    )
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=42,
+    )
+
+    panel_user, missing_fields_match = asyncio.run(
+        _panel_identity_view_for_comparison(
+            panel_service,
+            "panel-1",
+            {
+                "uuid": "panel-1",
+                "description": "linked@example.com\nalice",
+                "telegramId": 42,
+            },
+            user,
+        )
+    )
+
+    assert panel_user["email"] == "linked@example.com"
+    assert not missing_fields_match
+    panel_service.get_user_by_uuid.assert_awaited_once_with("panel-1")
 
 
 def test_subscription_update_delta_skips_unchanged_fields():

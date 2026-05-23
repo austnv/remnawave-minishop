@@ -66,6 +66,8 @@ def _panel_identity_matches_user(
     panel_user: dict[str, Any],
     user: User,
     desired_description: str,
+    *,
+    missing_identity_fields_match: bool = True,
 ) -> bool:
     if desired_description and not _description_matches(
         panel_user.get("description"),
@@ -73,15 +75,63 @@ def _panel_identity_matches_user(
     ):
         return False
 
-    if user.email and _normalize_panel_email(panel_user.get("email")) != user.email.strip().lower():
-        return False
+    if user.email:
+        if "email" not in panel_user:
+            return missing_identity_fields_match
+        panel_email = _normalize_panel_email(panel_user.get("email"))
+        if panel_email != user.email.strip().lower():
+            return False
 
-    if user.telegram_id and _coerce_panel_telegram_id(panel_user.get("telegramId")) != int(
-        user.telegram_id
-    ):
-        return False
+    if user.telegram_id:
+        if "telegramId" not in panel_user:
+            return missing_identity_fields_match
+        panel_telegram_id = _coerce_panel_telegram_id(panel_user.get("telegramId"))
+        if panel_telegram_id != int(user.telegram_id):
+            return False
 
     return True
+
+
+def _panel_identity_needs_full_fetch(panel_user: dict[str, Any], user: User) -> bool:
+    if user.email:
+        if "email" not in panel_user:
+            return True
+        if not _normalize_panel_email(panel_user.get("email")):
+            return True
+    if user.telegram_id:
+        if "telegramId" not in panel_user:
+            return True
+        if _coerce_panel_telegram_id(panel_user.get("telegramId")) is None:
+            return True
+    return False
+
+
+async def _panel_identity_view_for_comparison(
+    panel_service: PanelApiService,
+    panel_uuid: str,
+    panel_user: dict[str, Any],
+    user: User,
+) -> tuple[dict[str, Any], bool]:
+    """Return the most reliable panel user view available for identity comparison.
+
+    Remnawave list responses may omit identity fields. When that happens, fetch
+    the concrete user by UUID before deciding whether the panel really needs a
+    repair PATCH.
+    """
+
+    if not _panel_identity_needs_full_fetch(panel_user, user):
+        return panel_user, True
+    try:
+        full_panel_user = await panel_service.get_user_by_uuid(panel_uuid)
+    except Exception:
+        logging.exception(
+            "Sync: failed to fetch full panel user %s for identity comparison",
+            panel_uuid,
+        )
+        return panel_user, True
+    if not full_panel_user:
+        return panel_user, True
+    return full_panel_user, False
 
 
 def _panel_identity_update_payload(user: User, description_text: str) -> dict[str, Any]:
@@ -802,6 +852,72 @@ async def _perform_sync_impl(
                         and str(linked_uuid)
                         in panel_uuids_by_telegram_id.get(telegram_id_from_panel, set())
                     )
+                    linked_uuid_present_on_panel = bool(
+                        linked_uuid and str(linked_uuid) in panel_users_by_uuid
+                    )
+                    panel_uuid_owner = users_by_panel_uuid.get(panel_uuid)
+                    if (
+                        panel_uuid_owner
+                        and panel_uuid_owner.user_id != existing_user.user_id
+                        and not linked_uuid_still_present
+                    ):
+                        if linked_uuid_present_on_panel:
+                            msg = (
+                                f"Panel UUID {panel_uuid} for user {actual_user_id} is already "
+                                f"linked to local user {panel_uuid_owner.user_id}, while current "
+                                f"local panel UUID {linked_uuid} still exists on panel."
+                            )
+                            sync_errors.append(msg)
+                            logging.warning("Sync: %s", msg)
+                            continue
+
+                        previous_panel_uuid = existing_user.panel_user_uuid
+                        previous_owner_user_id = panel_uuid_owner.user_id
+                        previous_owner_email = panel_uuid_owner.email
+                        previous_owner_telegram_id = panel_uuid_owner.telegram_id
+                        (
+                            existing_user,
+                            can_merge_panel_uuid_owner,
+                        ) = await _merge_local_duplicate_panel_user_if_needed(
+                            session,
+                            existing_user=existing_user,
+                            duplicate_panel_uuid=panel_uuid,
+                        )
+                        if not can_merge_panel_uuid_owner:
+                            logging.warning(
+                                "Sync: panel UUID %s is already linked to local user %s; "
+                                "skipping reassignment to user %s because local merge failed.",
+                                panel_uuid,
+                                previous_owner_user_id,
+                                actual_user_id,
+                            )
+                            continue
+
+                        existing_user.panel_user_uuid = panel_uuid
+                        actual_user_id = existing_user.user_id
+                        user_was_updated = True
+                        users_uuid_updated += 1
+                        if previous_panel_uuid:
+                            users_by_panel_uuid.pop(str(previous_panel_uuid), None)
+                        users_by_panel_uuid[panel_uuid] = existing_user
+                        users_by_user_id.pop(int(previous_owner_user_id), None)
+                        users_by_user_id[int(existing_user.user_id)] = existing_user
+                        if previous_owner_telegram_id is not None:
+                            users_by_telegram_id.pop(int(previous_owner_telegram_id), None)
+                        if existing_user.telegram_id is not None:
+                            users_by_telegram_id[int(existing_user.telegram_id)] = existing_user
+                        if previous_owner_email:
+                            users_by_email.pop(previous_owner_email.strip().lower(), None)
+                        if existing_user.email:
+                            users_by_email[existing_user.email.strip().lower()] = existing_user
+                        logging.info(
+                            "Sync: merged local user %s owning panel UUID %s into user %s "
+                            "and reassigned stale local panel UUID %s.",
+                            previous_owner_user_id,
+                            panel_uuid,
+                            actual_user_id,
+                            previous_panel_uuid,
+                        )
                     if linked_uuid_still_present:
                         is_duplicate_panel_identity = True
                         (
@@ -859,7 +975,7 @@ async def _perform_sync_impl(
                             panel_uuid,
                         )
                         continue
-                    else:
+                    elif existing_user.panel_user_uuid != panel_uuid:
                         existing_user.panel_user_uuid = panel_uuid
                         user_was_updated = True
                         users_uuid_updated += 1
@@ -911,10 +1027,20 @@ async def _perform_sync_impl(
                         )
                         # Update description only when it differs from the current one on panel
                         desired_description = description_text.strip()
-                        if desired_description and not _panel_identity_matches_user(
+                        (
+                            panel_user_for_identity,
+                            missing_identity_fields_match,
+                        ) = await _panel_identity_view_for_comparison(
+                            panel_service,
+                            panel_uuid,
                             panel_user_dict,
                             existing_user,
+                        )
+                        if desired_description and not _panel_identity_matches_user(
+                            panel_user_for_identity,
+                            existing_user,
                             desired_description,
+                            missing_identity_fields_match=missing_identity_fields_match,
                         ):
                             await panel_service.update_user_details_on_panel(
                                 panel_uuid,

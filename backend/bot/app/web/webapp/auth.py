@@ -1058,11 +1058,19 @@ async def _sync_panel_identity_for_user(
             payload["status"] = "ACTIVE"
 
     try:
-        await subscription_service.panel_service.update_user_details_on_panel(
+        updated_panel_user = await subscription_service.panel_service.update_user_details_on_panel(
             user.panel_user_uuid,
             payload,
             log_response=False,
         )
+        if not updated_panel_user or (
+            isinstance(updated_panel_user, dict) and updated_panel_user.get("error")
+        ):
+            logger.warning(
+                "Panel identity update returned no success payload for user %s",
+                user.user_id,
+            )
+            return False
         return True
     except Exception as exc:
         logger.warning(
