@@ -6,10 +6,13 @@ from unittest.mock import AsyncMock, patch
 from bot.handlers.admin.sync_admin import (
     _absorb_duplicate_panel_identity,
     _coerce_panel_telegram_id,
+    _description_contains_email,
     _description_matches,
+    _description_without_email,
     _panel_description_for_user,
     _panel_identity_matches_user,
     _panel_identity_needs_full_fetch,
+    _panel_identity_needs_legacy_description_cleanup,
     _panel_identity_payload_with_expiry,
     _panel_identity_view_for_comparison,
     _should_update_lifetime_used_traffic,
@@ -52,6 +55,25 @@ def test_panel_description_for_user_excludes_email():
     assert _panel_description_for_user(user) == "alice\nAlice\nSmith"
 
 
+def test_description_contains_email_detects_legacy_panel_description():
+    assert _description_contains_email(
+        "Linked@Example.com\nalice\nAlice",
+        "linked@example.com",
+    )
+    assert not _description_contains_email("alice\nAlice", "linked@example.com")
+
+
+def test_description_without_email_preserves_panel_text():
+    assert (
+        _description_without_email(
+            "linked@example.com\nalice\nAlice",
+            "linked@example.com",
+        )
+        == "alice\nAlice"
+    )
+    assert _description_without_email("linked@example.com", "linked@example.com") == ""
+
+
 def test_panel_identity_match_accepts_list_description_without_email():
     user = SimpleNamespace(
         email="linked@example.com",
@@ -90,20 +112,61 @@ def test_panel_identity_payload_with_expiry_keeps_email_out_of_description():
     assert payload["telegramId"] == 42
 
 
+def test_panel_identity_detects_legacy_full_description_cleanup_need():
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=42,
+        username="alice",
+        first_name="Alice",
+        last_name=None,
+    )
+    panel_user = {
+        "description": "alice\nAlice",
+        "email": "linked@example.com",
+        "telegramId": 42,
+    }
+
+    assert _panel_identity_needs_legacy_description_cleanup(
+        panel_user,
+        user,
+        _panel_description_for_user(user),
+    )
+
+
+def test_panel_identity_detects_email_only_legacy_cleanup_need():
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=None,
+        username=None,
+        first_name=None,
+        last_name=None,
+    )
+    panel_user = {
+        "description": "",
+        "email": "linked@example.com",
+    }
+
+    assert _panel_identity_needs_legacy_description_cleanup(
+        panel_user,
+        user,
+        _panel_description_for_user(user),
+    )
+
+
 def test_panel_identity_match_treats_missing_list_email_as_unknown():
     user = SimpleNamespace(
         email="linked@example.com",
         telegram_id=42,
     )
     panel_user = {
-        "description": "linked@example.com\nalice",
+        "description": "alice",
         "telegramId": 42,
     }
 
     assert _panel_identity_matches_user(
         panel_user,
         user,
-        "linked@example.com\nalice",
+        "alice",
     )
 
 
@@ -113,14 +176,14 @@ def test_panel_identity_match_treats_missing_full_email_as_mismatch():
         telegram_id=42,
     )
     panel_user = {
-        "description": "linked@example.com\nalice",
+        "description": "alice",
         "telegramId": 42,
     }
 
     assert not _panel_identity_matches_user(
         panel_user,
         user,
-        "linked@example.com\nalice",
+        "alice",
         missing_identity_fields_match=False,
     )
 
@@ -131,7 +194,7 @@ def test_panel_identity_match_rejects_different_returned_email():
         telegram_id=42,
     )
     panel_user = {
-        "description": "linked@example.com\nalice",
+        "description": "alice",
         "email": "other@example.com",
         "telegramId": 42,
     }
@@ -139,7 +202,7 @@ def test_panel_identity_match_rejects_different_returned_email():
     assert not _panel_identity_matches_user(
         panel_user,
         user,
-        "linked@example.com\nalice",
+        "alice",
     )
 
 
@@ -189,6 +252,51 @@ def test_panel_identity_view_fetches_full_user_when_list_email_missing():
 
     assert panel_user["email"] == "linked@example.com"
     assert not missing_fields_match
+    panel_service.get_user_by_uuid.assert_awaited_once_with("panel-1")
+
+
+def test_panel_identity_view_fetches_full_user_to_clean_legacy_description_email():
+    panel_service = SimpleNamespace(
+        get_user_by_uuid=AsyncMock(
+            return_value={
+                "uuid": "panel-1",
+                "description": "linked@example.com\nalice\nAlice",
+                "email": "linked@example.com",
+                "telegramId": 42,
+            }
+        )
+    )
+    user = SimpleNamespace(
+        email="linked@example.com",
+        telegram_id=42,
+        username="alice",
+        first_name="Alice",
+        last_name=None,
+    )
+
+    panel_user, missing_fields_match = asyncio.run(
+        _panel_identity_view_for_comparison(
+            panel_service,
+            "panel-1",
+            {
+                "uuid": "panel-1",
+                "description": "alice\nAlice",
+                "email": "linked@example.com",
+                "telegramId": 42,
+            },
+            user,
+            _panel_description_for_user(user),
+        )
+    )
+
+    assert panel_user["description"] == "linked@example.com\nalice\nAlice"
+    assert not missing_fields_match
+    assert not _panel_identity_matches_user(
+        panel_user,
+        user,
+        _panel_description_for_user(user),
+        missing_identity_fields_match=missing_fields_match,
+    )
     panel_service.get_user_by_uuid.assert_awaited_once_with("panel-1")
 
 

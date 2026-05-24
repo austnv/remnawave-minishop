@@ -62,6 +62,29 @@ def _description_matches(current: Optional[str], desired: str) -> bool:
     return bool(_description_variants(current) & _description_variants(desired))
 
 
+def _description_contains_email(value: Optional[str], email: Optional[str]) -> bool:
+    normalized_email = _normalize_panel_email(email)
+    if not normalized_email:
+        return False
+    return normalized_email in _normalize_description(value).lower()
+
+
+def _description_without_email(value: Optional[str], email: Optional[str]) -> str:
+    normalized_email = _normalize_panel_email(email)
+    if not normalized_email:
+        return (value or "").strip()
+
+    cleaned_lines = []
+    for raw_line in (value or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.lower() == normalized_email:
+            continue
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines).strip()
+
+
 def _panel_identity_matches_user(
     panel_user: dict[str, Any],
     user: User,
@@ -106,11 +129,27 @@ def _panel_identity_needs_full_fetch(panel_user: dict[str, Any], user: User) -> 
     return False
 
 
+def _panel_identity_needs_legacy_description_cleanup(
+    panel_user: dict[str, Any],
+    user: User,
+    desired_description: str,
+) -> bool:
+    if not user.email:
+        return False
+    current_description = panel_user.get("description")
+    if _description_contains_email(current_description, user.email):
+        return False
+    if not desired_description:
+        return not _normalize_description(current_description)
+    return _description_matches(current_description, desired_description)
+
+
 async def _panel_identity_view_for_comparison(
     panel_service: PanelApiService,
     panel_uuid: str,
     panel_user: dict[str, Any],
     user: User,
+    desired_description: str = "",
 ) -> tuple[dict[str, Any], bool]:
     """Return the most reliable panel user view available for identity comparison.
 
@@ -119,7 +158,15 @@ async def _panel_identity_view_for_comparison(
     repair PATCH.
     """
 
-    if not _panel_identity_needs_full_fetch(panel_user, user):
+    needs_full_fetch = _panel_identity_needs_full_fetch(panel_user, user)
+    if not needs_full_fetch and _panel_identity_needs_legacy_description_cleanup(
+        panel_user,
+        user,
+        desired_description,
+    ):
+        needs_full_fetch = True
+
+    if not needs_full_fetch:
         return panel_user, True
     try:
         full_panel_user = await panel_service.get_user_by_uuid(panel_uuid)
@@ -1023,13 +1070,25 @@ async def _perform_sync_impl(
                             panel_uuid,
                             panel_user_dict,
                             existing_user,
+                            desired_description,
                         )
-                        if desired_description and not _panel_identity_matches_user(
+                        current_description = panel_user_for_identity.get("description")
+                        description_has_email = _description_contains_email(
+                            current_description,
+                            existing_user.email,
+                        )
+                        identity_matches = _panel_identity_matches_user(
                             panel_user_for_identity,
                             existing_user,
                             desired_description,
                             missing_identity_fields_match=missing_identity_fields_match,
-                        ):
+                        )
+                        if description_has_email:
+                            description_text = _description_without_email(
+                                current_description,
+                                existing_user.email,
+                            )
+                        if description_has_email or not identity_matches:
                             await panel_service.update_user_details_on_panel(
                                 panel_uuid,
                                 _panel_identity_update_payload(existing_user, description_text),
