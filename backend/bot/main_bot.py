@@ -5,16 +5,13 @@ from typing import Awaitable, Callable, Optional
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import BotCommand, MenuButtonDefault, MenuButtonWebApp, WebAppInfo
-from sqlalchemy.orm import sessionmaker
 
 from bot.app.controllers.dispatcher_controller import build_dispatcher
 from bot.app.factories.build_services import build_core_services
 from bot.app.web.web_server import build_and_start_web_app
-from bot.handlers.admin.sync_admin import perform_sync
 from bot.infra.redis import close_redis
 from bot.middlewares.i18n import JsonI18n
 from bot.routers import build_root_router
-from bot.services.panel_api_service import PanelApiService
 from bot.services.settings_override_service import load_overrides_from_db
 from bot.utils.message_queue import init_queue_manager
 from config.settings import Settings
@@ -203,40 +200,7 @@ async def on_startup_configured(dispatcher: Dispatcher):
     except Exception:
         logging.exception("STARTUP: Failed to initialize message queue manager.")
 
-    # Automatic sync on startup — runs in background so the dispatcher can
-    # start serving Telegram webhooks immediately even if the panel is slow.
-    # perform_sync is single-flight, so concurrent admin-triggered runs will
-    # be skipped while this one is in progress.
     logging.info("STARTUP: Bot on_startup_configured completed.")
-
-
-async def _background_startup_sync(
-    *,
-    panel_service: PanelApiService,
-    session_factory: sessionmaker,
-    settings: Settings,
-    i18n_instance: JsonI18n,
-) -> None:
-    try:
-        async with session_factory() as session:
-            sync_result = await perform_sync(
-                panel_service=panel_service,
-                session=session,
-                settings=settings,
-                i18n_instance=i18n_instance,
-            )
-        status = sync_result.get("status")
-        details = sync_result.get("details", "N/A")
-        if status == "completed":
-            logging.info(f"STARTUP: Background sync completed successfully. Details: {details}")
-        elif status == "skipped":
-            logging.info(f"STARTUP: Background sync skipped: {details}")
-        else:
-            logging.warning(
-                f"STARTUP: Background sync finished with status '{status}'. Details: {details}"
-            )
-    except Exception:
-        logging.exception("STARTUP: Background sync failed.")
 
 
 async def on_shutdown_configured(dispatcher: Dispatcher):

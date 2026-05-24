@@ -1,9 +1,33 @@
+import ast
 import asyncio
 import logging
+from pathlib import Path
 
 from aiogram.exceptions import TelegramNetworkError
 
 from bot.main_bot import _run_telegram_startup_step
+
+
+def test_backend_startup_does_not_run_panel_sync_inline():
+    source = Path("backend/bot/main_bot.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    forbidden_imports = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "bot.handlers.admin.sync_admin"
+    ]
+    forbidden_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "perform_sync"
+    ]
+
+    assert forbidden_imports == []
+    assert forbidden_calls == []
 
 
 def test_telegram_startup_network_error_retries_until_success_without_traceback(caplog):
