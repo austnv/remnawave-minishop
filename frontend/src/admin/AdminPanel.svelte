@@ -77,6 +77,7 @@
   export let onToast = () => {};
   export let initialSection = "stats";
   export let initialPaymentId = null;
+  export let initialPaymentUserId = null;
   export let initialUserId = null;
   export let onSectionChange = () => {};
   export let onSettingsSaved = () => {};
@@ -283,13 +284,24 @@
     return match ? Number(match[1]) : null;
   }
 
+  function readPaymentUserIdFromPath() {
+    if (typeof window === "undefined") return null;
+    const match = window.location.pathname.match(/^\/admin\/payments\/users\/(-?\d+)$/);
+    return match ? Number(match[1]) : null;
+  }
+
   function onPopState() {
     active = readSectionFromPath();
     sidebarOpen = false;
     const userId = readUserIdFromPath();
-    if (userId) {
-      if (!$usersStore.openedUser || $usersStore.openedUser.user_id !== userId) {
-        usersStore.openUser(userId, { skipPush: true });
+    const paymentUserId = active === "payments" ? readPaymentUserIdFromPath() : null;
+    const contextualUserId = paymentUserId || userId;
+    if (contextualUserId) {
+      if (!$usersStore.openedUser || $usersStore.openedUser.user_id !== contextualUserId) {
+        usersStore.openUser(contextualUserId, {
+          skipPush: true,
+          pathContext: paymentUserId ? "payments" : "users",
+        });
       }
     } else if ($usersStore.openedUser) {
       usersStore.closeUser({ skipPush: true });
@@ -321,14 +333,16 @@
     const uid = Number(userId);
     // Synthetic email-only users use negative user_id; still a valid admin target.
     if (!Number.isFinite(uid) || uid === 0) return;
-    const next = normalizeSection("users");
+    const next = normalizeSection("payments");
     sidebarOpen = false;
     if (active !== next) {
       active = next;
       usersStore.closeUser();
+      paymentsStore.closePayment({ skipPush: true });
       onSectionChange(next);
     }
-    usersStore.openUser(uid);
+    paymentsStore.closePayment({ skipPush: true });
+    usersStore.openUser(uid, { pathContext: "payments" });
   }
 
   function resolvedAvatarUrl(user) {
@@ -460,6 +474,13 @@
     paymentsStore.openPayment(initialPaymentId, { skipPush: true });
   }
 
+  $: if (
+    active === "payments" &&
+    initialPaymentUserId &&
+    (!$usersStore.openedUser || $usersStore.openedUser.user_id !== initialPaymentUserId)
+  ) {
+    usersStore.openUser(initialPaymentUserId, { skipPush: true, pathContext: "payments" });
+  }
 </script>
 
 <div class="admin-screen-wrap" class:is-sidebar-open={sidebarOpen}>

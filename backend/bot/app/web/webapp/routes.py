@@ -23,6 +23,7 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
         index_route,
     )
     app.router.add_get("/admin/users/{user_id:-?[0-9]+}", index_route)
+    app.router.add_get("/admin/payments/users/{user_id:-?[0-9]+}", index_route)
     app.router.add_get("/admin/payments/{payment_id:\\d+}", index_route)
     app.router.add_get("/admin/support/{ticket_id:\\d+}", index_route)
     app.router.add_get("/auth/telegram/start", telegram_oauth_start_route)

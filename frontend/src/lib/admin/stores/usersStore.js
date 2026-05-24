@@ -42,16 +42,34 @@ export function createUsersStore({ api, onToast, at }) {
   });
 
   let _activeRef = "stats"; // fallback if active isn't tracked
+  let _pathContext = null;
 
   function setActive(active) {
     _activeRef = active;
   }
 
+  function _setPathContext(context) {
+    if (context === "payments") {
+      _pathContext = "payments";
+      return;
+    }
+    if (_activeRef === "users") {
+      _pathContext = "users";
+      return;
+    }
+    _pathContext = null;
+  }
+
   function _pushUserPath(userId) {
     if (typeof window === "undefined") return;
     if (window.location.protocol === "file:") return;
-    if (_activeRef !== "users") return;
-    const target = userId ? `/admin/users/${userId}` : `/admin/users`;
+    let target = "";
+    if (_activeRef === "users") {
+      target = userId ? `/admin/users/${userId}` : `/admin/users`;
+    } else if (_activeRef === "payments" && _pathContext === "payments") {
+      target = userId ? `/admin/payments/users/${userId}` : `/admin/payments`;
+    }
+    if (!target) return;
     if (window.location.pathname === target) return;
     window.history.pushState(null, "", `${target}${window.location.search}${window.location.hash}`);
   }
@@ -94,6 +112,7 @@ export function createUsersStore({ api, onToast, at }) {
     const userId =
       typeof userOrId === "object" && userOrId !== null ? userOrId.user_id : Number(userOrId);
     if (!userId) return;
+    _setPathContext(opts.pathContext);
 
     state.update((s) => ({
       ...s,
@@ -136,6 +155,7 @@ export function createUsersStore({ api, onToast, at }) {
         onToast(res?.error || "load_failed");
         state.update((s) => ({ ...s, openedUser: null }));
         if (!opts.skipPush) _pushUserPath(null);
+        _pathContext = null;
       }
     } finally {
       state.update((s) => ({ ...s, userDetailLoading: false }));
@@ -162,6 +182,7 @@ export function createUsersStore({ api, onToast, at }) {
       };
     });
     if (wasOpen && !opts.skipPush) _pushUserPath(null);
+    _pathContext = null;
   }
 
   async function loadUserLogs(page) {

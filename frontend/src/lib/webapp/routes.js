@@ -62,6 +62,14 @@ export function adminPaymentIdFromPath(pathname) {
   return m ? Number(m[1]) : null;
 }
 
+export function adminPaymentsUserIdFromPath(pathname) {
+  const normalized = String(pathname || "")
+    .toLowerCase()
+    .replace(/\/+$/, "");
+  const m = normalized.match(/^\/admin\/payments\/users\/(-?\d+)$/);
+  return m ? Number(m[1]) : null;
+}
+
 export function supportTicketIdFromPath(pathname) {
   const normalized = String(pathname || "")
     .toLowerCase()
@@ -89,8 +97,12 @@ export function syncSectionPath(section, replace = false, adminSection = null, a
     const supportTicketId =
       adm === "support" ? adminSupportTicketIdFromPath(window.location.pathname) : null;
     const paymentId = adm === "payments" ? adminPaymentIdFromPath(window.location.pathname) : null;
+    const paymentUserId =
+      adm === "payments" ? adminPaymentsUserIdFromPath(window.location.pathname) : null;
     if (adm === "users" && uid) targetPath = `/admin/users/${uid}`;
     else if (adm === "support" && supportTicketId) targetPath = `/admin/support/${supportTicketId}`;
+    else if (adm === "payments" && paymentUserId)
+      targetPath = `/admin/payments/users/${paymentUserId}`;
     else if (adm === "payments" && paymentId) targetPath = `/admin/payments/${paymentId}`;
     else targetPath = `/admin/${adm}`;
   }

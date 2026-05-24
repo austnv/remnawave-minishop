@@ -80,6 +80,7 @@
   import { DEV_MOCK, applyPreviewMock } from "./lib/webapp/previewMock.js";
   import {
     adminPaymentIdFromPath,
+    adminPaymentsUserIdFromPath,
     adminSectionFromPath,
     adminUserIdFromPath,
     normalizeSection,
@@ -790,6 +791,7 @@
     onToast: (text) => showToast(text),
     initialSection: adminSectionFromPath(window.location.pathname),
     initialPaymentId: adminPaymentIdFromPath(window.location.pathname),
+    initialPaymentUserId: adminPaymentsUserIdFromPath(window.location.pathname),
     initialUserId: adminUserIdFromPath(window.location.pathname),
     onSectionChange: handleAdminSectionChange,
     onSettingsSaved: handleAdminPersistedSaved,
