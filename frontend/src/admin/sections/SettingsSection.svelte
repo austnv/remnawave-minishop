@@ -42,11 +42,19 @@
   const PLATEGA_CRYPTO_KEYS = new Set(["PLATEGA_CRYPTO_ENABLED", "PLATEGA_CRYPTO_METHOD"]);
   const PLATEGA_LEGACY_KEYS = new Set(["PLATEGA_PAYMENT_METHOD"]);
   const LEGACY_TARIFF_TRAFFIC_KEYS = new Set(["TRAFFIC_PACKAGES", "STARS_TRAFFIC_PACKAGES"]);
+  const TRIAL_TARIFF_KEYS = new Set([
+    "TRIAL_ENABLED",
+    "TRIAL_DURATION_DAYS",
+    "TRIAL_TRAFFIC_LIMIT_GB",
+    "TRIAL_TRAFFIC_STRATEGY",
+    "TRIAL_SQUAD_UUIDS",
+  ]);
   const SEMANTIC_FIELD_GROUP_ORDER = {
     platega_common: 1,
     platega_sbp: 2,
     platega_crypto: 3,
     platega_legacy: 4,
+    trial_tariff_settings: 0,
     legacy_tariff_periods: 1,
     legacy_tariff_traffic: 2,
   };
@@ -283,6 +291,15 @@
 
   function legacyTariffSemanticGroup(field) {
     const key = String(field?.key || "");
+    if (TRIAL_TARIFF_KEYS.has(key)) {
+      return fieldGroupMeta(
+        "trial_tariff_settings",
+        "settings_group_trial_tariff_settings",
+        "Trial access",
+        "settings_group_trial_tariff_settings_hint",
+        "Trial duration, traffic limit, and Remnawave squads are also available on the Tariffs page."
+      );
+    }
     if (LEGACY_TARIFF_TRAFFIC_KEYS.has(key)) {
       return fieldGroupMeta(
         "legacy_tariff_traffic",

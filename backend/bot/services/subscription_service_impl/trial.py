@@ -83,7 +83,15 @@ class TrialSubscriptionMixin:
             status="ACTIVE",
             traffic_limit_bytes=self.settings.trial_traffic_limit_bytes,
             traffic_limit_strategy=self.settings.TRIAL_TRAFFIC_STRATEGY,
+            include_default_squads=False,
         )
+        trial_squads = self.settings.parsed_trial_squad_uuids
+        if trial_squads:
+            panel_update_payload["activeInternalSquads"] = trial_squads
+        if self.settings.parsed_user_external_squad_uuid:
+            panel_update_payload["externalSquadUuid"] = (
+                self.settings.parsed_user_external_squad_uuid
+            )
 
         panel_update_payload.update(self._panel_identity_payload_for_user(db_user))
 

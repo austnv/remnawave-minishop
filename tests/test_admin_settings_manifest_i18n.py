@@ -121,6 +121,10 @@ def test_legacy_tariff_settings_are_separated_from_payment_settings():
     assert payment_method_fields[0]["section"] == "payments"
     assert manifest["MONTH_1_ENABLED"]["section"] == "pricing"
     assert manifest["MONTH_1_ENABLED"]["section_order"] == 11
+    assert manifest["TRIAL_ENABLED"]["section"] == "pricing"
+    assert manifest["TRIAL_ENABLED"]["subsection"] == "trial"
+    assert manifest["TRIAL_SQUAD_UUIDS"]["section"] == "pricing"
+    assert manifest["TRIAL_SQUAD_UUIDS"]["subsection"] == "trial"
 
 
 def test_platega_settings_share_one_admin_subsection():

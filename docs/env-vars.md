@@ -355,6 +355,7 @@ PAYMENT_HELEKET_TELEGRAM_EMOJI
 | `TRIAL_DURATION_DAYS` | Длительность пробного периода. |
 | `TRIAL_TRAFFIC_LIMIT_GB` | Лимит трафика пробного периода. |
 | `TRIAL_TRAFFIC_STRATEGY` | Стратегия лимита пробного периода. |
+| `TRIAL_SQUAD_UUIDS` | Internal Squads для trial через запятую. Если пусто, используется `USER_SQUAD_UUIDS`. |
 | `REFERRAL_ONE_BONUS_PER_REFEREE` | Ограничить бонусы одним успешным платежом приглашенного. |
 | `REFERRAL_WELCOME_BONUS_DAYS` | Приветственный бонус пришедшему по реферальной ссылке. |
 | `LEGACY_REFS` | Разрешить ссылки `ref_<telegram_id>`. |

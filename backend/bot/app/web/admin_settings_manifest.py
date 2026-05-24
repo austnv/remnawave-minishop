@@ -266,10 +266,38 @@ SETTINGS_MANIFEST: List[SettingField] = [
         subsection="common",
     ),
     # ─── Trial ─────────────────────────────────────────────────────
-    SettingField("TRIAL_ENABLED", "bool", "trial", "Триал включён"),
-    SettingField("TRIAL_DURATION_DAYS", "int", "trial", "Длительность триала (дней)", min=0),
-    SettingField("TRIAL_TRAFFIC_LIMIT_GB", "float", "trial", "Лимит трафика триала (ГБ)", min=0),
-    SettingField("TRIAL_TRAFFIC_STRATEGY", "string", "trial", "Стратегия сброса трафика триала"),
+    SettingField("TRIAL_ENABLED", "bool", "pricing", "Триал включён", subsection="trial"),
+    SettingField(
+        "TRIAL_DURATION_DAYS",
+        "int",
+        "pricing",
+        "Длительность триала (дней)",
+        min=0,
+        subsection="trial",
+    ),
+    SettingField(
+        "TRIAL_TRAFFIC_LIMIT_GB",
+        "float",
+        "pricing",
+        "Лимит трафика триала (ГБ)",
+        min=0,
+        subsection="trial",
+    ),
+    SettingField(
+        "TRIAL_TRAFFIC_STRATEGY",
+        "string",
+        "pricing",
+        "Стратегия сброса трафика триала",
+        subsection="trial",
+    ),
+    SettingField(
+        "TRIAL_SQUAD_UUIDS",
+        "string",
+        "pricing",
+        "Internal Squads для триала",
+        "UUID через запятую. Если пусто, используется USER_SQUAD_UUIDS.",
+        subsection="trial",
+    ),
     # ─── Referral program ──────────────────────────────────────────
     SettingField(
         "REFERRAL_ONE_BONUS_PER_REFEREE", "bool", "referral", "Один бонус на приглашённого"

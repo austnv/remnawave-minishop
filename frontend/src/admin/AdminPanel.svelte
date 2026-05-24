@@ -734,7 +734,7 @@
           {/if}
 
           {#if active === "tariffs"}
-            <TariffsSection {at} {fmtMoney} />
+            <TariffsSection {at} {fmtMoney} {onSettingsSaved} />
           {/if}
 
           {#if active === "appearance"}

@@ -2814,6 +2814,67 @@
   flex-wrap: wrap;
 }
 
+.admin-tariff-settings-card {
+  margin-top: 14px;
+}
+
+.admin-tariff-settings-form {
+  gap: 14px;
+}
+
+.admin-field-label-compact {
+  gap: 8px;
+}
+
+.admin-field-label-compact .input,
+.admin-field-label-compact .admin-select-trigger {
+  width: 100%;
+}
+
+.admin-legacy-tariff-table {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface-2);
+}
+
+.admin-legacy-tariff-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(92px, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--admin-border);
+}
+
+.admin-legacy-tariff-row:first-child {
+  border-top: 0;
+}
+
+.admin-legacy-tariff-head {
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admin-legacy-tariff-row strong {
+  color: var(--admin-text);
+  font-size: 13px;
+}
+
+.admin-legacy-tariff-row .input {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-legacy-traffic-row {
+  margin-top: 14px;
+}
+
 .admin-tariff-dialog {
   width: min(980px, calc(100vw - 32px));
 }
@@ -3026,6 +3087,14 @@
 
   .admin-tariff-card {
     padding: 12px;
+  }
+
+  .admin-legacy-tariff-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-legacy-tariff-head {
+    display: none;
   }
 
   .admin-tariff-actions .admin-btn {

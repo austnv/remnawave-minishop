@@ -1,17 +1,73 @@
 <script>
-  import { RefreshCw, Trash2, Plus } from "$components/ui/icons.js";
+  import { RefreshCw, Trash2, Plus, Save, TriangleAlert, X } from "$components/ui/icons.js";
   import { getContext, onMount } from "svelte";
-  import { AdminBadge, AdminButton, AdminEmptyState } from "$components/patterns/admin/index.js";
+  import {
+    AdminBadge,
+    AdminButton,
+    AdminEmptyState,
+    AdminSelect,
+  } from "$components/patterns/admin/index.js";
+  import { Switch } from "$components/ui/primitives.js";
 
   export let at;
   export let fmtMoney;
+  export let onSettingsSaved = () => {};
 
   const tariffsStore = getContext("tariffsStore");
+  const settingsStore = getContext("settingsStore");
 
-  $: ({ tariffsCatalog, tariffsLoading, tariffsPath, tariffsSaving } = $tariffsStore);
+  const TRIAL_SETTING_KEYS = [
+    "TRIAL_ENABLED",
+    "TRIAL_DURATION_DAYS",
+    "TRIAL_TRAFFIC_LIMIT_GB",
+    "TRIAL_TRAFFIC_STRATEGY",
+    "TRIAL_SQUAD_UUIDS",
+  ];
+  const LEGACY_PERIODS = [
+    ["1", "MONTH_1_ENABLED", "RUB_PRICE_1_MONTH", "STARS_PRICE_1_MONTH"],
+    ["3", "MONTH_3_ENABLED", "RUB_PRICE_3_MONTHS", "STARS_PRICE_3_MONTHS"],
+    ["6", "MONTH_6_ENABLED", "RUB_PRICE_6_MONTHS", "STARS_PRICE_6_MONTHS"],
+    ["12", "MONTH_12_ENABLED", "RUB_PRICE_12_MONTHS", "STARS_PRICE_12_MONTHS"],
+  ];
+  const LEGACY_TARIFF_SETTING_KEYS = [
+    ...LEGACY_PERIODS.flatMap((row) => row.slice(1)),
+    "TRAFFIC_PACKAGES",
+    "STARS_TRAFFIC_PACKAGES",
+  ];
+  const TRAFFIC_STRATEGY_OPTIONS = [
+    { value: "NO_RESET", label: "NO_RESET" },
+    { value: "DAY", label: "DAY" },
+    { value: "WEEK", label: "WEEK" },
+    { value: "MONTH", label: "MONTH" },
+  ];
+
+  $: ({
+    tariffsCatalog,
+    tariffsLoading,
+    tariffsPath,
+    tariffsSaving,
+    panelSquads,
+    panelSquadsLoading,
+  } = $tariffsStore);
+  $: ({ settingsSections, settingsDirty, settingsSaving } = $settingsStore);
 
   $: enabledTariffs = (tariffsCatalog.tariffs || []).filter((tariff) => tariff.enabled !== false);
   $: disabledTariffs = Math.max(0, (tariffsCatalog.tariffs || []).length - enabledTariffs.length);
+  $: settingsFieldMap = new Map(
+    (settingsSections || [])
+      .flatMap((section) => section.fields || [])
+      .map((field) => [field.key, field])
+  );
+  $: trialDirtyCount = TRIAL_SETTING_KEYS.filter((key) => Boolean(settingsDirty[key])).length;
+  $: legacyDirtyCount = LEGACY_TARIFF_SETTING_KEYS.filter((key) =>
+    Boolean(settingsDirty[key])
+  ).length;
+  $: panelSquadOptions = (panelSquads || []).map((squad) => ({
+    value: squad.uuid,
+    label: `${squad.name || squad.uuid} · ${String(squad.uuid || "").slice(0, 8)}...`,
+  }));
+
+  let selectedTrialSquad = "";
 
   function tariffName(tariff) {
     return tariff?.names?.ru || tariff?.names?.en || tariff?.key || "—";
@@ -37,8 +93,65 @@
       .join(" · ");
   }
 
+  function fieldFor(key) {
+    return settingsFieldMap.get(key) || { key, value: "" };
+  }
+
+  function valueForKey(key) {
+    if (settingsDirty[key]?.deleted) return "";
+    if (Object.prototype.hasOwnProperty.call(settingsDirty, key)) {
+      return settingsDirty[key].value;
+    }
+    return fieldFor(key).value ?? "";
+  }
+
+  function boolValue(key) {
+    return Boolean(valueForKey(key));
+  }
+
+  function setSetting(key, value) {
+    settingsStore.markDirty(key, value);
+  }
+
+  function csvList(key) {
+    return String(valueForKey(key) || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function setCsvList(key, values) {
+    const normalized = Array.from(
+      new Set((values || []).map((item) => String(item).trim()).filter(Boolean))
+    );
+    settingsStore.markDirty(key, normalized.join(","));
+  }
+
+  function addTrialSquad(uuid) {
+    const next = String(uuid || "").trim();
+    if (!next) return;
+    setCsvList("TRIAL_SQUAD_UUIDS", [...csvList("TRIAL_SQUAD_UUIDS"), next]);
+    selectedTrialSquad = "";
+  }
+
+  function removeTrialSquad(uuid) {
+    setCsvList(
+      "TRIAL_SQUAD_UUIDS",
+      csvList("TRIAL_SQUAD_UUIDS").filter((item) => item !== uuid)
+    );
+  }
+
+  function trialSquadLabel(uuid) {
+    return tariffsStore.squadLabel(uuid);
+  }
+
+  async function saveTariffSettings() {
+    await settingsStore.saveSettings(onSettingsSaved);
+  }
+
   onMount(() => {
     tariffsStore.loadTariffs();
+    settingsStore.loadSettings();
   });
 </script>
 
@@ -68,6 +181,134 @@
       >
     </div>
   </div>
+
+  <article class="admin-card admin-tariff-settings-card">
+    <header class="admin-card-head">
+      <div>
+        <h3>{at("tariffs_trial_title", {}, "Trial access")}</h3>
+        <small>
+          {at(
+            "tariffs_trial_subtitle",
+            {},
+            "Configure trial duration, traffic limit, and Remnawave squads from the tariff page."
+          )}
+        </small>
+      </div>
+      <div class="admin-editor-section-actions">
+        <AdminBadge variant={boolValue("TRIAL_ENABLED") ? "success" : "muted"}>
+          {boolValue("TRIAL_ENABLED")
+            ? at("enabled", {}, "Enabled")
+            : at("disabled", {}, "Disabled")}
+        </AdminBadge>
+        {#if trialDirtyCount}
+          <AdminBadge variant="warning">
+            {at("settings_dirty_count", { count: trialDirtyCount }, `Changes: ${trialDirtyCount}`)}
+          </AdminBadge>
+          <AdminButton
+            size="sm"
+            variant="primary"
+            onclick={saveTariffSettings}
+            disabled={settingsSaving}
+          >
+            <Save size={13} />
+            {settingsSaving ? at("btn_saving", {}, "Saving...") : at("btn_save", {}, "Save")}
+          </AdminButton>
+        {/if}
+      </div>
+    </header>
+    <div class="admin-card-body">
+      <div class="admin-form admin-tariff-settings-form">
+        <div class="admin-form-row admin-form-row-3">
+          <label class="admin-field-label admin-field-label-compact">
+            <span>{at("tariffs_trial_enabled", {}, "Trial enabled")}</span>
+            <div class="admin-setting-switch">
+              <Switch.Root
+                checked={boolValue("TRIAL_ENABLED")}
+                onCheckedChange={(checked) => setSetting("TRIAL_ENABLED", checked)}
+                class="admin-switch-root"
+              >
+                <Switch.Thumb class="admin-switch-thumb" />
+              </Switch.Root>
+              <small
+                >{boolValue("TRIAL_ENABLED")
+                  ? at("enabled", {}, "Enabled")
+                  : at("disabled", {}, "Disabled")}</small
+              >
+            </div>
+          </label>
+          <label class="admin-field-label admin-field-label-compact">
+            <span>{at("tariffs_trial_days", {}, "Duration, days")}</span>
+            <input
+              class="input"
+              type="number"
+              min="0"
+              step="1"
+              value={valueForKey("TRIAL_DURATION_DAYS")}
+              oninput={(event) => setSetting("TRIAL_DURATION_DAYS", event.currentTarget.value)}
+            />
+          </label>
+          <label class="admin-field-label admin-field-label-compact">
+            <span>{at("tariffs_trial_traffic", {}, "Traffic limit, GB")}</span>
+            <input
+              class="input"
+              type="number"
+              min="0"
+              step="0.1"
+              value={valueForKey("TRIAL_TRAFFIC_LIMIT_GB")}
+              oninput={(event) => setSetting("TRIAL_TRAFFIC_LIMIT_GB", event.currentTarget.value)}
+            />
+          </label>
+        </div>
+        <div class="admin-form-row admin-form-row-2">
+          <label class="admin-field-label admin-field-label-compact">
+            <span>{at("tariffs_trial_strategy", {}, "Traffic reset strategy")}</span>
+            <AdminSelect
+              class="admin-setting-select"
+              value={String(valueForKey("TRIAL_TRAFFIC_STRATEGY") || "NO_RESET")}
+              items={TRAFFIC_STRATEGY_OPTIONS}
+              ariaLabel={at("tariffs_trial_strategy", {}, "Traffic reset strategy")}
+              onValueChange={(value) => setSetting("TRIAL_TRAFFIC_STRATEGY", value)}
+            />
+          </label>
+          <label class="admin-field-label admin-field-label-compact">
+            <span>{at("tariffs_trial_squads", {}, "Trial Internal Squads")}</span>
+            <small>
+              {at(
+                "tariffs_trial_squads_hint",
+                {},
+                "These squads are applied when trial is activated. Empty value falls back to USER_SQUAD_UUIDS."
+              )}
+            </small>
+            <AdminSelect
+              bind:value={selectedTrialSquad}
+              items={panelSquadOptions}
+              disabled={panelSquadsLoading || !panelSquadOptions.length}
+              placeholder={panelSquadsLoading
+                ? at("loading", {}, "Loading...")
+                : at("tariffs_trial_add_squad", {}, "Add squad from panel")}
+              ariaLabel={at("tariffs_trial_add_squad", {}, "Add squad from panel")}
+              onValueChange={addTrialSquad}
+            />
+            <input
+              class="input"
+              type="text"
+              placeholder={valueForKey("USER_SQUAD_UUIDS") || "uuid-a,uuid-b"}
+              value={valueForKey("TRIAL_SQUAD_UUIDS")}
+              oninput={(event) => setSetting("TRIAL_SQUAD_UUIDS", event.currentTarget.value)}
+            />
+            <div class="admin-chip-list">
+              {#each csvList("TRIAL_SQUAD_UUIDS") as uuid}
+                <button type="button" class="admin-chip" onclick={() => removeTrialSquad(uuid)}>
+                  {trialSquadLabel(uuid)}
+                  <X size={12} />
+                </button>
+              {/each}
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+  </article>
 
   <article class="admin-card">
     <header class="admin-card-head">
@@ -190,6 +431,118 @@
           {/each}
         </div>
       {/if}
+    </div>
+  </article>
+
+  <article class="admin-card admin-tariff-settings-card">
+    <header class="admin-card-head">
+      <div>
+        <h3>{at("tariffs_legacy_title", {}, "Legacy tariff compatibility")}</h3>
+        <small>
+          {at(
+            "tariffs_legacy_subtitle",
+            {},
+            "Old remnawave-tg-shop periods and traffic packages used only when the JSON tariff catalog is not configured."
+          )}
+        </small>
+      </div>
+      <div class="admin-editor-section-actions">
+        {#if legacyDirtyCount}
+          <AdminBadge variant="warning">
+            {at(
+              "settings_dirty_count",
+              { count: legacyDirtyCount },
+              `Changes: ${legacyDirtyCount}`
+            )}
+          </AdminBadge>
+          <AdminButton
+            size="sm"
+            variant="primary"
+            onclick={saveTariffSettings}
+            disabled={settingsSaving}
+          >
+            <Save size={13} />
+            {settingsSaving ? at("btn_saving", {}, "Saving...") : at("btn_save", {}, "Save")}
+          </AdminButton>
+        {/if}
+      </div>
+    </header>
+    <div class="admin-card-body">
+      <div class="admin-settings-warning" role="status">
+        <TriangleAlert size={16} aria-hidden="true" />
+        <div class="admin-settings-warning-copy">
+          <strong>{at("settings_legacy_tariffs_warning_title", {}, "Legacy tariffs")}</strong>
+          <p>
+            {at(
+              "settings_legacy_tariffs_warning_body",
+              {},
+              "These settings are ignored when tariffs are configured in the dedicated Tariffs section."
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div class="admin-legacy-tariff-table">
+        <div class="admin-legacy-tariff-row admin-legacy-tariff-head">
+          <span>{at("tariffs_legacy_period", {}, "Period")}</span>
+          <span>{at("tariffs_legacy_enabled", {}, "Enabled")}</span>
+          <span>{at("payment_rub", {}, "RUB")}</span>
+          <span>{at("payment_stars", {}, "Stars")}</span>
+        </div>
+        {#each LEGACY_PERIODS as [months, enabledKey, rubKey, starsKey]}
+          <div class="admin-legacy-tariff-row">
+            <strong>{months} {at("months_short", {}, "mo")}</strong>
+            <div class="admin-setting-switch">
+              <Switch.Root
+                checked={boolValue(enabledKey)}
+                onCheckedChange={(checked) => setSetting(enabledKey, checked)}
+                class="admin-switch-root"
+              >
+                <Switch.Thumb class="admin-switch-thumb" />
+              </Switch.Root>
+            </div>
+            <input
+              class="input"
+              type="number"
+              min="0"
+              step="1"
+              value={valueForKey(rubKey)}
+              oninput={(event) => setSetting(rubKey, event.currentTarget.value)}
+            />
+            <input
+              class="input"
+              type="number"
+              min="0"
+              step="1"
+              value={valueForKey(starsKey)}
+              oninput={(event) => setSetting(starsKey, event.currentTarget.value)}
+            />
+          </div>
+        {/each}
+      </div>
+
+      <div class="admin-form-row admin-form-row-2 admin-legacy-traffic-row">
+        <label class="admin-field-label admin-field-label-compact">
+          <span>{at("tariffs_legacy_traffic_packages", {}, "Traffic packages")}</span>
+          <small>{at("tariffs_legacy_traffic_hint", {}, "Format: 10:199,50:799")}</small>
+          <input
+            class="input"
+            type="text"
+            value={valueForKey("TRAFFIC_PACKAGES")}
+            oninput={(event) => setSetting("TRAFFIC_PACKAGES", event.currentTarget.value)}
+          />
+        </label>
+        <label class="admin-field-label admin-field-label-compact">
+          <span>{at("tariffs_legacy_stars_traffic_packages", {}, "Traffic packages, Stars")}</span>
+          <small>{at("tariffs_legacy_traffic_hint", {}, "Format: 10:199,50:799")}</small>
+          <input
+            class="input"
+            type="text"
+            value={valueForKey("STARS_TRAFFIC_PACKAGES")}
+            oninput={(event) => setSetting("STARS_TRAFFIC_PACKAGES", event.currentTarget.value)}
+          />
+        </label>
+      </div>
     </div>
   </article>
 {/if}

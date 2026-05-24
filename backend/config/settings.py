@@ -273,6 +273,13 @@ class Settings(BaseSettings):
     TRIAL_DURATION_DAYS: int = Field(default=3)
     TRIAL_TRAFFIC_LIMIT_GB: Optional[float] = Field(default=5.0)
     TRIAL_TRAFFIC_STRATEGY: str = Field(default="NO_RESET")
+    TRIAL_SQUAD_UUIDS: Optional[str] = Field(
+        default=None,
+        description=(
+            "Comma-separated UUIDs of internal squads to assign during trial activation. "
+            "Falls back to USER_SQUAD_UUIDS when empty."
+        ),
+    )
 
     CRYPT4_ENABLED: bool = Field(
         default=False, description="Enable happ crypt4 encryption for subscription URLs"
@@ -542,6 +549,17 @@ class Settings(BaseSettings):
         if self.USER_SQUAD_UUIDS:
             return [uuid.strip() for uuid in self.USER_SQUAD_UUIDS.split(",") if uuid.strip()]
         return None
+
+    @computed_field
+    @property
+    def parsed_trial_squad_uuids(self) -> Optional[List[str]]:
+        if self.TRIAL_SQUAD_UUIDS:
+            trial_squads = [
+                uuid.strip() for uuid in self.TRIAL_SQUAD_UUIDS.split(",") if uuid.strip()
+            ]
+            if trial_squads:
+                return trial_squads
+        return self.parsed_user_squad_uuids
 
     @computed_field
     @property
