@@ -1,5 +1,5 @@
 <script>
-  import { onMount, setContext } from "svelte";
+  import { onMount, setContext, tick } from "svelte";
   import { createAuthStore } from "./lib/webapp/stores/authStore.js";
   import { createBillingStore } from "./lib/webapp/stores/billingStore.js";
   import { createDevicesStore } from "./lib/webapp/stores/devicesStore.js";
@@ -7,8 +7,11 @@
   import { createSupportStore } from "./lib/webapp/stores/supportStore.js";
   import { createAccountStore } from "./lib/webapp/stores/accountStore.js";
   import { Tooltip } from "$components/ui/primitives.js";
+  import { CheckCircle2 } from "$components/ui/icons.js";
 
   import BrandMark from "$lib/webapp/BrandMark.svelte";
+  import Button from "$components/ui/button.svelte";
+  import Dialog from "$components/ui/dialog.svelte";
   import PreviewBoard from "./PreviewBoard.svelte";
   import WebAppShell from "./webapp/WebAppShell.svelte";
   import AuthScreen from "./webapp/auth/AuthScreen.svelte";
@@ -121,6 +124,8 @@
   let trialBusy = false;
   let trialActivationResult = null;
   let trialActivationError = "";
+  let activationSuccessDialogOpen = false;
+  let activationSuccessUseInstallGuides = false;
   let promoCode = "";
   let promoBusy = false;
   let promoStatus = "";
@@ -199,6 +204,7 @@
     t,
     showToast,
     openExternalLink,
+    onSubscriptionActivated: handleSubscriptionActivated,
     tg,
   });
   const devicesStore = createDevicesStore({ api, t, showToast });
@@ -1172,6 +1178,56 @@
     openConnectLink();
   }
 
+  function openActivationConnectLink() {
+    const url =
+      subscription?.connect_url ||
+      subscription?.config_link ||
+      trialActivationResult?.connect_url ||
+      trialActivationResult?.config_link;
+    if (!url) {
+      showToast(t("wa_connect_link_unavailable"));
+      return;
+    }
+    openExternalLink(url);
+  }
+
+  function navigateToActivationTarget({ replace = true } = {}) {
+    const useInstallGuides = canUseInstallGuides();
+    activationSuccessUseInstallGuides = useInstallGuides;
+    billingStore.closePaymentModal();
+    activeTab = "home";
+    if (useInstallGuides) {
+      screen = "install";
+      syncSectionPath("install", replace);
+      installGuidesStore.load(true);
+      return;
+    }
+    screen = "home";
+    syncSectionPath("home", replace);
+  }
+
+  async function showActivationSuccessDialog() {
+    await tick();
+    navigateToActivationTarget({ replace: true });
+    activationSuccessDialogOpen = true;
+  }
+
+  async function handleSubscriptionActivated() {
+    await tick();
+    if (!subscription?.active) return;
+    await showActivationSuccessDialog();
+  }
+
+  function closeActivationSuccessDialog() {
+    const shouldOpenConnect = !activationSuccessUseInstallGuides;
+    activationSuccessDialogOpen = false;
+    if (activationSuccessUseInstallGuides) {
+      navigateToActivationTarget({ replace: true });
+      return;
+    }
+    if (shouldOpenConnect) openActivationConnectLink();
+  }
+
   async function copyText(value, success = t("wa_copied")) {
     if (!value) {
       showToast(t("wa_unavailable"));
@@ -1220,9 +1276,8 @@
     }
   }
 
-  async function activateTrial(options = {}) {
+  async function activateTrial() {
     if (trialBusy) return;
-    const stayOnTrial = Boolean(options?.stayOnTrial);
     trialBusy = true;
     trialActivationResult = null;
     trialActivationError = "";
@@ -1235,11 +1290,7 @@
       trialActivationResult = response;
       showToast(t("wa_trial_activated"));
       await loadData();
-      if (stayOnTrial) {
-        activeTab = "home";
-        screen = "trial";
-        syncSectionPath("trial", true);
-      }
+      await showActivationSuccessDialog();
     } catch (error) {
       const message = error?.message || t("wa_trial_activation_failed");
       trialActivationError = message;
@@ -1788,6 +1839,34 @@
             {trafficMode}
             {t}
           />
+
+          <Dialog
+            open={activationSuccessDialogOpen}
+            title={t("wa_activation_success_title", {}, "Everything is successfully activated")}
+            description={activationSuccessUseInstallGuides
+              ? t(
+                  "wa_activation_success_install_hint",
+                  {},
+                  "Press OK and follow the setup instructions for your device."
+                )
+              : t(
+                  "wa_activation_success_connect_hint",
+                  {},
+                  "Press OK and we will open the Remnawave subscription page for setup."
+                )}
+            closeLabel={t("wa_close")}
+            onclose={closeActivationSuccessDialog}
+            class="activation-success-dialog"
+          >
+            <div class="activation-success-dialog-body">
+              <div class="activation-success-mark" aria-hidden="true">
+                <CheckCircle2 size={34} />
+              </div>
+              <Button class="wide" onclick={closeActivationSuccessDialog}>
+                {t("wa_ok", {}, "OK")}
+              </Button>
+            </div>
+          </Dialog>
         {/if}
 
         {#if toastText}

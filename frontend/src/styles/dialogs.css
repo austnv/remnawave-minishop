@@ -78,6 +78,34 @@
   gap: 10px;
 }
 
+.activation-success-dialog {
+  width: min(100%, 440px);
+}
+
+.activation-success-dialog-body {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+.activation-success-mark {
+  display: grid;
+  width: 70px;
+  height: 70px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--success) 38%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 25%, color-mix(in srgb, white 42%, transparent), transparent 34%),
+    color-mix(in srgb, var(--success) 16%, var(--panel));
+  color: var(--success);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--success) 20%, transparent);
+}
+
+.activation-success-dialog-body .btn {
+  width: 100%;
+}
+
 .payment-divider {
   height: 1px;
   width: 100%;

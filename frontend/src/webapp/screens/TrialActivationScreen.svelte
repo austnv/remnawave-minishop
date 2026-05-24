@@ -56,7 +56,7 @@
   onMount(() => {
     if (!requested && canRequestTrial) {
       requested = true;
-      activateTrial({ stayOnTrial: true });
+      activateTrial();
     }
   });
 </script>
@@ -139,11 +139,7 @@
         {t("wa_install_and_configure")}
       </Button>
     {:else if trialError && canRequestTrial}
-      <Button
-        class="wide"
-        onclick={() => activateTrial({ stayOnTrial: true })}
-        disabled={trialBusy}
-      >
+      <Button class="wide" onclick={activateTrial} disabled={trialBusy}>
         <RefreshCw size={18} />
         {t("wa_trial_retry", {}, "Try again")}
       </Button>
