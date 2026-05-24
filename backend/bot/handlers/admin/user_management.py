@@ -1264,8 +1264,13 @@ async def process_delete_user_confirmation_handler(
         return
 
     try:
-        if user_model.panel_user_uuid:
-            panel_deleted = await panel_service.delete_user_from_panel(user_model.panel_user_uuid)
+        panel_user_uuids = await user_dal.get_panel_user_uuids_for_user(
+            session,
+            target_user_id,
+            user=user_model,
+        )
+        for panel_uuid in panel_user_uuids:
+            panel_deleted = await panel_service.delete_user_from_panel(panel_uuid)
             if not panel_deleted:
                 await message.answer(
                     _(

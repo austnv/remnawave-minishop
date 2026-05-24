@@ -12,10 +12,17 @@ from sqlalchemy.orm import aliased
 
 from ..models import (
     AdAttribution,
+    EmailVerificationCode,
+    HwidDevicePurchase,
     MessageLog,
     Payment,
     PromoCodeActivation,
     Subscription,
+    SupportTicket,
+    SupportTicketMessage,
+    TariffChange,
+    TrafficTopup,
+    TrafficWarning,
     User,
     UserBilling,
     UserPaymentMethod,
@@ -583,6 +590,40 @@ async def get_all_users_with_panel_uuid(session: AsyncSession) -> List[User]:
     return result.scalars().all()
 
 
+async def get_panel_user_uuids_for_user(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    user: Optional[User] = None,
+) -> List[str]:
+    """Return every Remnawave user UUID linked to a bot user.
+
+    The canonical UUID normally lives on ``users.panel_user_uuid``, but older
+    or partially-synced records can still have UUIDs only on subscription rows.
+    """
+
+    if user is None:
+        user = await get_user_by_id(session, user_id)
+
+    panel_uuids: List[str] = []
+    seen: set[str] = set()
+
+    def add_uuid(value: Any) -> None:
+        panel_uuid = str(value or "").strip()
+        if panel_uuid and panel_uuid not in seen:
+            seen.add(panel_uuid)
+            panel_uuids.append(panel_uuid)
+
+    add_uuid(getattr(user, "panel_user_uuid", None))
+
+    stmt = select(Subscription.panel_user_uuid).where(Subscription.user_id == user_id)
+    result = await session.execute(stmt)
+    for panel_uuid in result.scalars().all():
+        add_uuid(panel_uuid)
+
+    return panel_uuids
+
+
 async def get_enhanced_user_statistics(session: AsyncSession) -> Dict[str, Any]:
     """Get comprehensive user statistics including active users, trial users, etc."""
     from datetime import datetime, timezone
@@ -706,19 +747,69 @@ async def delete_user_and_relations(session: AsyncSession, user_id: int) -> bool
         update(User).where(User.referred_by_id == user_id).values(referred_by_id=None)
     )
 
-    # Clean up dependent tables that do not cascade automatically
+    subscription_ids = select(Subscription.subscription_id).where(Subscription.user_id == user_id)
+    payment_ids = select(Payment.payment_id).where(Payment.user_id == user_id)
+    support_ticket_ids = select(SupportTicket.ticket_id).where(SupportTicket.user_id == user_id)
+
+    # Clean up dependent tables that do not cascade automatically.
+    await session.execute(
+        delete(TrafficTopup).where(
+            or_(
+                TrafficTopup.subscription_id.in_(subscription_ids),
+                TrafficTopup.payment_id.in_(payment_ids),
+            )
+        )
+    )
+    await session.execute(
+        delete(HwidDevicePurchase).where(
+            or_(
+                HwidDevicePurchase.subscription_id.in_(subscription_ids),
+                HwidDevicePurchase.payment_id.in_(payment_ids),
+            )
+        )
+    )
+    await session.execute(
+        delete(TariffChange).where(
+            or_(
+                TariffChange.subscription_id.in_(subscription_ids),
+                TariffChange.payment_id.in_(payment_ids),
+            )
+        )
+    )
+    await session.execute(
+        delete(TrafficWarning).where(TrafficWarning.subscription_id.in_(subscription_ids))
+    )
+    await session.execute(
+        delete(SupportTicketMessage).where(SupportTicketMessage.ticket_id.in_(support_ticket_ids))
+    )
+    await session.execute(
+        update(SupportTicketMessage)
+        .where(SupportTicketMessage.author_user_id == user_id)
+        .values(author_user_id=None)
+    )
+    await session.execute(delete(SupportTicket).where(SupportTicket.user_id == user_id))
+    await session.execute(
+        delete(EmailVerificationCode).where(EmailVerificationCode.target_user_id == user_id)
+    )
     await session.execute(
         delete(MessageLog).where(
             or_(MessageLog.user_id == user_id, MessageLog.target_user_id == user_id)
         )
     )
-    await session.execute(delete(Payment).where(Payment.user_id == user_id))
-    await session.execute(delete(Subscription).where(Subscription.user_id == user_id))
-    await session.execute(delete(PromoCodeActivation).where(PromoCodeActivation.user_id == user_id))
+    await session.execute(
+        delete(PromoCodeActivation).where(
+            or_(
+                PromoCodeActivation.user_id == user_id,
+                PromoCodeActivation.payment_id.in_(payment_ids),
+            )
+        )
+    )
     await session.execute(delete(UserPaymentMethod).where(UserPaymentMethod.user_id == user_id))
     await session.execute(delete(UserBilling).where(UserBilling.user_id == user_id))
     await session.execute(delete(AdAttribution).where(AdAttribution.user_id == user_id))
     await session.execute(delete(UserTelegramAvatar).where(UserTelegramAvatar.user_id == user_id))
+    await session.execute(delete(Payment).where(Payment.user_id == user_id))
+    await session.execute(delete(Subscription).where(Subscription.user_id == user_id))
 
     await session.delete(user)
     await session.flush()
