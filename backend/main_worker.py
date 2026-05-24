@@ -88,6 +88,7 @@ async def _webhook_consumer(settings, session_factory, bot, i18n, services):
                     payload.get("user") or {},
                 )
             elif provider == "panel_sync":
+                sync_result = None
                 async with redis_lock(
                     settings,
                     "panel-sync",
@@ -95,12 +96,24 @@ async def _webhook_consumer(settings, session_factory, bot, i18n, services):
                 ) as acquired:
                     if acquired:
                         async with session_factory() as session:
-                            await perform_sync(
+                            sync_result = await perform_sync(
                                 panel_service=services["panel_service"],
                                 session=session,
                                 settings=settings,
                                 i18n_instance=i18n,
                             )
+                    else:
+                        logging.info(
+                            "Queued panel sync skipped because another sync holds the lock"
+                        )
+                if sync_result is not None:
+                    await _notify_queued_panel_sync_result(
+                        bot,
+                        settings,
+                        i18n,
+                        payload,
+                        sync_result,
+                    )
             else:
                 logging.warning("Unknown webhook event provider: %s", provider)
         except Exception:
@@ -113,6 +126,28 @@ async def _webhook_consumer(settings, session_factory, bot, i18n, services):
                 provider,
                 depth,
             )
+
+
+async def _notify_queued_panel_sync_result(bot, settings, i18n, payload, sync_result):
+    status = sync_result.get("status")
+    errors = sync_result.get("errors", [])
+    lang = payload.get("language") or settings.DEFAULT_LANGUAGE
+    _ = lambda key, **kwargs: i18n.gettext(lang, key, **kwargs)
+
+    target_chat_id = payload.get("target_chat_id")
+    if target_chat_id:
+        try:
+            if status == "failed":
+                await bot.send_message(target_chat_id, _("sync_failed_simple"))
+            elif status == "completed_with_errors":
+                await bot.send_message(
+                    target_chat_id,
+                    _("sync_errors_simple", errors_count=len(errors)),
+                )
+            else:
+                await bot.send_message(target_chat_id, _("sync_success_simple"))
+        except Exception:
+            logging.exception("Failed to send queued panel sync result to admin")
 
 
 async def _panel_sync_loop(settings, session_factory, i18n, services):

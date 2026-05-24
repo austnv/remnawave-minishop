@@ -156,7 +156,6 @@ async def admin_panel_actions_callback_handler(
             panel_service=panel_service,
             session=session,
         )
-        await callback.answer(_("admin_sync_initiated_from_panel"))
     elif action == "queue_status":
         await show_queue_status_handler(callback, i18n_data)
     elif action == "view_payments":

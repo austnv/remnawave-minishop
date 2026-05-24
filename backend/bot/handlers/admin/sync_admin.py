@@ -9,8 +9,8 @@ from aiogram.filters import Command
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.infra.webhook_queue import enqueue_webhook_event
 from bot.middlewares.i18n import JsonI18n
-from bot.services.notification_service import NotificationService
 from bot.services.panel_api_service import PanelApiService
 from bot.utils.text_sanitizer import panel_description_from_profile
 from config.settings import Settings
@@ -1613,63 +1613,74 @@ async def sync_command_handler(
         return
     _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs)
 
-    target_chat_id = (
-        message_event.chat.id
-        if isinstance(message_event, types.Message)
-        else (message_event.message.chat.id if message_event.message else None)
-    )
+    target_chat_id = _sync_request_target_chat_id(message_event)
     if not target_chat_id:
         logging.error("Sync handler: could not determine target_chat_id.")
         if isinstance(message_event, types.CallbackQuery):
             await message_event.answer("Error initiating sync.", show_alert=True)
         return
 
-    if isinstance(message_event, types.Message):
-        await message_event.answer(_("sync_started_simple"))
+    requested_by = getattr(getattr(message_event, "from_user", None), "id", None)
+    queued = await _enqueue_manual_panel_sync(
+        settings,
+        requested_by=requested_by,
+        target_chat_id=target_chat_id,
+        language=current_lang,
+    )
+    if not queued:
+        logging.warning("Admin (%s) failed to enqueue manual panel sync.", requested_by)
+        await _answer_sync_request(message_event, _("sync_failed_simple"), show_alert=True)
+        return
 
-    logging.info(f"Admin ({message_event.from_user.id}) triggered panel sync.")
+    await _answer_sync_request(
+        message_event,
+        _("admin_sync_initiated_from_panel")
+        if isinstance(message_event, types.CallbackQuery)
+        else _("sync_started_simple"),
+    )
+    logging.info("Admin (%s) queued panel sync from bot.", requested_by)
 
-    # Use the extracted perform_sync function
-    try:
-        sync_result = await perform_sync(panel_service, session, settings, i18n)
 
-        status = sync_result.get("status")
-        details = sync_result.get("details", "No details available")
-        errors = sync_result.get("errors", [])
+def _sync_request_target_chat_id(message_event: Union[types.Message, types.CallbackQuery]):
+    chat = getattr(message_event, "chat", None)
+    if chat and getattr(chat, "id", None) is not None:
+        return chat.id
+    callback_message = getattr(message_event, "message", None)
+    callback_chat = getattr(callback_message, "chat", None)
+    if callback_chat and getattr(callback_chat, "id", None) is not None:
+        return callback_chat.id
+    return None
 
-        # Simple confirmation message to admin
-        if status == "failed":
-            await bot.send_message(target_chat_id, _("sync_failed_simple"))
-        elif status == "completed_with_errors":
-            await bot.send_message(
-                target_chat_id,
-                _("sync_errors_simple", errors_count=len(errors)),
-            )
-        else:
-            await bot.send_message(target_chat_id, _("sync_success_simple"))
 
-        # Send notification to log channel with proper thread handling
-        try:
-            notification_service = NotificationService(bot, settings, i18n)
-            await notification_service.notify_panel_sync(
-                status,
-                details,
-                sync_result.get("users_processed", 0),
-                sync_result.get("subs_synced", 0),
-            )
-        except Exception as e_notification:
-            logging.error(f"Failed to send sync notification: {e_notification}")
+async def _answer_sync_request(
+    message_event: Union[types.Message, types.CallbackQuery],
+    text: str,
+    *,
+    show_alert: bool = False,
+) -> None:
+    answer = getattr(message_event, "answer", None)
+    if not callable(answer):
+        return
+    if isinstance(message_event, types.CallbackQuery):
+        await answer(text, show_alert=show_alert)
+        return
+    await answer(text)
 
-    except Exception as e_sync_global:
-        logging.error(f"Global error during /sync command: {e_sync_global}", exc_info=True)
-        await bot.send_message(target_chat_id, _("sync_critical_error"))
 
-        # Send notification to log channel about failure
-        try:
-            notification_service = NotificationService(bot, settings, i18n)
-            await notification_service.notify_panel_sync("failed", str(e_sync_global), 0, 0)
-        except Exception as e_notification:
-            logging.error(f"Failed to send sync failure notification: {e_notification}")
+async def _enqueue_manual_panel_sync(
+    settings: Settings,
+    *,
+    requested_by: Optional[int],
+    target_chat_id: int,
+    language: str,
+) -> bool:
+    payload = {
+        "source": "bot_admin",
+        "requested_by": requested_by,
+        "target_chat_id": target_chat_id,
+        "language": language,
+    }
+    return await enqueue_webhook_event(settings, "panel_sync", payload, event_id=None)
 
 
 @router.message(Command("syncstatus"))
