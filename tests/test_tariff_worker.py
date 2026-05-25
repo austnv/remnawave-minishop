@@ -304,6 +304,14 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
                     ]
                 }
             )
+            panel_service.get_user_by_uuid = AsyncMock(
+                return_value={
+                    "activeInternalSquads": [
+                        {"uuid": "squad-1"},
+                        {"uuid": "premium-squad"},
+                    ]
+                }
+            )
             panel_service.update_user_details_on_panel = AsyncMock(return_value={"response": {}})
             subscription_service = SubscriptionService(settings, panel_service)
             worker = TariffTrafficWorker(
@@ -345,8 +353,9 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sub.premium_used_bytes, 5 * (1024**3))
             self.assertFalse(sub.premium_is_limited)
             panel_service.update_user_details_on_panel.assert_not_awaited()
+            panel_service.get_user_by_uuid.assert_not_awaited()
 
-    async def test_premium_sync_patches_panel_when_current_squads_are_known_and_wrong(self):
+    async def test_premium_sync_trusts_full_fetch_over_bulk_list_squad_mismatch(self):
         payload = _tariffs_config_payload()
         payload["tariffs"][0]["premium_squad_uuids"] = ["premium-squad"]
         payload["tariffs"][0]["premium_monthly_gb"] = 25
@@ -370,6 +379,14 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
                 return_value={
                     "topUsers": [
                         {"username": "tg_123", "total": 5 * (1024**3)},
+                    ]
+                }
+            )
+            panel_service.get_user_by_uuid = AsyncMock(
+                return_value={
+                    "activeInternalSquads": [
+                        {"uuid": "squad-1"},
+                        {"uuid": "premium-squad"},
                     ]
                 }
             )
@@ -404,11 +421,185 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
                 now,
                 panel_username="tg_123",
                 panel_user_dict={"activeInternalSquads": [{"uuid": "squad-1"}]},
+                panel_view="list",
             )
 
+            panel_service.get_user_by_uuid.assert_awaited_once_with(
+                "panel-uuid",
+                log_response=False,
+            )
+            panel_service.update_user_details_on_panel.assert_not_awaited()
+            panel_service.get_user_by_uuid.reset_mock()
+
+            await worker._sync_premium_squad_limit(
+                AsyncMock(),
+                sub,
+                tariff,
+                now,
+                panel_username="tg_123",
+                panel_user_dict={"activeInternalSquads": [{"uuid": "squad-1"}]},
+                panel_view="list",
+            )
+
+            panel_service.get_user_by_uuid.assert_not_awaited()
+            panel_service.update_user_details_on_panel.assert_not_awaited()
+
+    async def test_premium_state_change_skips_panel_patch_when_full_user_already_matches(self):
+        payload = _tariffs_config_payload()
+        payload["tariffs"][0]["premium_squad_uuids"] = ["premium-squad"]
+        payload["tariffs"][0]["premium_monthly_gb"] = 25
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "tariffs.json"
+            config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            settings = Settings(
+                _env_file=None,
+                BOT_TOKEN="token",
+                POSTGRES_USER="app_user",
+                POSTGRES_PASSWORD="app_password",
+                TARIFFS_CONFIG_PATH=str(config_path),
+                TARIFF_TRAFFIC_WARNING_LEVELS="101",
+            )
+            panel_service = AsyncMock(spec=PanelApiService)
+            panel_service.get_internal_squad_accessible_nodes = AsyncMock(
+                return_value=[{"uuid": "node-1"}]
+            )
+            panel_service.get_node_users_bandwidth_stats = AsyncMock(
+                return_value={
+                    "topUsers": [
+                        {"username": "tg_123", "total": 5 * (1024**3)},
+                    ]
+                }
+            )
+            panel_service.get_user_by_uuid = AsyncMock(
+                return_value={
+                    "activeInternalSquads": [
+                        {"uuid": "squad-1"},
+                        {"uuid": "premium-squad"},
+                    ]
+                }
+            )
+            panel_service.update_user_details_on_panel = AsyncMock(return_value={"response": {}})
+            subscription_service = SubscriptionService(settings, panel_service)
+            worker = TariffTrafficWorker(
+                settings=settings,
+                session_factory=SimpleNamespace(),
+                panel_service=panel_service,
+                subscription_service=subscription_service,
+            )
+            now = datetime(2026, 5, 9, tzinfo=timezone.utc)
+            sub = SimpleNamespace(
+                subscription_id=1,
+                user_id=123,
+                panel_user_uuid="panel-uuid",
+                premium_baseline_bytes=25 * (1024**3),
+                premium_topup_balance_bytes=0,
+                premium_topup_used_bytes=0,
+                premium_used_bytes=5 * (1024**3),
+                premium_is_limited=True,
+                premium_period_start_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+                premium_unlimited_override=False,
+                premium_bonus_bytes=0,
+            )
+            tariff = settings.tariffs_config.require("standard")
+
+            await worker._sync_premium_squad_limit(
+                AsyncMock(),
+                sub,
+                tariff,
+                now,
+                panel_username="tg_123",
+                panel_user_dict={"activeInternalSquads": [{"uuid": "squad-1"}]},
+                panel_view="list",
+            )
+
+            self.assertFalse(sub.premium_is_limited)
+            panel_service.get_user_by_uuid.assert_awaited_once_with(
+                "panel-uuid",
+                log_response=False,
+            )
+            panel_service.update_user_details_on_panel.assert_not_awaited()
+
+    async def test_premium_sync_patches_panel_when_current_squads_are_known_and_wrong(self):
+        payload = _tariffs_config_payload()
+        payload["tariffs"][0]["premium_squad_uuids"] = ["premium-squad"]
+        payload["tariffs"][0]["premium_monthly_gb"] = 25
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "tariffs.json"
+            config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            settings = Settings(
+                _env_file=None,
+                BOT_TOKEN="token",
+                POSTGRES_USER="app_user",
+                POSTGRES_PASSWORD="app_password",
+                TARIFFS_CONFIG_PATH=str(config_path),
+                TARIFF_TRAFFIC_WARNING_LEVELS="101",
+            )
+            panel_service = AsyncMock(spec=PanelApiService)
+            panel_service.get_internal_squad_accessible_nodes = AsyncMock(
+                return_value=[{"uuid": "node-1"}]
+            )
+            panel_service.get_node_users_bandwidth_stats = AsyncMock(
+                return_value={
+                    "topUsers": [
+                        {"username": "tg_123", "total": 5 * (1024**3)},
+                    ]
+                }
+            )
+            panel_service.get_user_by_uuid = AsyncMock(
+                return_value={"activeInternalSquads": [{"uuid": "squad-1"}]}
+            )
+            panel_service.update_user_details_on_panel = AsyncMock(return_value={"response": {}})
+            subscription_service = SubscriptionService(settings, panel_service)
+            worker = TariffTrafficWorker(
+                settings=settings,
+                session_factory=SimpleNamespace(),
+                panel_service=panel_service,
+                subscription_service=subscription_service,
+            )
+            now = datetime(2026, 5, 9, tzinfo=timezone.utc)
+            sub = SimpleNamespace(
+                subscription_id=1,
+                user_id=123,
+                panel_user_uuid="panel-uuid",
+                premium_baseline_bytes=25 * (1024**3),
+                premium_topup_balance_bytes=0,
+                premium_topup_used_bytes=0,
+                premium_used_bytes=5 * (1024**3),
+                premium_is_limited=False,
+                premium_period_start_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+                premium_unlimited_override=False,
+                premium_bonus_bytes=0,
+            )
+            tariff = settings.tariffs_config.require("standard")
+
+            with self.assertLogs(level="INFO") as logs:
+                await worker._sync_premium_squad_limit(
+                    AsyncMock(),
+                    sub,
+                    tariff,
+                    now,
+                    panel_username="tg_123",
+                    panel_user_dict={"activeInternalSquads": [{"uuid": "squad-1"}]},
+                    panel_view="list",
+                )
+
             panel_service.update_user_details_on_panel.assert_awaited_once()
+            panel_service.get_user_by_uuid.assert_awaited_once_with(
+                "panel-uuid",
+                log_response=False,
+            )
             payload_sent = panel_service.update_user_details_on_panel.await_args.args[1]
             self.assertEqual(payload_sent["activeInternalSquads"], ["squad-1", "premium-squad"])
+            self.assertTrue(
+                any(
+                    "Sync panel PATCH: source=premium_squad_limit" in line
+                    and "reasons=activeInternalSquads_mismatch" in line
+                    and "fields=activeInternalSquads" in line
+                    for line in logs.output
+                )
+            )
 
     async def test_premium_unlimited_override_never_throttles(self):
         payload = _tariffs_config_payload()
@@ -436,6 +627,9 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
                         {"username": "tg_42", "total": 50 * (1024**3)},
                     ]
                 }
+            )
+            panel_service.get_user_by_uuid = AsyncMock(
+                return_value={"activeInternalSquads": [{"uuid": "squad-1"}]}
             )
             panel_service.update_user_details_on_panel = AsyncMock(return_value={"response": {}})
             subscription_service = SubscriptionService(settings, panel_service)
@@ -467,6 +661,7 @@ class TariffWorkerTests(unittest.IsolatedAsyncioTestCase):
                 datetime.now(timezone.utc),
                 panel_username="tg_42",
                 panel_user_dict={"activeInternalSquads": [{"uuid": "squad-1"}]},
+                panel_view="list",
             )
 
             self.assertFalse(sub.premium_is_limited)
