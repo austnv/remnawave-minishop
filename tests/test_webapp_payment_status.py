@@ -166,3 +166,28 @@ class WebAppPaymentStatusTests(IsolatedAsyncioTestCase):
 
         invalidate_cache.assert_awaited_once_with(settings, 1001)
         self.assertEqual(response.status, 200)
+
+    async def test_wata_pending_payment_refresh_delegates_to_provider_service(self):
+        payment = SimpleNamespace(
+            payment_id=43,
+            user_id=1001,
+            provider="wata",
+            status="pending_wata",
+        )
+        refreshed_payment = SimpleNamespace(
+            payment_id=43,
+            user_id=1001,
+            provider="wata",
+            status="succeeded",
+        )
+        wata_service = SimpleNamespace(
+            configured=True,
+            refresh_payment_status=AsyncMock(return_value=refreshed_payment),
+        )
+        request = SimpleNamespace(app={"wata_service": wata_service})
+        session = AsyncMock()
+
+        result = await billing_module._refresh_wata_payment_status(request, session, payment)
+
+        self.assertIs(result, refreshed_payment)
+        wata_service.refresh_payment_status.assert_awaited_once_with(session, payment)

@@ -201,3 +201,70 @@ def test_wata_known_payment_with_unknown_status_still_acknowledges_webhook(monke
 
     assert response.status == 200
     assert session.commits == 0
+
+
+def test_wata_refresh_finds_paid_transaction_by_order_id_and_finalizes(monkeypatch):
+    session = _FakeSession()
+    payment = _payment(provider="wata", provider_payment_id="link-id")
+    updates = []
+    finalized = []
+    service = _service(session)
+
+    async def search_transactions(*, order_id=None, payment_link_id=None, status=None, limit=5):
+        assert order_id == "465"
+        assert payment_link_id is None
+        assert status == "Paid"
+        assert limit == 5
+        return True, {
+            "items": [
+                {
+                    "id": "tx-paid",
+                    "status": "Paid",
+                    "orderId": "465",
+                    "amount": 100,
+                    "currency": "RUB",
+                    "paymentLinkId": "link-id",
+                }
+            ]
+        }
+
+    async def get_payment_by_db_id(_session, payment_id):
+        assert _session is session
+        assert payment_id == 465
+        return payment
+
+    async def update_provider_payment_and_status(
+        _session,
+        payment_id,
+        provider_payment_id,
+        status,
+    ):
+        updates.append((payment_id, provider_payment_id, status))
+        payment.provider_payment_id = provider_payment_id
+        payment.status = status
+
+    async def finalize_successful_payment(request):
+        finalized.append(
+            (
+                request.payment.payment_id,
+                request.provider_subscription,
+                request.provider_notification,
+            )
+        )
+        return SimpleNamespace()
+
+    service.search_transactions = search_transactions
+    monkeypatch.setattr(wata.payment_dal, "get_payment_by_db_id", get_payment_by_db_id)
+    monkeypatch.setattr(
+        wata.payment_dal,
+        "update_provider_payment_and_status",
+        update_provider_payment_and_status,
+    )
+    monkeypatch.setattr(wata, "finalize_successful_payment", finalize_successful_payment)
+
+    result = asyncio.run(service.refresh_payment_status(session, payment))
+
+    assert result is payment
+    assert updates == [(465, "tx-paid", "succeeded")]
+    assert finalized == [(465, "wata", "wata")]
+    assert session.commits == 1

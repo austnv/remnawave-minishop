@@ -715,6 +715,31 @@ async def _refresh_yookassa_payment_status(
     return payment
 
 
+async def _refresh_wata_payment_status(
+    request: web.Request,
+    session: AsyncSession,
+    payment: Payment,
+) -> Payment:
+    if str(getattr(payment, "provider", "") or "").lower() != "wata":
+        return payment
+    if not _payment_status_can_be_refreshed(payment):
+        return payment
+
+    wata_service = request.app.get("wata_service")
+    if (
+        not wata_service
+        or not getattr(wata_service, "configured", False)
+        or not hasattr(wata_service, "refresh_payment_status")
+    ):
+        return payment
+
+    try:
+        return await wata_service.refresh_payment_status(session, payment)
+    except Exception:
+        logger.exception("Failed to refresh Wata payment %s status", payment.payment_id)
+        return payment
+
+
 async def payment_status_route(request: web.Request) -> web.Response:
     user_id = _require_user_id(request)
     try:
@@ -728,6 +753,7 @@ async def payment_status_route(request: web.Request) -> web.Response:
         if not payment or payment.user_id != user_id:
             return _json_error(404, "not_found", "Payment not found")
         payment = await _refresh_yookassa_payment_status(request, session, payment)
+        payment = await _refresh_wata_payment_status(request, session, payment)
         if payment.status == "succeeded":
             await invalidate_webapp_user_caches(request.app["settings"], user_id)
         return web.json_response(
