@@ -9,6 +9,8 @@ export function createBillingStore({
   onSubscriptionActivationPending = null,
   onSubscriptionActivated = null,
   tg,
+  getTg = null,
+  telegramSdk = null,
 }) {
   const state = writable({
     paymentModalOpen: false,
@@ -239,19 +241,63 @@ export function createBillingStore({
     state.update((s) => ({ ...s, changeConfirmOpen: false }));
   }
 
-  function openTelegramInvoice(url, successContext = {}) {
-    if (!url) return;
-    if (tg?.openInvoice) {
-      tg.openInvoice(url, async (status) => {
+  function resolveTelegramWebApp() {
+    if (typeof getTg === "function") {
+      const currentTg = getTg();
+      if (currentTg) return currentTg;
+    }
+    if (tg) return tg;
+    if (telegramSdk?.refresh) return telegramSdk.refresh();
+    return null;
+  }
+
+  async function resolveInvoiceTelegramWebApp() {
+    const currentTg = resolveTelegramWebApp();
+    if (currentTg?.openInvoice) return currentTg;
+    if (telegramSdk?.ensureForAction) {
+      const loadedTg = await telegramSdk.ensureForAction();
+      if (loadedTg?.openInvoice) return loadedTg;
+    }
+    return resolveTelegramWebApp();
+  }
+
+  async function openTelegramInvoice(url, successContext = {}) {
+    if (!url) return false;
+    const invoiceTg = await resolveInvoiceTelegramWebApp();
+    if (invoiceTg?.openInvoice) {
+      invoiceTg.openInvoice(url, async (status) => {
         if (status === "paid") {
           await handlePaymentSuccess(successContext);
         } else if (status === "failed") {
           showToast(t("wa_payment_create_failed"));
         }
       });
-      return;
+      return true;
     }
-    openExternalLink(url);
+    showToast(
+      t("wa_payment_stars_telegram_required", {}, "Open this payment in Telegram to pay with Stars")
+    );
+    return false;
+  }
+
+  async function handlePaymentResponse(response, successContext = {}, closeModal = () => {}) {
+    if (!response.ok) throw response;
+    showToast(t("wa_payment_created"));
+    if (response.action === "open_invoice") {
+      if (!response.payment_url) throw response;
+      const opened = await openTelegramInvoice(response.payment_url, successContext);
+      if (!opened) return false;
+    } else if (response.action === "invoice_sent") {
+      startPaymentStatusPolling(response.payment_id, successContext);
+      closeModal();
+      return true;
+    } else {
+      if (!response.payment_url) throw response;
+      openExternalLink(response.payment_url);
+    }
+    startPaymentStatusPolling(response.payment_id, successContext);
+    closeModal();
+    return true;
   }
 
   function startPaymentStatusPolling(paymentId, successContext = {}) {
@@ -293,23 +339,11 @@ export function createBillingStore({
       const response = await billing.postPayment(
         billing.planPaymentBody(s.selectedPlan, s.selectedMethod)
       );
-      if (!response.ok) throw response;
-      showToast(t("wa_payment_created"));
       const successContext = paymentSuccessContext(s, response);
       rememberSubscriptionActivationPending(successContext);
-      if (response.action === "open_invoice") {
-        if (!response.payment_url) throw response;
-        openTelegramInvoice(response.payment_url, successContext);
-      } else if (response.action === "invoice_sent") {
-        startPaymentStatusPolling(response.payment_id, successContext);
+      await handlePaymentResponse(response, successContext, () => {
         state.update((s) => ({ ...s, paymentModalOpen: false }));
-        return;
-      } else {
-        if (!response.payment_url) throw response;
-        openExternalLink(response.payment_url);
-      }
-      startPaymentStatusPolling(response.payment_id, successContext);
-      state.update((s) => ({ ...s, paymentModalOpen: false }));
+      });
     } catch (error) {
       showToast(error?.message || t("wa_payment_create_failed"));
     } finally {
@@ -355,11 +389,9 @@ export function createBillingStore({
       const response = await billing.postPayment(
         billing.topupPaymentBody(s.selectedTopupPlan, s.selectedMethod, s.topupOptions?.tariff_key)
       );
-      if (!response.ok || !response.payment_url) throw response;
-      showToast(t("wa_payment_created"));
-      openExternalLink(response.payment_url);
-      startPaymentStatusPolling(response.payment_id);
-      state.update((s) => ({ ...s, topupModalOpen: false }));
+      await handlePaymentResponse(response, {}, () => {
+        state.update((s) => ({ ...s, topupModalOpen: false }));
+      });
     } catch (error) {
       showToast(error?.message || t("wa_payment_create_failed"));
     } finally {
@@ -433,11 +465,9 @@ export function createBillingStore({
         s.selectedChangeAction.mode === "buy_period"
           ? await billing.postPayment(body)
           : await billing.postTariffChangePayment(body);
-      if (!response.ok || !response.payment_url) throw response;
-      showToast(t("wa_payment_created"));
-      openExternalLink(response.payment_url);
-      startPaymentStatusPolling(response.payment_id);
-      state.update((s) => ({ ...s, changeConfirmOpen: false, changeModalOpen: false }));
+      await handlePaymentResponse(response, {}, () => {
+        state.update((s) => ({ ...s, changeConfirmOpen: false, changeModalOpen: false }));
+      });
     } catch (error) {
       showToast(error?.message || t("wa_payment_create_failed"));
     } finally {
@@ -477,11 +507,9 @@ export function createBillingStore({
           s.deviceTopupOptions?.tariff_key
         )
       );
-      if (!response.ok || !response.payment_url) throw response;
-      showToast(t("wa_payment_created"));
-      openExternalLink(response.payment_url);
-      startPaymentStatusPolling(response.payment_id);
-      state.update((s) => ({ ...s, deviceTopupModalOpen: false }));
+      await handlePaymentResponse(response, {}, () => {
+        state.update((s) => ({ ...s, deviceTopupModalOpen: false }));
+      });
     } catch (error) {
       showToast(error?.message || t("wa_payment_create_failed"));
     } finally {

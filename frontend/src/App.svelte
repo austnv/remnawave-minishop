@@ -227,6 +227,8 @@
     onSubscriptionActivationPending: rememberActivationPending,
     onSubscriptionActivated: handleSubscriptionActivated,
     tg,
+    getTg: () => tg || telegramSdk.refresh(),
+    telegramSdk,
   });
   const devicesStore = createDevicesStore({ api, t, showToast });
   const supportStore = createSupportStore({ api, t, showToast });
