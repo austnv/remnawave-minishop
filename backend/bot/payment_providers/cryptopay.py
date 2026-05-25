@@ -38,9 +38,12 @@ from .shared import (
     parse_payment_callback,
     payment_failed,
     payment_link_response,
+    payment_record_amounts,
     payment_unavailable,
+    quote_hwid_callback_parts,
     render_payment_link,
     sale_mode_base,
+    sale_mode_is_traffic,
     sale_mode_tariff_key,
 )
 
@@ -155,13 +158,14 @@ class CryptoPayService:
         description: str,
         sale_mode: str = "subscription",
         url_kind: str = "bot",
+        hwid_quote: Optional[dict] = None,
     ) -> Optional[str]:
         if not self.configured or not self.client:
             logging.error("CryptoPayService not configured")
             return None
 
         sale_base = sale_mode_base(sale_mode)
-        is_traffic = sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
+        amounts = payment_record_amounts(months=months, sale_mode=sale_mode)
         try:
             payment_record = await payment_dal.create_payment_record(
                 session,
@@ -177,7 +181,17 @@ class CryptoPayService:
                     "provider": "cryptopay",
                     "sale_mode": sale_mode,
                     "tariff_key": sale_mode_tariff_key(sale_mode),
-                    "purchased_gb": float(months) if is_traffic else None,
+                    "purchased_gb": amounts.purchased_gb,
+                    "purchased_hwid_devices": amounts.purchased_hwid_devices,
+                    "hwid_valid_from": hwid_quote.get("valid_from") if hwid_quote else None,
+                    "hwid_valid_until": hwid_quote.get("valid_until") if hwid_quote else None,
+                    "hwid_pricing_period_months": hwid_quote.get("pricing_period_months")
+                    if hwid_quote
+                    else None,
+                    "hwid_proration_ratio": hwid_quote.get("proration_ratio")
+                    if hwid_quote
+                    else None,
+                    "hwid_full_price": hwid_quote.get("full_price") if hwid_quote else None,
                 },
             )
             await session.commit()
@@ -192,7 +206,7 @@ class CryptoPayService:
                 "subscription_months": str(months),
                 "payment_db_id": str(payment_record.payment_id),
                 "sale_mode": sale_mode,
-                "traffic_gb": str(months) if is_traffic else None,
+                "traffic_gb": str(months) if sale_mode_is_traffic(sale_mode) else None,
             }
         )
         try:
@@ -366,6 +380,16 @@ async def pay_crypto_callback_handler(
     if not parts:
         await notify_callback_parse_error(callback, translator)
         return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=cryptopay_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
+        await notify_callback_parse_error(callback, translator)
+        return
 
     payment_description = describe_payment(translator, parts)
     invoice_url = await cryptopay_service.create_invoice(
@@ -375,6 +399,7 @@ async def pay_crypto_callback_handler(
         amount=parts.price,
         description=payment_description,
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     if invoice_url:
@@ -424,6 +449,15 @@ async def create_webapp_payment(ctx: WebAppPaymentContext) -> web.Response:
         description=ctx.description,
         sale_mode=ctx.sale_mode,
         url_kind="web",
+        hwid_quote={
+            "valid_from": ctx.hwid_valid_from,
+            "valid_until": ctx.hwid_valid_until,
+            "pricing_period_months": ctx.hwid_pricing_period_months,
+            "proration_ratio": ctx.hwid_proration_ratio,
+            "full_price": ctx.hwid_full_price,
+        }
+        if ctx.hwid_valid_from and ctx.hwid_valid_until
+        else None,
     )
     if not url:
         return payment_failed()

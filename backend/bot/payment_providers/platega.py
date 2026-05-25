@@ -46,6 +46,7 @@ from .shared import (
     payment_record_amounts,
     payment_unavailable,
     post_json_request,
+    quote_hwid_callback_parts,
     render_link_or_fail,
     safe_callback_answer,
 )
@@ -475,6 +476,16 @@ async def pay_platega_callback_handler(
         logging.error("Invalid pay_platega data in callback: %s", callback.data)
         await notify_callback_parse_error(callback, translator)
         return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=platega_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
+        await notify_callback_parse_error(callback, translator)
+        return
 
     currency_code = settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
     payment_description = describe_payment(translator, parts)
@@ -487,6 +498,7 @@ async def pay_platega_callback_handler(
         months=parts.months,
         provider="platega",
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     try:

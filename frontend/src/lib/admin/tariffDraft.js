@@ -49,6 +49,8 @@ export function rowsFromPackages(packageSet, currency, valueKey) {
   return (packageSet?.[currency] || []).map((pkg) => ({
     [valueKey]: pkg[valueKey],
     price: pkg.price,
+    prices: pkg.prices ? structuredCloneSafe(pkg.prices) : undefined,
+    min_price: pkg.min_price ?? "",
   }));
 }
 
@@ -115,10 +117,20 @@ export function compactMap(obj) {
 
 export function packagesFromRows(rows, valueKey) {
   return (rows || [])
-    .map((row) => ({
-      [valueKey]: parseNumber(row[valueKey]),
-      price: parseNumber(row.price),
-    }))
+    .map((row) => {
+      const pkg = {
+        [valueKey]: parseNumber(row[valueKey]),
+        price: parseNumber(row.price),
+      };
+      if (row.prices && typeof row.prices === "object") {
+        pkg.prices = structuredCloneSafe(row.prices);
+      }
+      const minPrice = parseNumber(row.min_price);
+      if (minPrice !== null) {
+        pkg.min_price = minPrice;
+      }
+      return pkg;
+    })
     .filter((row) => row[valueKey] > 0 && row.price !== null && row.price >= 0);
 }
 

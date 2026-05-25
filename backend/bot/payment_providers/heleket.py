@@ -49,6 +49,7 @@ from .shared import (
     parse_payment_callback,
     payment_failed,
     payment_unavailable,
+    quote_hwid_callback_parts,
     render_link_or_fail,
 )
 
@@ -565,6 +566,16 @@ async def pay_heleket_callback_handler(
         logging.error("Invalid pay_heleket data in callback: %s", callback.data)
         await notify_callback_parse_error(callback, translator)
         return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=heleket_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
+        await notify_callback_parse_error(callback, translator)
+        return
 
     currency_code = (heleket_service.currency or settings.DEFAULT_CURRENCY_SYMBOL or "RUB").upper()
     payment_description = describe_payment(translator, parts)
@@ -577,6 +588,7 @@ async def pay_heleket_callback_handler(
         months=parts.months,
         provider="heleket",
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     try:

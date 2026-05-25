@@ -197,6 +197,16 @@
             <p>{subscriptionPurchaseDescription}</p>
           </div>
         {/if}
+        {#if subscription?.active && Number(subscription?.extra_hwid_devices || 0) > 0}
+          <div class="subscription-purchase-description">
+            <p>
+              {t("wa_hwid_devices_renewal_notice", {
+                count: Number(subscription.extra_hwid_devices || 0),
+                date: subscription.extra_hwid_devices_valid_until_text || "",
+              })}
+            </p>
+          </div>
+        {/if}
         <div class="period-grid period-grid-two-columns">
           {#each selectedTariffPlans as plan}
             <button
@@ -249,6 +259,16 @@
       {#if showSubscriptionPurchaseDescription()}
         <div class="subscription-purchase-description">
           <p>{subscriptionPurchaseDescription}</p>
+        </div>
+      {/if}
+      {#if subscription?.active && Number(subscription?.extra_hwid_devices || 0) > 0}
+        <div class="subscription-purchase-description">
+          <p>
+            {t("wa_hwid_devices_renewal_notice", {
+              count: Number(subscription.extra_hwid_devices || 0),
+              date: subscription.extra_hwid_devices_valid_until_text || "",
+            })}
+          </p>
         </div>
       {/if}
       <div class="period-grid period-grid-two-columns">

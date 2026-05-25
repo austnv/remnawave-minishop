@@ -57,8 +57,9 @@ def payment_methods_back_callback(
         return f"tariff:package:{tariff_key}:{value}"
     if sale_base == "premium_topup" and tariff_key:
         return f"tariff:premium_package:{tariff_key}:{value}"
-    if sale_base in {"hwid_device", "hwid_devices"} and tariff_key:
-        return f"hwid_devices:package:{tariff_key}:{value}"
+    if sale_base in {"hwid_device", "hwid_devices", "hwid_devices_renewal"} and tariff_key:
+        action = "renewal_package" if sale_base == "hwid_devices_renewal" else "package"
+        return f"hwid_devices:{action}:{tariff_key}:{value}"
     if sale_base == "tariff_upgrade" and tariff_key:
         amount = str(price) if price is not None else value
         return f"tariff_change:pay:{tariff_key}:{amount}"
@@ -79,7 +80,7 @@ def payment_options_back_callback(sale_mode: str = "subscription") -> str:
         return f"tariff:select:{tariff_key}{context_suffix}"
     if sale_base in {"topup", "premium_topup"}:
         return "tariff_topup:list"
-    if sale_base in {"hwid_device", "hwid_devices"}:
+    if sale_base in {"hwid_device", "hwid_devices", "hwid_devices_renewal"}:
         return "hwid_devices:list"
     return subscription_options_callback(context)
 
@@ -425,6 +426,7 @@ def get_hwid_device_packages_keyboard(
     i18n_instance,
     settings: Settings,
     back_callback: str = "main_action:my_subscription",
+    renewal: bool = False,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
@@ -437,7 +439,10 @@ def get_hwid_device_packages_keyboard(
                     price=package.price,
                     currency_symbol=settings.DEFAULT_CURRENCY_SYMBOL,
                 ),
-                callback_data=f"hwid_devices:package:{tariff.key}:{package.count}",
+                callback_data=(
+                    f"hwid_devices:{'renewal_package' if renewal else 'package'}:"
+                    f"{tariff.key}:{package.count}"
+                ),
             )
         )
     builder.row(

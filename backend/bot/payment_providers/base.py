@@ -113,6 +113,11 @@ class WebAppPaymentContext:
     description: str
     sale_mode: str
     traffic_gb: Optional[float] = None
+    hwid_valid_from: Optional[Any] = None
+    hwid_valid_until: Optional[Any] = None
+    hwid_pricing_period_months: Optional[int] = None
+    hwid_proration_ratio: Optional[float] = None
+    hwid_full_price: Optional[float] = None
 
 
 EnabledPredicate = Callable[[Any], bool]

@@ -52,7 +52,9 @@ from .base import (
     provider_runtime_enabled,
 )
 from .shared import (
+    PaymentCallbackParts,
     SuccessMessage,
+    append_hwid_renewal_note,
     build_success_message,
     create_webapp_payment_record,
     format_human_units,
@@ -65,6 +67,7 @@ from .shared import (
     payment_link_response,
     payment_record_amounts,
     payment_unavailable,
+    quote_hwid_callback_parts,
     resolve_inviter_name,
     send_success_message_to_user,
 )
@@ -419,7 +422,7 @@ YOOKASSA_WEBHOOK_ALLOWED_IPS = [
     "77.75.154.128/25",
     "2a02:5180::/32",
 ]
-HWID_DEVICE_SALE_BASES = {"hwid_device", "hwid_devices"}
+HWID_DEVICE_SALE_BASES = {"hwid_device", "hwid_devices", "hwid_devices_renewal"}
 
 
 def _is_hwid_device_sale_base(sale_mode_base: str) -> bool:
@@ -831,6 +834,14 @@ async def process_successful_payment(
                 )
             )
             include_keyboard = True
+
+        if sale_mode_base == "subscription" and activation_details:
+            details_message = append_hwid_renewal_note(
+                details_message,
+                translator,
+                count=activation_details.get("hwid_devices_renewal_recommended_count"),
+                valid_until=activation_details.get("hwid_devices_valid_until"),
+            )
 
         install_share_url = None
         if include_keyboard:
@@ -1288,6 +1299,7 @@ async def _initiate_yk_payment(
     payment_method_id: Optional[str] = None,
     selected_method_internal_id: Optional[int] = None,
     sale_mode: str = "subscription",
+    hwid_quote: Optional[dict] = None,
 ) -> bool:
     """Create payment record and initiate YooKassa payment (new card or saved card)."""
     if not callback.message:
@@ -1299,7 +1311,7 @@ async def _initiate_yk_payment(
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
         else (
             get_text("payment_description_hwid_devices", count=int(months))
-            if sale_base in {"hwid_device", "hwid_devices"}
+            if sale_base in HWID_DEVICE_SALE_BASES
             else get_text("payment_description_subscription", months=int(months))
         )
     )
@@ -1316,8 +1328,15 @@ async def _initiate_yk_payment(
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
         else None,
         "purchased_hwid_devices": int(months)
-        if sale_base in {"hwid_device", "hwid_devices"}
+        if sale_base in HWID_DEVICE_SALE_BASES
         else None,
+        "hwid_valid_from": hwid_quote.get("valid_from") if hwid_quote else None,
+        "hwid_valid_until": hwid_quote.get("valid_until") if hwid_quote else None,
+        "hwid_pricing_period_months": hwid_quote.get("pricing_period_months")
+        if hwid_quote
+        else None,
+        "hwid_proration_ratio": hwid_quote.get("proration_ratio") if hwid_quote else None,
+        "hwid_full_price": hwid_quote.get("full_price") if hwid_quote else None,
     }
 
     db_payment_record = None
@@ -1634,6 +1653,23 @@ async def pay_yk_callback_handler(
         return
 
     months, price_rub, sale_mode = parsed
+    hwid_quote = None
+    if _sale_mode_base(sale_mode) in HWID_DEVICE_SALE_BASES:
+        quoted_parts, hwid_quote = await quote_hwid_callback_parts(
+            session=session,
+            user_id=callback.from_user.id,
+            parts=PaymentCallbackParts(months=months, price=price_rub, sale_mode=sale_mode),
+            subscription_service=yookassa_service.subscription_service,
+            currency="rub",
+        )
+        if not quoted_parts:
+            try:
+                await callback.answer(get_text("error_try_again"), show_alert=True)
+            except Exception:
+                pass
+            return
+        months = quoted_parts.months
+        price_rub = quoted_parts.price
     user_id = callback.from_user.id
     currency_code_for_yk = "RUB"
     autopay_enabled = bool(
@@ -1710,6 +1746,7 @@ async def pay_yk_callback_handler(
         save_payment_method=autopay_enabled and autopay_require_binding,
         back_callback=payment_methods_back_callback(_format_value(months), sale_mode, price_rub),
         sale_mode=sale_mode,
+        hwid_quote=hwid_quote,
     )
     try:
         await callback.answer()

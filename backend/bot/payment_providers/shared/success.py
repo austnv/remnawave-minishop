@@ -19,7 +19,7 @@ from db.models import Payment, User
 from .common import Translator, format_human_units, make_translator, sale_mode_base
 
 _TRAFFIC_MODES = {"traffic", "traffic_package", "topup", "premium_topup"}
-_HWID_DEVICE_MODES = {"hwid_device", "hwid_devices"}
+_HWID_DEVICE_MODES = {"hwid_device", "hwid_devices", "hwid_devices_renewal"}
 
 
 def is_traffic_sale_base(sale_base: str) -> bool:
@@ -126,6 +126,28 @@ def build_success_message(payload: SuccessMessage) -> str:
         months=payload.months,
         end_date=end_text,
     )
+
+
+def append_hwid_renewal_note(
+    text: str,
+    translator: Translator,
+    *,
+    count: Any,
+    valid_until: Optional[datetime],
+) -> str:
+    try:
+        count_int = int(count or 0)
+    except (TypeError, ValueError):
+        count_int = 0
+    if count_int <= 0:
+        return text
+    date_text = valid_until.strftime("%Y-%m-%d") if valid_until else ""
+    note = translator(
+        "payment_successful_hwid_devices_renewal_note",
+        count=format_human_units(count_int),
+        date=date_text,
+    )
+    return f"{text}\n\n{note}"
 
 
 async def send_success_message_to_user(
@@ -333,6 +355,13 @@ async def finalize_successful_payment(
             inviter_name=inviter_name,
         )
     )
+    if is_subscription and activation:
+        success_text = append_hwid_renewal_note(
+            success_text,
+            translator,
+            count=activation.get("hwid_devices_renewal_recommended_count"),
+            valid_until=activation.get("hwid_devices_valid_until"),
+        )
     if req.text_prefix:
         success_text = f"{req.text_prefix}\n{success_text}"
 

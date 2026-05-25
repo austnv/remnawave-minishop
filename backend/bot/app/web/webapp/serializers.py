@@ -259,7 +259,8 @@ def _serialize_subscription(
             can_topup_traffic = bool(can_topup_regular_traffic or can_topup_premium_traffic)
             # max_devices == 0 means unlimited — top-up is pointless in that case.
             can_topup_devices = bool(
-                tariff.has_hwid_device_packages()
+                tariff.billing_model == "period"
+                and tariff.has_hwid_device_packages()
                 and _coerce_int_or_none(active.get("max_devices")) != 0
             )
         except Exception:
@@ -272,6 +273,19 @@ def _serialize_subscription(
     share_token = str(
         install_share_token or getattr(local_sub, "install_share_token", "") or ""
     ).strip()
+    extra_hwid_valid_until = active.get("extra_hwid_devices_valid_until")
+    if extra_hwid_valid_until and extra_hwid_valid_until.tzinfo is None:
+        extra_hwid_valid_until = extra_hwid_valid_until.replace(tzinfo=timezone.utc)
+    extra_hwid_next_valid_from = active.get("extra_hwid_devices_next_valid_from")
+    if extra_hwid_next_valid_from and extra_hwid_next_valid_from.tzinfo is None:
+        extra_hwid_next_valid_from = extra_hwid_next_valid_from.replace(tzinfo=timezone.utc)
+    extra_hwid_count = _coerce_int_or_none(active.get("extra_hwid_devices")) or 0
+    device_topup_renewal_available = bool(
+        extra_hwid_count > 0
+        and extra_hwid_valid_until
+        and end_date
+        and extra_hwid_valid_until < end_date
+    )
     return {
         "active": seconds_left > 0,
         "status": active.get("status_from_panel") or "UNKNOWN",
@@ -322,7 +336,17 @@ def _serialize_subscription(
         "is_throttled": bool(active.get("is_throttled")),
         "max_devices": _coerce_int_or_none(active.get("max_devices")),
         "base_hwid_device_limit": _coerce_int_or_none(active.get("base_hwid_device_limit")),
-        "extra_hwid_devices": _coerce_int_or_none(active.get("extra_hwid_devices")) or 0,
+        "extra_hwid_devices": extra_hwid_count,
+        "extra_hwid_devices_valid_until": extra_hwid_valid_until.isoformat()
+        if extra_hwid_valid_until
+        else None,
+        "extra_hwid_devices_valid_until_text": extra_hwid_valid_until.strftime("%d.%m.%Y %H:%M")
+        if extra_hwid_valid_until
+        else None,
+        "extra_hwid_devices_next_valid_from": extra_hwid_next_valid_from.isoformat()
+        if extra_hwid_next_valid_from
+        else None,
+        "device_topup_renewal_available": device_topup_renewal_available,
         "auto_renew_enabled": bool(getattr(local_sub, "auto_renew_enabled", False)),
         "provider": getattr(local_sub, "provider", None),
     }
@@ -378,7 +402,9 @@ def _serialize_plans(
                     tariff,
                     tariff.hwid_device_packages,
                     lang,
-                ),
+                )
+                if tariff.billing_model == "period"
+                else [],
             }
             if tariff.billing_model == "period":
                 for months in sorted(tariff.enabled_periods):
@@ -585,10 +611,14 @@ def _serialize_tariff_change_target(
                 "mode": "recalc_days",
                 "kind": "free",
                 "title": "recalc_days",
-                "days_after": int(options.get("recalc_days") or 0),
-                "remaining_days": int(options.get("remaining_days") or 0),
-            }
-        )
+                    "days_after": int(options.get("recalc_days") or 0),
+                    "remaining_days": int(options.get("remaining_days") or 0),
+                    "converted_hwid_value_rub": float(
+                        options.get("converted_hwid_value_rub") or 0
+                    ),
+                    "converted_hwid_days": int(options.get("converted_hwid_days") or 0),
+                }
+            )
         paid_diff = float(options.get("paid_diff_rub") or 0)
         if paid_diff > 0:
             actions.append(
@@ -608,6 +638,10 @@ def _serialize_tariff_change_target(
                 "title": "convert_days_to_gb",
                 "converted_gb": float(options.get("converted_gb") or 0),
                 "remaining_days": int(options.get("remaining_days") or 0),
+                "converted_hwid_value_rub": float(
+                    options.get("converted_hwid_value_rub") or 0
+                ),
+                "converted_hwid_gb": float(options.get("converted_hwid_gb") or 0),
             }
         )
         actions.extend(

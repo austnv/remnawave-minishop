@@ -1240,6 +1240,7 @@
         stripTopupQueryFromUrl();
       }
     }
+    return payload;
   }
 
   async function loadPublicInstall(shareToken) {

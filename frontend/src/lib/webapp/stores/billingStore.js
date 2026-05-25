@@ -43,9 +43,14 @@ export function createBillingStore({
 
   function isSubscriptionSale(plan) {
     const saleMode = String(plan?.sale_mode || "subscription").toLowerCase();
-    return !["traffic", "traffic_package", "topup", "premium_topup", "hwid_devices"].includes(
-      saleMode
-    );
+    return ![
+      "traffic",
+      "traffic_package",
+      "topup",
+      "premium_topup",
+      "hwid_devices",
+      "hwid_devices_renewal",
+    ].includes(saleMode);
   }
 
   function paymentSuccessContext(s, response = {}) {
@@ -53,6 +58,8 @@ export function createBillingStore({
       paymentId: response.payment_id || "",
       initialSubscriptionPayment:
         !s.paymentStartedWithActiveSubscription && isSubscriptionSale(s.selectedPlan),
+      renewalSubscriptionPayment:
+        s.paymentStartedWithActiveSubscription && isSubscriptionSale(s.selectedPlan),
     };
   }
 
@@ -64,7 +71,15 @@ export function createBillingStore({
       paymentPollToken += 1;
     }
     showToast(t("wa_payment_success", {}, "Payment successful"));
-    await loadData({ fresh: true });
+    const payload = await loadData({ fresh: true });
+    if (
+      successContext.renewalSubscriptionPayment &&
+      payload?.subscription?.device_topup_renewal_available &&
+      payload?.subscription?.can_topup_devices
+    ) {
+      showToast(t("wa_hwid_devices_renewal_prompt"));
+      openDeviceTopupModal(payload.payment_methods?.[0]?.id || "");
+    }
     if (
       successContext.initialSubscriptionPayment &&
       typeof onSubscriptionActivated === "function"
@@ -190,6 +205,8 @@ export function createBillingStore({
     state.update((s) => ({
       ...s,
       deviceTopupModalOpen: true,
+      deviceTopupOptions: null,
+      selectedDeviceTopupPlan: null,
       selectedMethod: s.selectedMethod || defaultMethod,
     }));
     loadDeviceTopupOptions();

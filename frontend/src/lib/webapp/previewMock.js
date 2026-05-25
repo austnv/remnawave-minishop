@@ -669,6 +669,10 @@ export function applyPreviewMock(kind) {
       tariff_key: "standard",
       tariff_name: "Стандарт",
       current_limit: 5,
+      extra_hwid_devices: 2,
+      extra_hwid_devices_valid_until_text: "01.06.2026 12:00",
+      renewal_available: false,
+      renewal_recommended_count: 0,
       plans: [
         {
           id: "standard:hwid:1",
@@ -702,6 +706,8 @@ export function applyPreviewMock(kind) {
       ...DEV_MOCK.data.subscription,
       active: true,
       max_devices: 5,
+      extra_hwid_devices: 2,
+      extra_hwid_devices_valid_until_text: "01.06.2026 12:00",
     };
   } else if (mode === "trial") {
     DEV_MOCK.data.settings.traffic_mode = false;

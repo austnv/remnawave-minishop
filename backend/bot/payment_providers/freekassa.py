@@ -50,6 +50,7 @@ from .shared import (
     payment_failed,
     payment_unavailable,
     post_json_request,
+    quote_hwid_callback_parts,
     render_link_or_fail,
 )
 
@@ -470,6 +471,16 @@ async def pay_fk_callback_handler(
         logging.error("Invalid pay_fk data in callback: %s", callback.data)
         await notify_callback_parse_error(callback, translator)
         return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=freekassa_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
+        await notify_callback_parse_error(callback, translator)
+        return
 
     currency_code = (
         getattr(freekassa_service, "default_currency", None)
@@ -486,6 +497,7 @@ async def pay_fk_callback_handler(
         months=parts.months,
         provider="freekassa",
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     try:

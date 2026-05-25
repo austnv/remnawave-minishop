@@ -24,7 +24,6 @@ from bot.payment_providers.yookassa import (
     process_successful_payment,
 )
 from bot.services.locale_override_service import load_locale_overrides
-from bot.services.settings_override_service import load_overrides_from_db
 from bot.services.tariff_worker import TariffTrafficWorker
 from bot.utils.message_queue import init_queue_manager
 from config.settings import get_settings
@@ -32,7 +31,7 @@ from config.settings import get_settings
 
 async def _build_worker_context(settings):
     session_factory = database_setup.init_db_connection(settings)
-    await load_overrides_from_db(settings, session_factory)
+    await database_setup.init_db(settings, session_factory)
     bot = Bot(
         token=settings.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

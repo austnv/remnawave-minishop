@@ -525,10 +525,14 @@ async def hwid_devices_list_callback(
         await callback.answer(get_text("hwid_devices_unlimited_no_topup"), show_alert=True)
         return
     tariff = config.require(active["tariff_key"])
+    if tariff.billing_model != "period":
+        await callback.answer(get_text("no_hwid_device_packages_available"), show_alert=True)
+        return
     packages = tariff.hwid_device_packages.rub if tariff.hwid_device_packages else []
     if not packages:
         await callback.answer(get_text("no_hwid_device_packages_available"), show_alert=True)
         return
+    renewal_available = bool(active.get("device_topup_renewal_available"))
     markup = get_hwid_device_packages_keyboard(
         tariff,
         packages,
@@ -536,14 +540,31 @@ async def hwid_devices_list_callback(
         i18n,
         settings,
         back_callback="main_action:my_devices",
+        renewal=renewal_available,
     )
-    await callback.message.edit_text(get_text("select_hwid_device_package"), reply_markup=markup)
+    text_key = (
+        "select_hwid_device_renewal_package"
+        if renewal_available
+        else "select_hwid_device_package"
+    )
+    await callback.message.edit_text(
+        get_text(
+            text_key,
+            date=active.get("extra_hwid_devices_valid_until_text") or "",
+        ),
+        reply_markup=markup,
+    )
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("hwid_devices:package:"))
+@router.callback_query(F.data.startswith("hwid_devices:renewal_package:"))
 async def hwid_devices_package_callback(
-    callback: types.CallbackQuery, i18n_data: dict, settings: Settings, session: AsyncSession
+    callback: types.CallbackQuery,
+    i18n_data: dict,
+    settings: Settings,
+    session: AsyncSession,
+    subscription_service: SubscriptionService,
 ):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: JsonI18n = i18n_data.get("i18n_instance")
@@ -552,8 +573,11 @@ async def hwid_devices_package_callback(
     if not config or not callback.message:
         await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
         return
-    _, _, tariff_key, count_raw = callback.data.split(":", 3)
+    _, action, tariff_key, count_raw = callback.data.split(":", 3)
     tariff = config.require(tariff_key)
+    if tariff.billing_model != "period":
+        await callback.answer(get_text("no_hwid_device_packages_available"), show_alert=True)
+        return
     count = int(count_raw)
     package = next(
         (
@@ -566,15 +590,37 @@ async def hwid_devices_package_callback(
     if not package:
         await callback.answer(get_text("error_try_again"), show_alert=True)
         return
+    sale_mode_base = "hwid_devices_renewal" if action == "renewal_package" else "hwid_devices"
+    rub_quote = await subscription_service.quote_hwid_device_topup(
+        session,
+        user_id=callback.from_user.id,
+        device_count=count,
+        tariff_key=tariff.key,
+        renewal=action == "renewal_package",
+        currency="rub",
+    )
+    stars_quote = await subscription_service.quote_hwid_device_topup(
+        session,
+        user_id=callback.from_user.id,
+        device_count=count,
+        tariff_key=tariff.key,
+        renewal=action == "renewal_package",
+        currency="stars",
+    )
+    if not rub_quote and not stars_quote:
+        await callback.answer(get_text("error_try_again"), show_alert=True)
+        return
     markup = get_payment_method_keyboard(
         count,
-        package.price,
-        None,
+        float(rub_quote.get("price") if rub_quote else 0),
+        int(stars_quote["price"])
+        if stars_quote and int(stars_quote.get("price") or 0) > 0
+        else None,
         settings.DEFAULT_CURRENCY_SYMBOL,
         current_lang,
         i18n,
         settings,
-        sale_mode=f"hwid_devices@{tariff.key}",
+        sale_mode=f"{sale_mode_base}@{tariff.key}",
         back_callback="hwid_devices:list",
         user_id=callback.from_user.id,
     )
@@ -654,7 +700,9 @@ async def tariff_change_select_callback(
     if not db_sub:
         await callback.answer("Error", show_alert=True)
         return
-    options = subscription_service.calculate_tariff_switch_options(db_sub, target)
+    options = await subscription_service.calculate_tariff_switch_options_with_hwid(
+        session, db_sub, target
+    )
     rows = []
     if options["mode"] == "period_to_period":
         rows.append(
@@ -741,7 +789,9 @@ async def tariff_change_confirm_apply_callback(
     if not db_sub:
         await callback.answer("Error", show_alert=True)
         return
-    options = subscription_service.calculate_tariff_switch_options(db_sub, target)
+    options = await subscription_service.calculate_tariff_switch_options_with_hwid(
+        session, db_sub, target
+    )
     if mode == "recalc_days":
         action_text = f"после перехода останется {options.get('recalc_days', 0)} дн."
     elif mode == "convert_days_to_gb":
@@ -1162,7 +1212,8 @@ async def my_subscription_command_handler(
                 try:
                     tariff_for_devices = settings.tariffs_config.require(local_sub.tariff_key)
                     if (
-                        tariff_for_devices.hwid_device_packages
+                        tariff_for_devices.billing_model == "period"
+                        and tariff_for_devices.hwid_device_packages
                         and tariff_for_devices.hwid_device_packages.rub
                     ):
                         prepend_rows.append(
@@ -1378,7 +1429,8 @@ async def my_devices_command_handler(
         try:
             tariff_for_devices = settings.tariffs_config.require(active["tariff_key"])
             if (
-                tariff_for_devices.hwid_device_packages
+                tariff_for_devices.billing_model == "period"
+                and tariff_for_devices.hwid_device_packages
                 and tariff_for_devices.hwid_device_packages.rub
             ):
                 devices_kb.append(

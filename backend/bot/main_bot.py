@@ -13,10 +13,9 @@ from bot.infra.redis import close_redis
 from bot.middlewares.i18n import JsonI18n
 from bot.routers import build_root_router
 from bot.services.locale_override_service import load_locale_overrides
-from bot.services.settings_override_service import load_overrides_from_db
 from bot.utils.message_queue import init_queue_manager
 from config.settings import Settings
-from db.database_setup import init_db_connection
+from db.database_setup import init_db, init_db_connection
 
 TELEGRAM_STARTUP_RETRY_DELAY_SECONDS = 2.0
 
@@ -267,7 +266,7 @@ async def run_bot(settings_param: Settings):
     if local_async_session_factory is None:
         logging.critical("Failed to initialize database connection and session factory. Exiting.")
         return
-    await load_overrides_from_db(settings_param, local_async_session_factory)
+    await init_db(settings_param, local_async_session_factory)
     dp, bot, extra = build_dispatcher(settings_param, local_async_session_factory)
     i18n_instance = extra["i18n_instance"]
     await load_locale_overrides(i18n_instance, local_async_session_factory)

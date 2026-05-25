@@ -53,7 +53,7 @@ export function createBillingActions({ api }) {
       months: plan.device_count || plan.months,
       device_count: plan.device_count || plan.months,
       tariff_key: plan.tariff_key || fallbackTariffKey,
-      sale_mode: "hwid_devices",
+      sale_mode: plan.sale_mode || "hwid_devices",
       method,
     };
   }

@@ -1,5 +1,6 @@
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -10,6 +11,7 @@ from db.models import Base
 from .migrator import run_database_migrations
 
 async_engine = None
+DB_INIT_ADVISORY_LOCK_ID = 817512404897421337
 
 
 def redacted_database_url(database_url: str) -> str:
@@ -71,6 +73,7 @@ async def init_db(settings: Settings, session_factory: sessionmaker):
         )
 
     async with async_engine.begin() as conn:
+        await conn.execute(text(f"SELECT pg_advisory_xact_lock({DB_INIT_ADVISORY_LOCK_ID})"))
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(run_database_migrations)
     logging.info("PostgreSQL database initialized/checked successfully using SQLAlchemy.")
@@ -83,8 +86,6 @@ async def init_db(settings: Settings, session_factory: sessionmaker):
         logging.warning(f"Failed to load setting overrides on startup: {e_overrides}")
 
     async with session_factory() as session:
-        from sqlalchemy import text
-
         from .dal.panel_sync_dal import get_panel_sync_status, update_panel_sync_status
 
         try:

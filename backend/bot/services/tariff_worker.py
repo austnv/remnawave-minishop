@@ -215,6 +215,7 @@ class TariffTrafficWorker:
 
                 if tariff.billing_model == "period":
                     await self._ensure_period_reset_strategy(sub, tariff, limit, panel_strategy)
+                await self._sync_hwid_device_limit(session, sub, tariff, panel_data)
                 await self._maybe_warn_or_throttle(
                     session,
                     sub,
@@ -376,6 +377,64 @@ class TariffTrafficWorker:
         await self.panel_service.update_user_details_on_panel(
             sub.panel_user_uuid, payload, log_response=False
         )
+
+    async def _sync_hwid_device_limit(
+        self,
+        session: AsyncSession,
+        sub: Subscription,
+        tariff,
+        panel_data: dict,
+    ) -> None:
+        base_hwid_limit = (
+            int(sub.hwid_device_limit)
+            if sub.hwid_device_limit is not None
+            else self.subscription_service._base_hwid_limit_for_tariff(tariff)
+        )
+        active_extra = await tariff_dal.sum_active_hwid_devices(
+            session,
+            subscription_id=sub.subscription_id,
+            at=datetime.now(timezone.utc),
+        )
+        update_data = {}
+        if sub.hwid_device_limit != base_hwid_limit:
+            update_data["hwid_device_limit"] = base_hwid_limit
+        if int(sub.extra_hwid_devices or 0) != active_extra:
+            update_data["extra_hwid_devices"] = active_extra
+        if update_data:
+            for key, value in update_data.items():
+                setattr(sub, key, value)
+
+        effective_limit = self.subscription_service._effective_hwid_limit(
+            base_hwid_limit,
+            active_extra,
+        )
+        if effective_limit is None:
+            return
+        try:
+            panel_limit = panel_data.get("hwidDeviceLimit")
+            panel_limit_int = int(panel_limit) if panel_limit is not None else None
+        except (TypeError, ValueError):
+            panel_limit_int = None
+        if panel_limit_int == effective_limit:
+            return
+
+        payload = self.subscription_service._build_panel_update_payload(
+            panel_user_uuid=sub.panel_user_uuid,
+            expire_at=sub.end_date,
+            hwid_device_limit=effective_limit,
+            include_default_squads=False,
+        )
+        updated_panel = await self.panel_service.update_user_details_on_panel(
+            sub.panel_user_uuid,
+            payload,
+            log_response=False,
+        )
+        if not updated_panel or updated_panel.get("error"):
+            logging.warning(
+                "TariffTrafficWorker: failed to sync HWID limit for subscription %s: %s",
+                sub.subscription_id,
+                updated_panel,
+            )
 
     async def _maybe_warn_or_throttle(
         self,
