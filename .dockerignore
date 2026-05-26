@@ -13,6 +13,10 @@ scratch/
 *.local.*
 node_modules/
 frontend/node_modules/
+docs-site/node_modules/
+docs-site/.astro/
+docs-site/dist/
+docs-site/src/content/docs/
 deploy/compose/docker-compose-dev.yml
 data/*
 !data/tariffs.example.json

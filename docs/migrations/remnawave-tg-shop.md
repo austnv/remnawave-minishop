@@ -1,11 +1,15 @@
 # Миграция с `remnawave-tg-shop` (≤ v2.7.0) на `remnawave-minishop` (v3.4+)
 
+Эта страница - готовый сценарий для legacy-стека `remnawave-tg-shop`. Это единственная миграция с другого бота, которая сейчас описана в документации. Для других Telegram-ботов, самописных панелей и ручных таблиц готового сценария пока нет: их нельзя переносить по этой инструкции без отдельного анализа схемы БД, тарифов, платежей и связи с Remnawave Panel.
+
+Автоматический скрипт ниже рассчитан именно на родственный стек `remnawave-tg-shop`, где структура БД и Docker volumes известны заранее. Для других ботов нужен отдельный адаптер экспорта/импорта.
+
 ## Короткий путь без смены ветки и сборки
 
 Если вы используете только готовые Docker-образы и не собираете проект
 локально, git-команды из ручного способа не нужны. Достаточно обновить
 compose-файл до одного из готовых примеров в `deploy/examples` и
-перенести/обновить БД. Самый прямой вариант без встроенного reverse proxy -
+перенести/обновить БД. Самый прямой вариант без встроенного обратного прокси -
 `deploy/examples/no-proxy/docker-compose.yml`; для Caddy, Nginx и Newt есть
 такие же самостоятельные папки.
 
@@ -101,7 +105,7 @@ docker compose \
 | Volume | v2.7.0 | v3.4+ | Что внутри |
 | --- | --- | --- | --- |
 | `remnawave-minishop-db-data` | переименовать из `remnawave-tg-shop-db-data` | переносится скриптом | PostgreSQL |
-| `remnawave-minishop-redis-data` | — | создаётся пустым | Redis (FSM, rate-limit, cache, очередь webhooks, distributed locks) |
+| `remnawave-minishop-redis-data` | — | создаётся пустым | Redis (FSM, rate-limit, cache, очередь вебхуков, distributed locks) |
 | `remnawave-minishop-shop-data` | — | создаётся пустым | `/app/data`: `tariffs.json`, темы Web App, кэш логотипа/emoji |
 | `remnawave-minishop-caddy-data` / `remnawave-minishop-caddy-config` | переименовать из `remnawave-tg-shop-caddy-*` | переносится скриптом | только при Caddy-варианте |
 
@@ -127,7 +131,7 @@ docker compose \
 | — | `REDIS_URL=redis://redis:6379/0` | Обязательна для воркера, очередей и rate-limit. По умолчанию в compose-файлах уже задана. |
 | — | `WEBAPP_SESSION_SECRET`, `WEBAPP_ENABLED`, `WEBAPP_SERVER_PORT`, `WEBAPP_THEMES_DIR`, `TARIFFS_CONFIG_PATH` | Новые настройки Web App / тарифного каталога. Безопасные дефолты есть в `.env.example`. |
 
-Полный референс — [docs/configuration.md](configuration.md). Скрипт миграции
+Полный референс — [docs/getting-started/configuration.md](../getting-started/configuration.md). Скрипт миграции
 эти переменные **не правит** автоматически (только `POSTGRES_HOST`), потому
 что у каждой инсталляции свой шаблон `.env` с кастомными значениями. Лучше
 сравнить свой `.env` с `.env.example` глазами один раз, чем получить
@@ -166,7 +170,7 @@ bash scripts/migrate_to_minishop.sh
 Примеры:
 
 ```bash
-# Caddy-вариант из raw.
+# Caddy-вариант из raw-файла.
 # Перед запуском скопируйте старый .env в deploy/examples/caddy/.env
 # и заполните WEBHOOK_HOST / MINIAPP_HOST.
 COMPOSE_FILE=deploy/examples/caddy/docker-compose.yml \
@@ -332,7 +336,7 @@ docker volume rm remnawave-tg-shop-caddy-data remnawave-tg-shop-caddy-config 2>/
 
 | Назначение | DNS-имя сервиса | Порт |
 | --- | --- | --- |
-| Telegram / платёжные / panel webhooks | `backend` | `8080` |
+| Telegram / платежные / вебхуки панели | `backend` | `8080` |
 | Health-чек | `backend` | `8080` (`/healthz`) |
 | Web App API (`/api/*`, `/auth/*`, ассеты тем и логотипов) | `backend` | `8081` (доступен только из Docker-сети) |
 | Статический фронт Web App | `frontend` | `80` (внутри `frontend` уже проксирует `/api/*` и `/auth/*` на `backend:8081`) |
@@ -356,9 +360,8 @@ server {
 }
 ```
 
-Полные примеры (Caddy, Nginx, Newt/Pangolin и запуск без reverse proxy) — в
-[docs/deployment.md](deployment.md), [docs/webapp.md](webapp.md) и папке
-[`deploy/examples`](../deploy/examples). Если раньше прокси указывал на
+Полные примеры (Caddy, Nginx, Newt/Pangolin и запуск без обратного прокси) — в
+[docs/getting-started/deployment.md](../getting-started/deployment.md) и [docs/features/web-app.md](../features/web-app.md). Если раньше прокси указывал на
 `remnawave-tg-shop:8000` напрямую, после миграции нужно либо переключиться на
 `backend:8080` / `frontend:80`, либо использовать готовый Caddy/Nginx/Newt
 пример, который уже знает правильную маршрутизацию.

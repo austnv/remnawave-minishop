@@ -1,0 +1,48 @@
+# Установка
+
+Начните с `.env`, затем поднимите Compose-стек и проверьте backend, worker и frontend.
+
+## Минимальный запуск
+
+```bash
+cp .env.example .env
+nano .env
+docker compose up -d --build
+docker compose ps
+docker compose logs -f backend worker frontend
+```
+
+## Что заполнить в первую очередь
+
+- `BOT_TOKEN` и `ADMIN_IDS` для доступа к боту и админке.
+- `WEBHOOK_BASE_URL` для Telegram, платежных вебхуков и вебхуков панели.
+- `SUBSCRIPTION_MINI_APP_URL` для Mini App и кнопок в Telegram.
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
+- `WEBAPP_SESSION_SECRET`, `WEBHOOK_SECRET_TOKEN`, `PANEL_API_URL`, `PANEL_API_KEY`, `PANEL_WEBHOOK_SECRET`.
+
+## Как выбрать Compose-вариант
+
+Для продакшена по умолчанию берите [Caddy](deployment.md#caddy-рекомендуемый-вариант): это самый короткий путь к публичному HTTPS без ручной раскладки сертификатов.
+
+```bash
+cd deploy/examples/caddy
+cp .env.example .env
+nano .env
+docker compose up -d
+```
+
+Остальные варианты описаны в [разделе развертывания](deployment.md#готовые-папки-запуска):
+
+- [Nginx](deployment.md#nginx) - если у вас уже есть TLS-сертификаты и нужен Nginx в Docker-сети;
+- [Pangolin/Newt](deployment.md#pangolin--newt) - если нельзя открывать входящие порты на сервере приложения;
+- [без обратного прокси](deployment.md#без-обратного-прокси) - для локальной проверки или внешнего TLS-терминатора.
+
+## После первого входа
+
+1. Откройте админку через Mini App.
+2. Проверьте платежные методы в настройках.
+3. Настройте каталог тарифов.
+4. Проверьте инструкции подключения.
+5. Сделайте тестовую покупку или пробную активацию.
+
+Подробности: [настройка окружения](configuration.md) и [развертывание](deployment.md).
