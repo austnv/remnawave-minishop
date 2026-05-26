@@ -125,11 +125,22 @@ IMAGE_TAG=3.1.0 docker compose up -d
 
 Для продакшен-запуска удобнее брать готовые папки из [`deploy/examples`](deploy/examples), а читать каноничные инструкции в [docs/deployment.md](docs/deployment.md). Предпочтительный вариант для обычного публичного сервера - Caddy: он сам выпускает и продлевает HTTPS-сертификаты. В папках рядом с compose лежат только конфиги и короткие ссылки на документацию.
 
-GHCR image names for releases:
+Имена образов для релизов:
 
 - `ghcr.io/3252a8/remnawave-minishop-backend`
 - `ghcr.io/3252a8/remnawave-minishop-worker`
 - `ghcr.io/3252a8/remnawave-minishop-frontend`
+- `docker.io/3252a8/remnawave-minishop-backend`
+- `docker.io/3252a8/remnawave-minishop-worker`
+- `docker.io/3252a8/remnawave-minishop-frontend`
+
+Сборка и публикация сразу в GHCR и Docker Hub:
+
+```bash
+docker login ghcr.io
+docker login docker.io
+IMAGE_TAG=v3.4.3 bash scripts/docker-build-push-images.sh
+```
 
 ## Поддержать проект
 
