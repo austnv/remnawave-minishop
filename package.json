@@ -2,6 +2,10 @@
   "private": true,
   "scripts": {
     "build:webapp": "npm --prefix frontend run build:webapp",
+    "build:docs": "npm --prefix docs-site run build",
+    "dev:docs": "npm --prefix docs-site run dev",
+    "preview:docs": "npm --prefix docs-site run preview",
+    "sync:docs": "npm --prefix docs-site run sync:docs",
     "lint:py": "python -m ruff check .",
     "lint:js": "npm --prefix frontend run lint",
     "lint": "npm run lint:py && npm run lint:js",
