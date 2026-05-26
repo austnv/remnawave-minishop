@@ -113,7 +113,7 @@ function frontmatter({ title, description, sourceRelativePath }) {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/');
-  const editUrl = `https://gitlab.com/3252a8/remnawave-minshop/-/edit/main/docs/${editPath}`;
+  const editUrl = `https://gitlab.com/3252a8/remnawave-minishop/-/edit/main/docs/${editPath}`;
   return [
     '---',
     `title: ${yamlString(title)}`,
