@@ -17,7 +17,7 @@ from bot.keyboards.inline.user_keyboards import (
 )
 from bot.middlewares.i18n import JsonI18n
 from config.settings import Settings
-from db.dal import user_dal
+from db.dal import tariff_dal, user_dal
 
 from .email_auth_service import EmailAuthService
 from .email_templates import render_subscription_expiring
@@ -63,12 +63,45 @@ class PanelWebhookService:
         **kwargs,
     ):
         _ = lambda k, **kw: self.i18n.gettext(lang, k, **kw)
+        extra_text = str(kwargs.pop("extra_text", "") or "").strip()
         try:
+            text = _(message_key, **kwargs)
+            if extra_text:
+                text = f"{text}\n\n{extra_text}"
             await self.bot.send_message(
-                user_id, _(message_key, **kwargs), reply_markup=reply_markup
+                user_id, text, reply_markup=reply_markup
             )
         except Exception:
             logging.exception("Failed to send notification to %s", user_id)
+
+    async def _hwid_renewal_note(self, internal_user_id: int, lang: str) -> str:
+        try:
+            from db.dal import subscription_dal
+
+            async with self.async_session_factory() as session:
+                sub = await subscription_dal.get_active_subscription_by_user_id(
+                    session, internal_user_id
+                )
+                if not sub:
+                    return ""
+                summary = await tariff_dal.get_hwid_device_entitlement_summary(
+                    session,
+                    subscription_id=sub.subscription_id,
+                )
+                count = int(summary.get("active_devices") or sub.extra_hwid_devices or 0)
+                if count <= 0:
+                    return ""
+                active_until = summary.get("active_until") or sub.end_date
+                date_text = active_until.strftime("%Y-%m-%d") if active_until else ""
+        except Exception:
+            logging.exception("Failed to build HWID renewal note for user %s", internal_user_id)
+            return ""
+        return self.i18n.gettext(
+            lang,
+            "subscription_hwid_renewal_reminder",
+            count=count,
+            date=date_text,
+        )
 
     async def handle_event(self, event_name: str, user_payload: dict):
         telegram_id = user_payload.get("telegramId")
@@ -97,6 +130,7 @@ class PanelWebhookService:
 
         if event_name in EVENT_MAP:
             days_left, msg_key = EVENT_MAP[event_name]
+            hwid_renewal_note = await self._hwid_renewal_note(internal_user_id, lang)
             if days_left == 1:
                 # Trigger auto-renew via SubscriptionService (wired in at factory)
                 try:
@@ -148,6 +182,7 @@ class PanelWebhookService:
                                 "autorenew_48h_charge_tomorrow_notice",
                                 reply_markup=cancel_kb,
                                 user_name=first_name,
+                                extra_text=hwid_renewal_note,
                             )
                             return
                 await self._send_message(
@@ -157,6 +192,7 @@ class PanelWebhookService:
                     reply_markup=markup,
                     user_name=first_name,
                     end_date=user_payload.get("expireAt", "")[:10],
+                    extra_text=hwid_renewal_note,
                 )
                 if days_left == 3 and user_email:
                     await self._send_subscription_expiring_email(
@@ -206,8 +242,9 @@ class PanelWebhookService:
                 days_left=days_left,
                 end_date_text=end_date_text,
                 dashboard_url=(self.settings.SUBSCRIPTION_MINI_APP_URL or "").strip() or None,
+                i18n=self.i18n,
             )
-            email_service = EmailAuthService(self.settings)
+            email_service = EmailAuthService(self.settings, self.i18n)
             await email_service.send_rendered_email(email=recipient, content=content)
         except Exception:
             logging.exception("Failed to send subscription-expiring email to %s", recipient)

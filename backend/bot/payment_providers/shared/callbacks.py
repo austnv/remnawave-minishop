@@ -21,6 +21,8 @@ from .common import (
     format_human_units,
     mark_payment_failed_creation,
     sale_mode_base,
+    sale_mode_is_hwid_devices,
+    sale_mode_tariff_key,
 )
 
 
@@ -110,6 +112,34 @@ def describe_payment(translator: Translator, parts: PaymentCallbackParts) -> str
         sale_mode=parts.sale_mode,
         human_value=parts.human_value,
     )
+
+
+async def quote_hwid_callback_parts(
+    *,
+    session: AsyncSession,
+    user_id: int,
+    parts: PaymentCallbackParts,
+    subscription_service,
+    currency: str = "rub",
+) -> tuple[Optional[PaymentCallbackParts], Optional[dict]]:
+    if not sale_mode_is_hwid_devices(parts.sale_mode):
+        return parts, None
+    quote = await subscription_service.quote_hwid_device_topup(
+        session,
+        user_id=user_id,
+        device_count=int(parts.months),
+        tariff_key=sale_mode_tariff_key(parts.sale_mode),
+        renewal=sale_mode_base(parts.sale_mode) == "hwid_devices_renewal",
+        currency=currency,
+    )
+    if not quote:
+        return None, None
+    quoted_parts = PaymentCallbackParts(
+        months=parts.months,
+        price=float(quote.get("price") or 0),
+        sale_mode=parts.sale_mode,
+    )
+    return quoted_parts, quote
 
 
 def payment_link_message_text(

@@ -882,6 +882,140 @@ def _migration_0026_add_lifetime_traffic_synced_at(connection: Connection) -> No
         )
 
 
+def _migration_0027_add_subscription_install_share_token(connection: Connection) -> None:
+    inspector = inspect(connection)
+    columns: Set[str] = {col["name"] for col in inspector.get_columns("subscriptions")}
+
+    if "install_share_token" not in columns:
+        connection.execute(
+            text("ALTER TABLE subscriptions ADD COLUMN install_share_token VARCHAR(32)")
+        )
+
+    connection.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_install_share_token
+            ON subscriptions (install_share_token)
+            WHERE install_share_token IS NOT NULL
+            """
+        )
+    )
+
+
+def _migration_0028_add_locale_overrides(connection: Connection) -> None:
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS locale_overrides (
+                lang VARCHAR(16) NOT NULL,
+                key VARCHAR(255) NOT NULL,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_by BIGINT,
+                PRIMARY KEY (lang, key)
+            )
+            """
+        )
+    )
+
+
+def _migration_0029_add_hwid_device_purchase_validity(connection: Connection) -> None:
+    inspector = inspect(connection)
+    table_names = set(inspector.get_table_names())
+    if "hwid_device_purchases" not in table_names or "subscriptions" not in table_names:
+        return
+
+    columns: Set[str] = {
+        col["name"] for col in inspector.get_columns("hwid_device_purchases")
+    }
+    if "valid_from" not in columns:
+        connection.execute(
+            text("ALTER TABLE hwid_device_purchases ADD COLUMN valid_from TIMESTAMPTZ")
+        )
+    if "valid_until" not in columns:
+        connection.execute(
+            text("ALTER TABLE hwid_device_purchases ADD COLUMN valid_until TIMESTAMPTZ")
+        )
+
+    connection.execute(
+        text(
+            """
+            UPDATE hwid_device_purchases hp
+            SET
+                valid_from = COALESCE(hp.valid_from, hp.created_at, s.start_date, NOW()),
+                valid_until = COALESCE(hp.valid_until, s.end_date)
+            FROM subscriptions s
+            WHERE hp.subscription_id = s.subscription_id
+              AND (hp.valid_from IS NULL OR hp.valid_until IS NULL)
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO hwid_device_purchases (
+                subscription_id,
+                payment_id,
+                purchased_devices,
+                valid_from,
+                valid_until
+            )
+            SELECT
+                s.subscription_id,
+                NULL,
+                s.extra_hwid_devices,
+                COALESCE(s.start_date, NOW()),
+                s.end_date
+            FROM subscriptions s
+            WHERE COALESCE(s.extra_hwid_devices, 0) > 0
+              AND s.end_date IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM hwid_device_purchases hp
+                  WHERE hp.subscription_id = s.subscription_id
+              )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_hwid_device_purchases_subscription_window "
+            "ON hwid_device_purchases (subscription_id, valid_from, valid_until)"
+        )
+    )
+
+
+def _migration_0030_add_hwid_pricing_metadata(connection: Connection) -> None:
+    inspector = inspect(connection)
+    table_names = set(inspector.get_table_names())
+    if "payments" in table_names:
+        payment_columns: Set[str] = {col["name"] for col in inspector.get_columns("payments")}
+        payment_additions = {
+            "hwid_valid_from": "TIMESTAMPTZ",
+            "hwid_valid_until": "TIMESTAMPTZ",
+            "hwid_pricing_period_months": "INTEGER",
+            "hwid_proration_ratio": "DOUBLE PRECISION",
+            "hwid_full_price": "DOUBLE PRECISION",
+        }
+        for column, ddl_type in payment_additions.items():
+            if column not in payment_columns:
+                connection.execute(text(f"ALTER TABLE payments ADD COLUMN {column} {ddl_type}"))
+
+    if "tariff_changes" in table_names:
+        change_columns: Set[str] = {
+            col["name"] for col in inspector.get_columns("tariff_changes")
+        }
+        change_additions = {
+            "converted_hwid_value_rub": "NUMERIC",
+            "converted_hwid_days": "INTEGER",
+        }
+        for column, ddl_type in change_additions.items():
+            if column not in change_columns:
+                connection.execute(
+                    text(f"ALTER TABLE tariff_changes ADD COLUMN {column} {ddl_type}")
+                )
+
+
 MIGRATIONS: List[Migration] = [
     Migration(
         id="0001_add_channel_subscription_fields",
@@ -1023,6 +1157,26 @@ MIGRATIONS: List[Migration] = [
         id="0026_add_lifetime_traffic_synced_at",
         description="Track when lifetime traffic usage was last synced from panel",
         upgrade=_migration_0026_add_lifetime_traffic_synced_at,
+    ),
+    Migration(
+        id="0027_add_subscription_install_share_token",
+        description="Add stable public share tokens for install instructions",
+        upgrade=_migration_0027_add_subscription_install_share_token,
+    ),
+    Migration(
+        id="0028_add_locale_overrides",
+        description="Persist runtime overrides for localization strings",
+        upgrade=_migration_0028_add_locale_overrides,
+    ),
+    Migration(
+        id="0029_add_hwid_device_purchase_validity",
+        description="Track validity windows for HWID device top-ups",
+        upgrade=_migration_0029_add_hwid_device_purchase_validity,
+    ),
+    Migration(
+        id="0030_add_hwid_pricing_metadata",
+        description="Persist quoted HWID top-up pricing windows and conversion audit",
+        upgrade=_migration_0030_add_hwid_pricing_metadata,
     ),
 ]
 

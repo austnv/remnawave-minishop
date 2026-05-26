@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
 from bot.services.notification_service import NotificationService
 from bot.utils.config_link import prepare_config_links
+from bot.utils.install_links import ensure_user_install_guide_links
 from bot.utils.text_sanitizer import sanitize_display_name, username_for_display
 from db.dal import payment_dal, user_dal
 from db.models import Payment, User
@@ -18,6 +19,7 @@ from db.models import Payment, User
 from .common import Translator, format_human_units, make_translator, sale_mode_base
 
 _TRAFFIC_MODES = {"traffic", "traffic_package", "topup", "premium_topup"}
+_HWID_DEVICE_MODES = {"hwid_device", "hwid_devices", "hwid_devices_renewal"}
 
 
 def is_traffic_sale_base(sale_base: str) -> bool:
@@ -70,7 +72,6 @@ class SuccessMessage:
     months: Any
     base_end_date: Optional[datetime]
     final_end_date: Optional[datetime]
-    config_link_text: str
     applied_referee_bonus_days: int = 0
     applied_promo_bonus_days: int = 0
     inviter_name: Optional[str] = None
@@ -97,7 +98,11 @@ def build_success_message(payload: SuccessMessage) -> str:
             "payment_successful_traffic_full",
             traffic_gb=format_human_units(payload.months),
             end_date=end_text,
-            config_link=payload.config_link_text,
+        )
+    if base in _HWID_DEVICE_MODES:
+        return _(
+            "payment_successful_hwid_devices_full",
+            count=format_human_units(payload.months),
         )
     if payload.applied_referee_bonus_days and payload.final_end_date:
         base_end_text = _fmt_date(payload.base_end_date or payload.final_end_date, end_text)
@@ -108,7 +113,6 @@ def build_success_message(payload: SuccessMessage) -> str:
             bonus_days=payload.applied_referee_bonus_days,
             final_end_date=end_text,
             inviter_name=payload.inviter_name or _("friend_placeholder"),
-            config_link=payload.config_link_text,
         )
     if payload.applied_promo_bonus_days and payload.final_end_date:
         return _(
@@ -116,14 +120,34 @@ def build_success_message(payload: SuccessMessage) -> str:
             months=payload.months,
             bonus_days=payload.applied_promo_bonus_days,
             end_date=end_text,
-            config_link=payload.config_link_text,
         )
     return _(
         "payment_successful_full",
         months=payload.months,
         end_date=end_text,
-        config_link=payload.config_link_text,
     )
+
+
+def append_hwid_renewal_note(
+    text: str,
+    translator: Translator,
+    *,
+    count: Any,
+    valid_until: Optional[datetime],
+) -> str:
+    try:
+        count_int = int(count or 0)
+    except (TypeError, ValueError):
+        count_int = 0
+    if count_int <= 0:
+        return text
+    date_text = valid_until.strftime("%Y-%m-%d") if valid_until else ""
+    note = translator(
+        "payment_successful_hwid_devices_renewal_note",
+        count=format_human_units(count_int),
+        date=date_text,
+    )
+    return f"{text}\n\n{note}"
 
 
 async def send_success_message_to_user(
@@ -136,6 +160,7 @@ async def send_success_message_to_user(
     settings: Any,
     config_link_display: Optional[str],
     connect_button_url: Optional[str],
+    install_share_url: Optional[str] = None,
     include_keyboard: bool = True,
     log_prefix: str = "payment_providers",
 ) -> None:
@@ -148,6 +173,7 @@ async def send_success_message_to_user(
             settings,
             config_link_display,
             connect_button_url=connect_button_url,
+            install_share_url=install_share_url,
             preserve_message=True,
         )
     try:
@@ -177,6 +203,7 @@ async def notify_admins_payment_received(
     traffic_is_premium: bool,
     tariff_key: Optional[str],
     log_prefix: str = "payment_providers",
+    email: Optional[str] = None,
 ) -> None:
     """Push the standard ``notify_payment_received`` to the admin log channel."""
     try:
@@ -189,6 +216,7 @@ async def notify_admins_payment_received(
             traffic_gb=traffic_gb_for_admin,
             payment_provider=payment_provider,
             username=username,
+            email=email,
             traffic_is_premium=traffic_is_premium,
             tariff_key=tariff_key,
         )
@@ -299,7 +327,6 @@ async def finalize_successful_payment(
     config_link_display, connect_button_url = await prepare_config_links(
         req.settings, raw_config_link
     )
-    config_link_text = config_link_display or translator("config_link_not_available")
 
     base_end_date = activation.get("end_date") if activation else None
     final_end_date = base_end_date
@@ -323,14 +350,40 @@ async def finalize_successful_payment(
             ),
             base_end_date=base_end_date,
             final_end_date=final_end_date,
-            config_link_text=config_link_text,
             applied_referee_bonus_days=applied_referee_bonus_days,
             applied_promo_bonus_days=applied_promo_bonus_days,
             inviter_name=inviter_name,
         )
     )
+    if is_subscription and activation:
+        success_text = append_hwid_renewal_note(
+            success_text,
+            translator,
+            count=activation.get("hwid_devices_renewal_recommended_count"),
+            valid_until=activation.get("hwid_devices_valid_until"),
+        )
     if req.text_prefix:
         success_text = f"{req.text_prefix}\n{success_text}"
+
+    install_share_url = None
+    if not req.skip_keyboard:
+        install_links = await ensure_user_install_guide_links(
+            req.session,
+            req.settings,
+            req.user_id,
+        )
+        install_share_url = install_links.public_share_url
+        if install_share_url:
+            try:
+                await req.session.commit()
+            except Exception:
+                await req.session.rollback()
+                logging.exception(
+                    "%s: failed to persist install guide share token for user %s.",
+                    req.log_prefix,
+                    req.user_id,
+                )
+                install_share_url = None
 
     await send_success_message_to_user(
         bot=req.bot,
@@ -341,6 +394,7 @@ async def finalize_successful_payment(
         settings=req.settings,
         config_link_display=config_link_display,
         connect_button_url=connect_button_url,
+        install_share_url=install_share_url,
         include_keyboard=not req.skip_keyboard,
         log_prefix=req.log_prefix,
     )
@@ -359,6 +413,7 @@ async def finalize_successful_payment(
         traffic_gb_for_admin=traffic_gb_for_activation,
         payment_provider=req.provider_notification,
         username=db_user.username if db_user else None,
+        email=getattr(db_user, "email", None) if db_user else None,
         traffic_is_premium=base == "premium_topup",
         tariff_key=tariff_key,
         log_prefix=req.log_prefix,

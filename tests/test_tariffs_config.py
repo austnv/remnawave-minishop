@@ -110,7 +110,7 @@ class TariffsConfigTests(unittest.TestCase):
         data = _valid_config()
         data["tariffs"][0]["hwid_device_limit"] = 5
         data["tariffs"][0]["hwid_device_packages"] = {
-            "rub": [{"count": 1, "price": 99}],
+            "rub": [{"count": 1, "price": 99, "prices": {"3": 249}, "min_price": 20}],
             "stars": [{"count": 1, "price": 2500}],
         }
 
@@ -120,6 +120,9 @@ class TariffsConfigTests(unittest.TestCase):
         self.assertEqual(tariff.hwid_device_limit, 5)
         self.assertTrue(tariff.has_hwid_device_packages())
         self.assertEqual(tariff.hwid_device_packages.rub[0].count, 1)
+        self.assertEqual(tariff.hwid_device_packages.rub[0].price_for_period(3), 249)
+        self.assertEqual(tariff.hwid_device_packages.rub[0].price_for_period(6), 594)
+        self.assertEqual(tariff.hwid_device_packages.rub[0].min_price, 20)
 
     def test_negative_hwid_device_limit_rejected(self):
         data = _valid_config()

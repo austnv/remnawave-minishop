@@ -50,6 +50,30 @@
   align-items: start;
 }
 
+.dialog-title-block {
+  min-width: 0;
+}
+
+.dialog-title-with-icon {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.dialog-title-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--accent);
+}
+
+.dialog-title-icon svg {
+  width: 23px;
+  height: 23px;
+}
+
 .dialog-head h2 {
   margin: 0;
   color: var(--text);
@@ -76,6 +100,31 @@
 .payment-dialog-body {
   display: grid;
   gap: 10px;
+}
+
+.activation-success-dialog {
+  width: min(100%, 440px);
+  gap: 22px;
+  padding: 22px 20px 20px;
+}
+
+.activation-success-dialog .dialog-title-with-icon {
+  gap: 14px;
+}
+
+.activation-success-dialog .dialog-head p {
+  margin-top: 8px;
+  line-height: 1.52;
+}
+
+.activation-success-dialog-body {
+  display: grid;
+  justify-items: center;
+  padding-top: 2px;
+}
+
+.activation-success-dialog-body .btn {
+  width: 100%;
 }
 
 .payment-divider {

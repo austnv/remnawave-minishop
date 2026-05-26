@@ -4,10 +4,12 @@ from types import SimpleNamespace
 
 from bot.keyboards.inline.user_keyboards import get_payment_method_keyboard
 from bot.payment_providers import (
+    build_provider_configs,
     get_provider_spec,
     iter_provider_specs,
     iter_service_keys,
     pending_statuses,
+    provider_admin_only_pairs,
     provider_emoji_map,
     provider_label_map,
     provider_telegram_button_text,
@@ -21,6 +23,7 @@ from bot.payment_providers.shared import (
     sale_mode_is_traffic,
     sale_mode_tariff_key,
 )
+from bot.payment_providers.yookassa import _resolve_yookassa_activation_amounts
 from config.settings import Settings
 
 _LEGACY_PROVIDER_FILES = [
@@ -188,12 +191,10 @@ def test_provider_presentation_ignores_cross_language_override():
 
     settings = SimpleNamespace(PAYMENT_YOOKASSA_WEBAPP_LABEL_RU="Карта")
 
-    assert resolve_provider_presentation(spec, settings, language="en").webapp_label == "Bank card"
+    assert resolve_provider_presentation(spec, settings, language="en").webapp_label == "YooKassa"
 
 
 def test_payment_method_keyboard_uses_custom_telegram_text_without_changing_callback(monkeypatch):
-    from bot.payment_providers import build_provider_configs
-
     monkeypatch.setenv("WATA_ENABLED", "True")
     monkeypatch.setenv("PAYMENT_WATA_TELEGRAM_LABEL_EN", "Wata custom")
     monkeypatch.setenv("PAYMENT_WATA_TELEGRAM_EMOJI", "💸")
@@ -222,6 +223,84 @@ def test_payment_method_keyboard_uses_custom_telegram_text_without_changing_call
     button = markup.inline_keyboard[0][0]
     assert button.text == "💸 Wata custom"
     assert button.callback_data == "pay_wata:1:150:subscription"
+
+
+def test_admin_only_provider_is_visible_only_to_admins(monkeypatch):
+    from bot.app.web.webapp.serializers import _serialize_payment_methods
+
+    monkeypatch.setenv("WATA_ENABLED", "False")
+    monkeypatch.setenv("WATA_ADMIN_ONLY_ENABLED", "True")
+    build_provider_configs(force=True)
+
+    settings = Settings(
+        _env_file=None,
+        BOT_TOKEN="token",
+        POSTGRES_USER="app_user",
+        POSTGRES_PASSWORD="app_password",
+        TARIFFS_CONFIG_PATH="missing-tariffs.json",
+        PAYMENT_METHODS_ORDER="wata",
+        ADMIN_IDS="42",
+        STARS_ENABLED=False,
+    )
+    i18n = SimpleNamespace(gettext=lambda _lang, key, **_kwargs: key)
+    app = {"wata_service": SimpleNamespace(configured=True)}
+    spec = get_provider_spec("wata")
+
+    regular_markup = get_payment_method_keyboard(
+        months=1,
+        price=150,
+        stars_price=None,
+        currency_symbol_val="RUB",
+        lang="en",
+        i18n_instance=i18n,
+        settings=settings,
+        user_id=7,
+    )
+    admin_markup = get_payment_method_keyboard(
+        months=1,
+        price=150,
+        stars_price=None,
+        currency_symbol_val="RUB",
+        lang="en",
+        i18n_instance=i18n,
+        settings=settings,
+        user_id=42,
+    )
+
+    assert spec is not None
+    assert not spec.is_visible(settings, app)
+    assert not spec.is_visible_for_user(settings, app, is_admin=False)
+    assert spec.is_visible_for_user(settings, app, is_admin=True)
+    assert all(
+        not button.callback_data.startswith("pay_wata:")
+        for row in regular_markup.inline_keyboard
+        for button in row
+    )
+    assert admin_markup.inline_keyboard[0][0].callback_data == "pay_wata:1:150:subscription"
+    assert _serialize_payment_methods(settings, app, "en", is_admin=False) == []
+    assert _serialize_payment_methods(settings, app, "en", is_admin=True)[0]["id"] == "wata"
+
+
+def test_admin_only_provider_toggle_pairs_are_declared():
+    pairs = set(provider_admin_only_pairs())
+
+    assert ("WATA_ENABLED", "WATA_ADMIN_ONLY_ENABLED") in pairs
+    assert ("PLATEGA_SBP_ENABLED", "PLATEGA_SBP_ADMIN_ONLY_ENABLED") in pairs
+    assert ("PLATEGA_CRYPTO_ENABLED", "PLATEGA_CRYPTO_ADMIN_ONLY_ENABLED") in pairs
+    assert ("STARS_ENABLED", "STARS_ADMIN_ONLY_ENABLED") in pairs
+
+
+def test_admin_only_provider_toggle_normalization_disables_public_pair():
+    from bot.services.settings_override_service import _normalize_exclusive_provider_toggles
+
+    updates, deletes = _normalize_exclusive_provider_toggles(
+        {"WATA_ADMIN_ONLY_ENABLED": True},
+        ["WATA_ENABLED"],
+    )
+
+    assert updates["WATA_ADMIN_ONLY_ENABLED"] is True
+    assert updates["WATA_ENABLED"] is False
+    assert deletes == []
 
 
 def test_provider_callbacks_are_built_from_specs():
@@ -259,7 +338,11 @@ def test_provider_callbacks_are_built_from_specs():
     )
 
 
-def test_provider_visibility_uses_service_configuration():
+def test_provider_visibility_uses_service_configuration(monkeypatch):
+    monkeypatch.setenv("WATA_ENABLED", "True")
+    monkeypatch.delenv("WATA_ADMIN_ONLY_ENABLED", raising=False)
+    build_provider_configs(force=True)
+
     spec = get_provider_spec("wata")
     assert spec is not None
 
@@ -291,3 +374,24 @@ def test_common_sale_mode_helpers_cover_provider_payment_records():
     assert hwid.purchased_hwid_devices == 3
     assert hwid.tariff_key == "vip"
     assert hwid.hwid_devices_sale
+
+
+def test_yookassa_hwid_webapp_metadata_uses_device_count_for_activation():
+    (
+        subscription_months,
+        traffic_amount_gb,
+        hwid_devices_count,
+        months_for_activation,
+        traffic_gb_for_activation,
+    ) = _resolve_yookassa_activation_amounts(
+        sale_mode_base="hwid_devices",
+        subscription_months_raw="0",
+        traffic_gb_raw=None,
+        hwid_devices_raw="3",
+    )
+
+    assert subscription_months == 0
+    assert traffic_amount_gb == 0
+    assert hwid_devices_count == 3
+    assert months_for_activation == 3
+    assert traffic_gb_for_activation is None

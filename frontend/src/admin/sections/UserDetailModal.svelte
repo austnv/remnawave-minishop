@@ -1028,7 +1028,7 @@
   description={at(
     "user_delete_confirm_subtitle",
     {},
-    "Действие необратимо. Удалятся все платежи, подписки и логи."
+    "Действие необратимо. Удалятся записи в БД бота и пользователь в Remnawave Panel."
   )}
   closeLabel={at("close", {}, "Закрыть")}
   onclose={() => usersStore.updateState({ userDeleteOpen: false })}

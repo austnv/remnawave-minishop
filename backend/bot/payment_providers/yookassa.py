@@ -36,6 +36,7 @@ from bot.services.panel_api_service import PanelApiService
 from bot.services.referral_service import ReferralService
 from bot.services.subscription_service import SubscriptionService
 from bot.utils.config_link import prepare_config_links
+from bot.utils.install_links import ensure_user_install_guide_links
 from bot.utils.request_security import ip_in_allowlist, request_client_ip
 from config.settings import Settings
 from db.dal import payment_dal, user_billing_dal, user_dal
@@ -48,9 +49,12 @@ from .base import (
     ServiceFactoryContext,
     WebAppPaymentContext,
     provider_env_file,
+    provider_runtime_enabled,
 )
 from .shared import (
+    PaymentCallbackParts,
     SuccessMessage,
+    append_hwid_renewal_note,
     build_success_message,
     create_webapp_payment_record,
     format_human_units,
@@ -63,6 +67,7 @@ from .shared import (
     payment_link_response,
     payment_record_amounts,
     payment_unavailable,
+    quote_hwid_callback_parts,
     resolve_inviter_name,
     send_success_message_to_user,
 )
@@ -150,7 +155,7 @@ class YooKassaService:
         )
 
         if not self.configured:
-            if not self.config.ENABLED:
+            if not provider_runtime_enabled(self.config):
                 logging.warning(
                     "YooKassa is disabled via YOOKASSA_ENABLED flag. Payment functionality will be DISABLED."  # noqa: E501
                 )
@@ -163,7 +168,11 @@ class YooKassaService:
 
     @property
     def configured(self) -> bool:
-        if not (self.config.ENABLED and self.config.SHOP_ID and self.config.SECRET_KEY):
+        if not (
+            provider_runtime_enabled(self.config)
+            and self.config.SHOP_ID
+            and self.config.SECRET_KEY
+        ):
             return False
         self._ensure_sdk_configured()
         return self._sdk_configured_for is not None
@@ -254,6 +263,9 @@ class YooKassaService:
             if save_payment_method:
                 # Ask YooKassa to save method for off-session charges
                 builder.set_save_payment_method(True)
+            elif not payment_method_id:
+                # Keep the Smart Payment form unrestricted for one-off payments.
+                builder.set_save_payment_method(False)
             if payment_method_id:
                 # Use a previously saved payment method for merchant-initiated payments
                 builder.set_payment_method_id(payment_method_id)
@@ -410,6 +422,49 @@ YOOKASSA_WEBHOOK_ALLOWED_IPS = [
     "77.75.154.128/25",
     "2a02:5180::/32",
 ]
+HWID_DEVICE_SALE_BASES = {"hwid_device", "hwid_devices", "hwid_devices_renewal"}
+
+
+def _is_hwid_device_sale_base(sale_mode_base: str) -> bool:
+    return sale_mode_base in HWID_DEVICE_SALE_BASES
+
+
+def _metadata_value_present(value: Optional[Any]) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def _resolve_yookassa_activation_amounts(
+    *,
+    sale_mode_base: str,
+    subscription_months_raw: Optional[Any],
+    traffic_gb_raw: Optional[Any],
+    hwid_devices_raw: Optional[Any],
+) -> tuple[float, float, int, int, Optional[float]]:
+    subscription_months = float(subscription_months_raw or 0)
+    traffic_amount_gb = (
+        float(traffic_gb_raw) if _metadata_value_present(traffic_gb_raw) else subscription_months
+    )
+    hwid_devices_count = (
+        int(float(hwid_devices_raw))
+        if _metadata_value_present(hwid_devices_raw)
+        else (int(subscription_months) if _is_hwid_device_sale_base(sale_mode_base) else 0)
+    )
+
+    if sale_mode_base == "subscription":
+        months_for_activation = int(subscription_months)
+    elif _is_hwid_device_sale_base(sale_mode_base):
+        months_for_activation = hwid_devices_count
+    else:
+        months_for_activation = int(traffic_amount_gb)
+
+    traffic_gb_for_activation = traffic_amount_gb if is_traffic_sale_base(sale_mode_base) else None
+    return (
+        subscription_months,
+        traffic_amount_gb,
+        hwid_devices_count,
+        months_for_activation,
+        traffic_gb_for_activation,
+    )
 
 
 async def process_successful_payment(
@@ -427,6 +482,7 @@ async def process_successful_payment(
     user_id_str = metadata.get("user_id")
     subscription_months_str = metadata.get("subscription_months")
     traffic_gb_str = metadata.get("traffic_gb")
+    hwid_devices_str = metadata.get("hwid_devices")
     sale_mode = metadata.get("sale_mode") or (
         "traffic" if settings.traffic_sale_mode else "subscription"
     )
@@ -439,7 +495,11 @@ async def process_successful_payment(
     # we will create/ensure a payment record idempotently using provider payment id.
     if (
         not user_id_str
-        or (not subscription_months_str and not traffic_gb_str)
+        or not (
+            _metadata_value_present(subscription_months_str)
+            or _metadata_value_present(traffic_gb_str)
+            or _metadata_value_present(hwid_devices_str)
+        )
         or (not payment_db_id_str and not auto_renew_subscription_id_str)
     ):
         logging.error(
@@ -450,8 +510,18 @@ async def process_successful_payment(
     db_user = None
     try:
         user_id = int(user_id_str)
-        subscription_months = float(subscription_months_str or 0)
-        traffic_amount_gb = float(traffic_gb_str) if traffic_gb_str else subscription_months
+        (
+            subscription_months,
+            traffic_amount_gb,
+            hwid_devices_count,
+            months_for_activation,
+            traffic_gb_for_activation,
+        ) = _resolve_yookassa_activation_amounts(
+            sale_mode_base=sale_mode_base,
+            subscription_months_raw=subscription_months_str,
+            traffic_gb_raw=traffic_gb_str,
+            hwid_devices_raw=hwid_devices_str,
+        )
         payment_db_id = (
             int(payment_db_id_str) if payment_db_id_str and payment_db_id_str.isdigit() else None
         )
@@ -468,6 +538,21 @@ async def process_successful_payment(
         months_for_record = int(subscription_months) if sale_mode_base == "subscription" else 0
         payment_value = float(amount_data.get("value", 0.0))
         yk_payment_id_from_hook = payment_info_from_webhook.get("id")
+
+        if _is_hwid_device_sale_base(sale_mode_base) and hwid_devices_count <= 0:
+            logging.error(
+                "YooKassa HWID payment %s has invalid device count in metadata: %s",
+                yk_payment_id_from_hook,
+                metadata,
+            )
+            if payment_db_id is not None:
+                await payment_dal.update_payment_status_by_db_id(
+                    session,
+                    payment_db_id,
+                    "failed_metadata_error",
+                    yk_payment_id_from_hook,
+                )
+            return
 
         payment_record = None
         # If this is an auto-renewal (no payment_db_id in metadata), ensure a payment record exists
@@ -613,9 +698,6 @@ async def process_successful_payment(
                     logging.exception("Failed to persist multi-card YooKassa method from webhook")
         except Exception:
             logging.exception("Failed to persist YooKassa payment method from webhook")
-        months_for_activation = (
-            int(subscription_months) if sale_mode_base == "subscription" else int(traffic_amount_gb)
-        )
         activation_details = await subscription_service.activate_subscription(
             session,
             user_id,
@@ -625,12 +707,12 @@ async def process_successful_payment(
             promo_code_id_from_payment=promo_code_id,
             provider="yookassa",
             sale_mode=sale_mode,
-            traffic_gb=traffic_amount_gb
-            if sale_mode_base in {"traffic", "traffic_package", "topup", "premium_topup"}
-            else None,
+            traffic_gb=traffic_gb_for_activation,
         )
 
-        if not activation_details or not activation_details.get("end_date"):
+        if not activation_details or (
+            sale_mode_base == "subscription" and not activation_details.get("end_date")
+        ):
             logging.error(
                 f"Failed to activate subscription for user {user_id} after payment {yk_payment_id_from_hook}"  # noqa: E501
             )
@@ -648,7 +730,7 @@ async def process_successful_payment(
             )
             raise Exception(f"DB Error: Could not update payment record {payment_db_id}")
 
-        base_subscription_end_date = activation_details["end_date"]
+        base_subscription_end_date = activation_details.get("end_date")
         final_end_date_for_user = base_subscription_end_date
         applied_promo_bonus_days = activation_details.get("applied_promo_bonus_days", 0)
 
@@ -683,6 +765,11 @@ async def process_successful_payment(
             if not receipt_item_name:
                 if is_traffic_sale_base(sale_mode_base):
                     receipt_item_name = settings.LKNPD_RECEIPT_NAME_TRAFFIC.format(gb=traffic_label)
+                elif _is_hwid_device_sale_base(sale_mode_base):
+                    receipt_item_name = _(
+                        "payment_description_hwid_devices",
+                        count=hwid_devices_count,
+                    )
                 else:
                     receipt_item_name = settings.LKNPD_RECEIPT_NAME_SUBSCRIPTION.format(
                         months=int(subscription_months)
@@ -702,7 +789,6 @@ async def process_successful_payment(
         config_link_display, connect_button_url = await prepare_config_links(
             settings, activation_details.get("subscription_url") if activation_details else None
         )
-        config_link_text = config_link_display or _("config_link_not_available")
         # Auto-renew charges show a concise message and skip the connect keyboard, so
         # they bypass the shared success-message builder.
         if sale_mode_base == "subscription" and is_auto_renew and final_end_date_for_user:
@@ -712,7 +798,11 @@ async def process_successful_payment(
                 end_date=final_end_date_for_user.strftime("%Y-%m-%d"),
             )
             include_keyboard = False
-        elif not final_end_date_for_user and not is_traffic_sale_base(sale_mode_base):
+        elif (
+            sale_mode_base == "subscription"
+            and not final_end_date_for_user
+            and not is_traffic_sale_base(sale_mode_base)
+        ):
             logging.error(
                 f"Critical error: final_end_date_for_user is None for user {user_id} after successful payment logic."  # noqa: E501
             )
@@ -729,11 +819,14 @@ async def process_successful_payment(
                     months=(
                         traffic_label
                         if is_traffic_sale_base(sale_mode_base)
-                        else int(subscription_months)
+                        else (
+                            hwid_devices_count
+                            if _is_hwid_device_sale_base(sale_mode_base)
+                            else int(subscription_months)
+                        )
                     ),
                     base_end_date=base_subscription_end_date,
                     final_end_date=final_end_date_for_user,
-                    config_link_text=config_link_text,
                     applied_referee_bonus_days=applied_referee_bonus_days_from_referral or 0,
                     applied_promo_bonus_days=applied_promo_bonus_days,
                     inviter_name=inviter_name,
@@ -741,6 +834,19 @@ async def process_successful_payment(
                 )
             )
             include_keyboard = True
+
+        if sale_mode_base == "subscription" and activation_details:
+            details_message = append_hwid_renewal_note(
+                details_message,
+                translator,
+                count=activation_details.get("hwid_devices_renewal_recommended_count"),
+                valid_until=activation_details.get("hwid_devices_valid_until"),
+            )
+
+        install_share_url = None
+        if include_keyboard:
+            install_links = await ensure_user_install_guide_links(session, settings, user_id)
+            install_share_url = install_links.public_share_url
         await send_success_message_to_user(
             bot=bot,
             user_id=user_id,
@@ -750,6 +856,7 @@ async def process_successful_payment(
             settings=settings,
             config_link_display=config_link_display,
             connect_button_url=connect_button_url,
+            install_share_url=install_share_url,
             include_keyboard=include_keyboard,
             log_prefix="YooKassa webhook",
         )
@@ -773,6 +880,7 @@ async def process_successful_payment(
             ),
             payment_provider="yookassa",
             username=user_for_notify.username if user_for_notify else None,
+            email=getattr(user_for_notify, "email", None) if user_for_notify else None,
             traffic_is_premium=sale_mode_base == "premium_topup",
             tariff_key=tariff_for_log,
             log_prefix="YooKassa webhook",
@@ -1191,6 +1299,7 @@ async def _initiate_yk_payment(
     payment_method_id: Optional[str] = None,
     selected_method_internal_id: Optional[int] = None,
     sale_mode: str = "subscription",
+    hwid_quote: Optional[dict] = None,
 ) -> bool:
     """Create payment record and initiate YooKassa payment (new card or saved card)."""
     if not callback.message:
@@ -1202,7 +1311,7 @@ async def _initiate_yk_payment(
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
         else (
             get_text("payment_description_hwid_devices", count=int(months))
-            if sale_base in {"hwid_device", "hwid_devices"}
+            if sale_base in HWID_DEVICE_SALE_BASES
             else get_text("payment_description_subscription", months=int(months))
         )
     )
@@ -1219,8 +1328,15 @@ async def _initiate_yk_payment(
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
         else None,
         "purchased_hwid_devices": int(months)
-        if sale_base in {"hwid_device", "hwid_devices"}
+        if sale_base in HWID_DEVICE_SALE_BASES
         else None,
+        "hwid_valid_from": hwid_quote.get("valid_from") if hwid_quote else None,
+        "hwid_valid_until": hwid_quote.get("valid_until") if hwid_quote else None,
+        "hwid_pricing_period_months": hwid_quote.get("pricing_period_months")
+        if hwid_quote
+        else None,
+        "hwid_proration_ratio": hwid_quote.get("proration_ratio") if hwid_quote else None,
+        "hwid_full_price": hwid_quote.get("full_price") if hwid_quote else None,
     }
 
     db_payment_record = None
@@ -1257,6 +1373,8 @@ async def _initiate_yk_payment(
     }
     if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}:
         yookassa_metadata["traffic_gb"] = str(months)
+    if sale_base in HWID_DEVICE_SALE_BASES:
+        yookassa_metadata["hwid_devices"] = str(months)
     if payment_method_id:
         yookassa_metadata["used_saved_payment_method_id"] = payment_method_id
 
@@ -1460,6 +1578,29 @@ async def _initiate_yk_payment(
     return False
 
 
+async def _yookassa_available_to_callback_user(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    get_text,
+) -> bool:
+    if SPEC.is_available_to_user(
+        settings,
+        user_id=callback.from_user.id,
+        require_configured=False,
+    ):
+        return True
+    try:
+        await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
+    except Exception:
+        pass
+    if callback.message:
+        try:
+            await callback.message.edit_text(get_text("payment_service_unavailable"))
+        except Exception:
+            pass
+    return False
+
+
 @router.callback_query(F.data.startswith("pay_yk:"))
 async def pay_yk_callback_handler(
     callback: types.CallbackQuery,
@@ -1477,6 +1618,9 @@ async def pay_yk_callback_handler(
             await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
         except Exception:
             pass
+        return
+
+    if not await _yookassa_available_to_callback_user(callback, settings, get_text):
         return
 
     if not yookassa_service or not yookassa_service.configured:
@@ -1509,6 +1653,23 @@ async def pay_yk_callback_handler(
         return
 
     months, price_rub, sale_mode = parsed
+    hwid_quote = None
+    if _sale_mode_base(sale_mode) in HWID_DEVICE_SALE_BASES:
+        quoted_parts, hwid_quote = await quote_hwid_callback_parts(
+            session=session,
+            user_id=callback.from_user.id,
+            parts=PaymentCallbackParts(months=months, price=price_rub, sale_mode=sale_mode),
+            subscription_service=yookassa_service.subscription_service,
+            currency="rub",
+        )
+        if not quoted_parts:
+            try:
+                await callback.answer(get_text("error_try_again"), show_alert=True)
+            except Exception:
+                pass
+            return
+        months = quoted_parts.months
+        price_rub = quoted_parts.price
     user_id = callback.from_user.id
     currency_code_for_yk = "RUB"
     autopay_enabled = bool(
@@ -1585,6 +1746,7 @@ async def pay_yk_callback_handler(
         save_payment_method=autopay_enabled and autopay_require_binding,
         back_callback=payment_methods_back_callback(_format_value(months), sale_mode, price_rub),
         sale_mode=sale_mode,
+        hwid_quote=hwid_quote,
     )
     try:
         await callback.answer()
@@ -1609,6 +1771,9 @@ async def pay_yk_new_card_handler(
             await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
         except Exception:
             pass
+        return
+
+    if not await _yookassa_available_to_callback_user(callback, settings, get_text):
         return
 
     if not yookassa_service or not yookassa_service.configured:
@@ -1693,6 +1858,9 @@ async def pay_yk_saved_list_handler(
             await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
         except Exception:
             pass
+        return
+
+    if not await _yookassa_available_to_callback_user(callback, settings, get_text):
         return
 
     try:
@@ -1853,6 +2021,9 @@ async def pay_yk_use_saved_handler(
             await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
         except Exception:
             pass
+        return
+
+    if not await _yookassa_available_to_callback_user(callback, settings, get_text):
         return
 
     if not yookassa_service or not yookassa_service.configured:
@@ -2557,10 +2728,7 @@ async def create_webapp_payment(ctx: WebAppPaymentContext) -> web.Response:
             description=ctx.description,
             metadata=metadata,
             receipt_email=service.config.DEFAULT_RECEIPT_EMAIL,
-            save_payment_method=bool(
-                service.config.autopayments_active
-                and service.config.AUTOPAYMENTS_REQUIRE_CARD_BINDING
-            ),
+            save_payment_method=False,
         )
         payment_url = response.get("confirmation_url") if response else None
         if not payment_url:
@@ -2700,8 +2868,8 @@ SPEC = PaymentProviderSpec(
     id="yookassa",
     provider_key="yookassa",
     label="YooKassa",
-    webapp_label="Банковская карта",
-    webapp_labels={"ru": "Банковская карта", "en": "Bank card"},
+    webapp_label="ЮKassa",
+    webapp_labels={"ru": "ЮKassa", "en": "YooKassa"},
     webapp_icon="CreditCard",
     telegram_labels={"ru": "ЮKassa", "en": "YooKassa"},
     telegram_emoji="💳",

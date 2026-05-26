@@ -8,6 +8,7 @@
     Download,
     FileText,
     Globe2,
+    Languages,
     LayoutDashboard,
     LifeBuoy,
     Megaphone,
@@ -30,6 +31,7 @@
   import AdsSection from "./sections/AdsSection.svelte";
   import BroadcastSection from "./sections/BroadcastSection.svelte";
   import LogsSection from "./sections/LogsSection.svelte";
+  import PaymentDetailModal from "./sections/PaymentDetailModal.svelte";
   import PaymentsSection from "./sections/PaymentsSection.svelte";
   import PromosSection from "./sections/PromosSection.svelte";
   import SettingsSection from "./sections/SettingsSection.svelte";
@@ -37,6 +39,7 @@
   import SupportSection from "./sections/SupportSection.svelte";
   import TariffEditorModal from "./sections/TariffEditorModal.svelte";
   import TariffsSection from "./sections/TariffsSection.svelte";
+  import TranslationsSection from "./sections/TranslationsSection.svelte";
   import AppearanceSection from "./sections/AppearanceSection.svelte";
   import UserDetailModal from "./sections/UserDetailModal.svelte";
   import UsersSection from "./sections/UsersSection.svelte";
@@ -50,6 +53,7 @@
   import { createAdminSupportStore } from "../lib/admin/stores/supportStore.js";
   import { createTariffsStore } from "../lib/admin/stores/tariffsStore.js";
   import { createThemesStore } from "../lib/admin/stores/themesStore.js";
+  import { createTranslationsStore } from "../lib/admin/stores/translationsStore.js";
   import { createUsersStore } from "../lib/admin/stores/usersStore.js";
   import {
     fmtDate,
@@ -75,11 +79,14 @@
   export let onClose = () => {};
   export let onToast = () => {};
   export let initialSection = "stats";
+  export let initialPaymentId = null;
+  export let initialPaymentUserId = null;
   export let initialUserId = null;
   export let onSectionChange = () => {};
   export let onSettingsSaved = () => {};
   export let onTariffsSaved = () => {};
   export let onThemesSaved = () => {};
+  export let onTranslationsSaved = () => {};
   export let brand = {};
   export let brandTitle = "/minishop";
   export let appFaviconUrl = "";
@@ -125,6 +132,7 @@
       items: [
         { id: "tariffs", label: at("nav_tariffs", {}, "Тарифы"), icon: Coins },
         { id: "appearance", label: at("nav_appearance", {}, "Внешний вид"), icon: Paintbrush },
+        { id: "translations", label: at("nav_translations", {}, "Переводы"), icon: Languages },
         { id: "settings", label: at("nav_settings", {}, "Настройки"), icon: Sliders },
       ],
     },
@@ -175,6 +183,14 @@
       title: at("section_appearance_title", {}, "Внешний вид"),
       subtitle: at("section_appearance_subtitle", {}, "Логотип, темы и акцентные цвета Mini App"),
     },
+    translations: {
+      title: at("section_translations_title", {}, "Переводы"),
+      subtitle: at(
+        "section_translations_subtitle",
+        {},
+        "Оверрайды строк локализации из базы данных и data/locales-overrides.json"
+      ),
+    },
     settings: {
       title: at("section_settings_title", {}, "Настройки приложения"),
       subtitle: at("section_settings_subtitle", {}, "Оверрайды над .env, применяются мгновенно"),
@@ -213,13 +229,14 @@
   const adsStore = createAdsStore({ api, onToast: flash, at });
   const broadcastStore = createBroadcastStore({ api, onToast: flash, at });
   const logsStore = createLogsStore({ api, at });
-  const paymentsStore = createPaymentsStore({ api, at });
+  const paymentsStore = createPaymentsStore({ api, onToast: flash, at });
   const promosStore = createPromosStore({ api, onToast: flash, at });
   const settingsStore = createSettingsStore({ api, onToast: flash, at });
   const statsStore = createStatsStore({ api, onToast: flash, at });
   const supportStore = createAdminSupportStore({ api, onToast: flash, at });
   const tariffsStore = createTariffsStore({ api, onToast: flash, onTariffsSaved, flash, at });
   const themesStore = createThemesStore({ api, onThemesSaved, flash, at });
+  const translationsStore = createTranslationsStore({ api, onToast: flash, at });
   const usersStore = createUsersStore({ api, onToast: flash, at });
 
   setContext("promosStore", promosStore);
@@ -233,12 +250,16 @@
   setContext("usersStore", usersStore);
   setContext("tariffsStore", tariffsStore);
   setContext("themesStore", themesStore);
+  setContext("translationsStore", translationsStore);
 
   $: usersStore.setActive(active);
+  $: paymentsStore.setActive(active);
   $: supportStore.setActive(active);
   $: dirtyCount = Object.keys($settingsStore.settingsDirty || {}).length;
+  $: translationsDirtyCount = Object.keys($translationsStore.translationsDirty || {}).length;
   $: syncBusy = $statsStore.syncBusy;
   $: settingsSaving = $settingsStore.settingsSaving;
+  $: translationsSaving = $translationsStore.translationsSaving;
   $: meta = SECTION_META[active] || { title: active, subtitle: "" };
   $: currentLanguageOption =
     languageOptions.find((option) => option.value === currentLang) || languageOptions[0];
@@ -251,13 +272,14 @@
     if (active === next) return;
     active = next;
     usersStore.closeUser();
+    paymentsStore.closePayment();
     supportStore.closeTicketView();
     onSectionChange(next);
   }
 
   function readSectionFromPath() {
     if (typeof window === "undefined") return "stats";
-    const match = window.location.pathname.match(/^\/admin\/([a-z0-9_-]+)(?:\/[^/]+)?$/i);
+    const match = window.location.pathname.match(/^\/admin\/([a-z0-9_-]+)(?:\/.*)?$/i);
     return normalizeSection(match ? match[1].toLowerCase() : "stats");
   }
 
@@ -273,16 +295,41 @@
     return match ? Number(match[1]) : null;
   }
 
+  function readPaymentIdFromPath() {
+    if (typeof window === "undefined") return null;
+    const match = window.location.pathname.match(/^\/admin\/payments\/(\d+)$/);
+    return match ? Number(match[1]) : null;
+  }
+
+  function readPaymentUserIdFromPath() {
+    if (typeof window === "undefined") return null;
+    const match = window.location.pathname.match(/^\/admin\/payments\/users\/(-?\d+)$/);
+    return match ? Number(match[1]) : null;
+  }
+
   function onPopState() {
     active = readSectionFromPath();
     sidebarOpen = false;
     const userId = readUserIdFromPath();
-    if (userId) {
-      if (!$usersStore.openedUser || $usersStore.openedUser.user_id !== userId) {
-        usersStore.openUser(userId, { skipPush: true });
+    const paymentUserId = active === "payments" ? readPaymentUserIdFromPath() : null;
+    const contextualUserId = paymentUserId || userId;
+    if (contextualUserId) {
+      if (!$usersStore.openedUser || $usersStore.openedUser.user_id !== contextualUserId) {
+        usersStore.openUser(contextualUserId, {
+          skipPush: true,
+          pathContext: paymentUserId ? "payments" : "users",
+        });
       }
     } else if ($usersStore.openedUser) {
       usersStore.closeUser({ skipPush: true });
+    }
+    const paymentId = readPaymentIdFromPath();
+    if (active === "payments" && paymentId) {
+      if (!$paymentsStore.openedPaymentId || $paymentsStore.openedPaymentId !== paymentId) {
+        paymentsStore.openPayment(paymentId, { skipPush: true });
+      }
+    } else if ($paymentsStore.openedPaymentId) {
+      paymentsStore.closePayment({ skipPush: true });
     }
     const ticketId = readSupportTicketIdFromPath();
     if (active === "support" && ticketId) {
@@ -303,14 +350,16 @@
     const uid = Number(userId);
     // Synthetic email-only users use negative user_id; still a valid admin target.
     if (!Number.isFinite(uid) || uid === 0) return;
-    const next = normalizeSection("users");
+    const next = normalizeSection("payments");
     sidebarOpen = false;
     if (active !== next) {
       active = next;
       usersStore.closeUser();
+      paymentsStore.closePayment({ skipPush: true });
       onSectionChange(next);
     }
-    usersStore.openUser(uid);
+    paymentsStore.closePayment({ skipPush: true });
+    usersStore.openUser(uid, { pathContext: "payments" });
   }
 
   function resolvedAvatarUrl(user) {
@@ -432,6 +481,22 @@
     (!$usersStore.openedUser || $usersStore.openedUser.user_id !== initialUserId)
   ) {
     usersStore.openUser(initialUserId, { skipPush: true });
+  }
+
+  $: if (
+    active === "payments" &&
+    initialPaymentId &&
+    (!$paymentsStore.openedPaymentId || $paymentsStore.openedPaymentId !== initialPaymentId)
+  ) {
+    paymentsStore.openPayment(initialPaymentId, { skipPush: true });
+  }
+
+  $: if (
+    active === "payments" &&
+    initialPaymentUserId &&
+    (!$usersStore.openedUser || $usersStore.openedUser.user_id !== initialPaymentUserId)
+  ) {
+    usersStore.openUser(initialPaymentUserId, { skipPush: true, pathContext: "payments" });
   }
 </script>
 
@@ -628,6 +693,27 @@
               : at("btn_save", {}, "Сохранить")}
           </AdminButton>
         {/if}
+        {#if active === "translations"}
+          {#if translationsDirtyCount}
+            <AdminBadge variant="warning"
+              >{at(
+                "settings_dirty_count",
+                { count: translationsDirtyCount },
+                "Изменений: " + translationsDirtyCount
+              )}</AdminBadge
+            >
+          {/if}
+          <AdminButton
+            variant="primary"
+            onclick={() => translationsStore.saveTranslations(onTranslationsSaved)}
+            disabled={!translationsDirtyCount || translationsSaving}
+          >
+            <Save size={14} />
+            {translationsSaving
+              ? at("btn_saving", {}, "Сохранение...")
+              : at("btn_save", {}, "Сохранить")}
+          </AdminButton>
+        {/if}
       </div>
     </header>
 
@@ -686,7 +772,7 @@
           {/if}
 
           {#if active === "tariffs"}
-            <TariffsSection {at} {fmtMoney} />
+            <TariffsSection {at} {fmtMoney} {onSettingsSaved} />
           {/if}
 
           {#if active === "appearance"}
@@ -701,7 +787,11 @@
           {/if}
 
           {#if active === "settings"}
-            <SettingsSection {at} {isCompact} {onSettingsSaved} {currentLang} />
+            <SettingsSection {at} {onSettingsSaved} {currentLang} />
+          {/if}
+
+          {#if active === "translations"}
+            <TranslationsSection {at} {onTranslationsSaved} />
           {/if}
         </div>
       {/key}
@@ -710,6 +800,14 @@
 </div>
 
 <TariffEditorModal {at} />
+
+<PaymentDetailModal
+  {at}
+  {fmtDate}
+  {fmtMoney}
+  {paymentStatusVariant}
+  onOpenUserCard={openPaymentUserCard}
+/>
 
 <UserDetailModal
   {at}

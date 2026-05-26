@@ -430,6 +430,17 @@ async def account_telegram_link_route(request: web.Request) -> web.Response:
 async def me_route(request: web.Request) -> web.Response:
     user_id = _require_user_id(request)
     settings: Settings = request.app["settings"]
+    fresh = str(request.query.get("fresh") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if fresh:
+        await _invalidate_webapp_user_caches(settings, user_id)
+        data = await _build_user_payload(request, user_id)
+        return web.json_response({"ok": True, **data})
+
     data = await webapp_cached_user_payload(
         settings,
         "me",
@@ -477,6 +488,11 @@ async def account_language_route(request: web.Request) -> web.Response:
         return validation_error
 
     language = _normalize_language(str(language_payload.language or ""))
+    i18n = request.app.get("i18n")
+    if i18n and hasattr(i18n, "reload_overrides_from_file"):
+        i18n.reload_overrides_from_file()
+    if i18n and language not in getattr(i18n, "locales_data", {}):
+        return _json_error(400, "unsupported_language", "Unsupported language")
     async_session_factory: sessionmaker = request.app["async_session_factory"]
     async with async_session_factory() as session:
         db_user = await user_dal.get_user_by_id(session, user_id)

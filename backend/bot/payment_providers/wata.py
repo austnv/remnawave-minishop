@@ -2,7 +2,7 @@ import base64
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from aiogram import Bot, F, Router, types
 from aiohttp import web
@@ -28,6 +28,7 @@ from .base import (
     ServiceFactoryContext,
     WebAppPaymentContext,
     provider_env_file,
+    provider_runtime_enabled,
 )
 from .shared import (
     HttpClientMixin,
@@ -48,13 +49,76 @@ from .shared import (
     notify_user_payment_failed,
     parse_payment_callback,
     payment_failed,
+    payment_link_response,
+    payment_record_amounts,
     payment_unavailable,
     post_json_request,
+    quote_hwid_callback_parts,
     render_link_or_fail,
+    render_payment_link,
+    safe_callback_answer,
+    sale_mode_base,
 )
 
 router = Router(name="user_subscription_payments_wata_router")
 _LOG = "wata"
+_WATA_IN_PROGRESS_STATUSES = {"created", "pending"}
+_WATA_LINK_OPENED_STATUSES = {"opened", "open"}
+_WATA_LINK_DEFAULT_TTL_MINUTES = 15
+_WATA_LINK_MIN_TTL_MINUTES = 15
+_WATA_LINK_MAX_TTL_MINUTES = 30 * 24 * 60
+
+
+def _clamp_wata_link_ttl_minutes(value: Any, *, default: int) -> int:
+    if isinstance(value, str):
+        value = value.strip()
+    try:
+        minutes = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(_WATA_LINK_MAX_TTL_MINUTES, max(_WATA_LINK_MIN_TTL_MINUTES, minutes))
+
+
+def _parse_wata_datetime(raw: Any) -> Optional[datetime]:
+    if not raw:
+        return None
+    try:
+        iso_value = str(raw).strip()
+        if iso_value.endswith("Z"):
+            iso_value = iso_value[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(iso_value)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _wata_success_status(status: int, _body: Any) -> bool:
+    return 200 <= status < 300
+
+
+def _normalized_wata_status(payload: Optional[Mapping[str, Any]]) -> str:
+    if not payload:
+        return ""
+    return (
+        str(
+            payload.get("transactionStatus")
+            or payload.get("status")
+            or payload.get("statusName")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
+
+
+def _wata_transaction_id(payload: Optional[Mapping[str, Any]]) -> Optional[str]:
+    return first_value(payload, "transactionId", "id")
+
+
+def _wata_payment_link_id(payload: Optional[Mapping[str, Any]]) -> Optional[str]:
+    return first_value(payload, "paymentLinkId", "payment_link_id")
 
 
 class WataConfig(ProviderEnvConfig):
@@ -70,21 +134,15 @@ class WataConfig(ProviderEnvConfig):
     BASE_URL: str = Field(default="https://api.wata.pro/api/h2h")
     RETURN_URL: Optional[str] = None
     FAILED_URL: Optional[str] = None
-    PAYMENT_LINK_TTL_DAYS: int = Field(default=3)
+    LINK_TTL_MINUTES: int = Field(default=_WATA_LINK_DEFAULT_TTL_MINUTES)
     WEBHOOK_VERIFY_SIGNATURE: bool = Field(default=True)
     PUBLIC_KEY: Optional[str] = None
     TRUSTED_IPS: str = Field(default="62.84.126.140,51.250.106.150")
 
-    @field_validator("PAYMENT_LINK_TTL_DAYS", mode="before")
+    @field_validator("LINK_TTL_MINUTES", mode="before")
     @classmethod
-    def _clamp_ttl(cls, v):
-        if isinstance(v, str):
-            v = v.strip()
-        try:
-            value = int(v)
-        except (TypeError, ValueError):
-            return 3
-        return min(30, max(1, value))
+    def _clamp_link_ttl_minutes(cls, v):
+        return _clamp_wata_link_ttl_minutes(v, default=_WATA_LINK_DEFAULT_TTL_MINUTES)
 
     @field_validator("API_TOKEN", "RETURN_URL", "FAILED_URL", "PUBLIC_KEY", mode="before")
     @classmethod
@@ -141,13 +199,13 @@ class WataService(HttpClientMixin):
         self._default_return_url = default_return_url
         self._cached_public_key_pem = None  # populated by webhook on first verify
 
-        self._init_http_client(total_timeout=20)
+        self._init_http_client(total_timeout=10)
         if not self.configured:
             logging.warning("WataService initialized but not fully configured. Payments disabled.")
 
     @property
     def configured(self) -> bool:
-        return bool(self.config.ENABLED and self.api_token)
+        return bool(provider_runtime_enabled(self.config) and self.api_token)
 
     @property
     def base_url(self) -> str:
@@ -166,8 +224,8 @@ class WataService(HttpClientMixin):
         return self.config.FAILED_URL or self.return_url
 
     @property
-    def payment_link_ttl_days(self) -> int:
-        return self.config.PAYMENT_LINK_TTL_DAYS
+    def payment_link_ttl_minutes(self) -> int:
+        return self.config.LINK_TTL_MINUTES
 
     @property
     def verify_webhook_signature(self) -> bool:
@@ -200,7 +258,9 @@ class WataService(HttpClientMixin):
             return False, {"message": "service_not_configured"}
 
         session = await self._get_session()
-        expires_at = datetime.now(timezone.utc) + timedelta(days=self.payment_link_ttl_days)
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(minutes=self.payment_link_ttl_minutes)
+        ).replace(microsecond=0)
         body: Dict[str, Any] = {
             "amount": float(format_decimal_amount(amount)),
             "currency": (currency or self.settings.DEFAULT_CURRENCY_SYMBOL or "RUB").upper(),
@@ -208,7 +268,7 @@ class WataService(HttpClientMixin):
             "orderId": str(payment_db_id),
             "successRedirectUrl": self.return_url,
             "failRedirectUrl": self.failed_url,
-            "expirationDateTime": expires_at.isoformat().replace("+00:00", "Z"),
+            "expirationDateTime": expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
         return await post_json_request(
             session,
@@ -216,6 +276,120 @@ class WataService(HttpClientMixin):
             body=body,
             headers=self._auth_headers(),
             log_prefix="Wata create_payment_link",
+            is_success=_wata_success_status,
+        )
+
+    async def _get_json(
+        self,
+        url: str,
+        *,
+        params: Optional[Mapping[str, Any]] = None,
+        log_prefix: str,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        if not self.configured:
+            logging.error("WataService is not configured. Cannot fetch provider state.")
+            return False, {"message": "service_not_configured"}
+
+        session = await self._get_session()
+        try:
+            async with session.get(
+                url,
+                params=dict(params or {}),
+                headers=self._auth_headers(),
+            ) as response:
+                response_text = await response.text()
+                try:
+                    response_data = json.loads(response_text) if response_text else {}
+                except json.JSONDecodeError:
+                    logging.error("%s: invalid JSON response: %s", log_prefix, response_text)
+                    return False, {
+                        "status": response.status,
+                        "message": "invalid_json",
+                        "raw": response_text,
+                    }
+                if not _wata_success_status(response.status, response_data):
+                    logging.error(
+                        "%s: API returned error (status=%s, body=%s)",
+                        log_prefix,
+                        response.status,
+                        response_data,
+                    )
+                    return False, {"status": response.status, "message": response_data}
+                return True, response_data
+        except Exception as exc:
+            logging.exception("%s: request failed.", log_prefix)
+            return False, {"message": str(exc)}
+
+    async def get_payment_link(self, payment_link_id: str) -> Tuple[bool, Dict[str, Any]]:
+        return await self._get_json(
+            f"{self.base_url}/links/{payment_link_id}",
+            log_prefix="Wata get_payment_link",
+        )
+
+    async def try_reuse_pending_link(self, payment: Any) -> Optional[str]:
+        """Return the existing payment link URL if it's still usable; else None.
+
+        Used to avoid creating duplicate Wata links each time a user re-clicks
+        the pay button. Repeated abandoned links inflate Wata's anti-fraud
+        signals and can cause downstream bank-side rejections during the
+        bank-selection step.
+        """
+        if not self.configured:
+            return None
+        provider_payment_id = str(getattr(payment, "provider_payment_id", "") or "").strip()
+        if not provider_payment_id:
+            return None
+
+        success, data = await self.get_payment_link(provider_payment_id)
+        if not success or not isinstance(data, dict):
+            return None
+
+        status = _normalized_wata_status(data) or str(data.get("status") or "").strip().lower()
+        if status and status not in _WATA_LINK_OPENED_STATUSES:
+            return None
+
+        expiration_raw = data.get("expirationDateTime") or data.get("expiration_date_time")
+        if expiration_raw:
+            exp_dt = _parse_wata_datetime(expiration_raw)
+            if exp_dt is None:
+                logging.warning(
+                    "Wata try_reuse_pending_link: unparseable expirationDateTime %r",
+                    expiration_raw,
+                )
+                return None
+            if exp_dt <= datetime.now(timezone.utc):
+                return None
+
+        return first_value(data, "url", "paymentUrl", "payment_url")
+
+    async def get_transaction(self, transaction_id: str) -> Tuple[bool, Dict[str, Any]]:
+        return await self._get_json(
+            f"{self.base_url}/transactions/{transaction_id}",
+            log_prefix="Wata get_transaction",
+        )
+
+    async def search_transactions(
+        self,
+        *,
+        order_id: Optional[str] = None,
+        payment_link_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 5,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        params: Dict[str, Any] = {
+            "skipCount": 0,
+            "maxResultCount": max(1, min(int(limit or 5), 1000)),
+        }
+        if order_id:
+            params["orderId"] = order_id
+        if payment_link_id:
+            params["paymentLinkId"] = payment_link_id
+        if status:
+            params["statuses"] = status
+        return await self._get_json(
+            f"{self.base_url}/transactions",
+            params=params,
+            log_prefix="Wata search_transactions",
         )
 
     async def _get_public_key_pem(self) -> Optional[str]:
@@ -256,6 +430,287 @@ class WataService(HttpClientMixin):
             logging.exception("Wata webhook: signature verification failed.")
             return False
 
+    def _transaction_matches_payment(
+        self,
+        payload: Mapping[str, Any],
+        payment: Any,
+        *,
+        provider_payment_id: Optional[str],
+    ) -> bool:
+        order_id = str(payload.get("orderId") or "").strip()
+        if order_id and order_id == str(payment.payment_id):
+            return True
+
+        payment_link_id = _wata_payment_link_id(payload)
+        if payment_link_id and provider_payment_id and payment_link_id == provider_payment_id:
+            return True
+
+        transaction_id = _wata_transaction_id(payload)
+        if transaction_id and provider_payment_id and transaction_id == provider_payment_id:
+            return True
+
+        return False
+
+    async def _find_transaction_for_payment(
+        self,
+        payment: Any,
+        *,
+        status: str,
+    ) -> Optional[Dict[str, Any]]:
+        provider_payment_id = str(getattr(payment, "provider_payment_id", "") or "").strip()
+        success, response_data = await self.search_transactions(
+            order_id=str(payment.payment_id),
+            status=status,
+            limit=5,
+        )
+        if success:
+            for item in response_data.get("items") or []:
+                if not isinstance(item, dict):
+                    continue
+                if _normalized_wata_status(item) != status.lower():
+                    continue
+                if self._transaction_matches_payment(
+                    item,
+                    payment,
+                    provider_payment_id=provider_payment_id or None,
+                ):
+                    return item
+
+        return None
+
+    async def _mark_paid_from_payload(
+        self,
+        session: AsyncSession,
+        payment: Any,
+        payload: Mapping[str, Any],
+        *,
+        log_prefix: str,
+    ) -> Optional[Any]:
+        current = await payment_dal.get_payment_by_db_id(session, payment.payment_id)
+        if current:
+            payment = current
+        if payment.status == "succeeded":
+            return payment
+
+        transaction_id = _wata_transaction_id(payload) or str(payment.payment_id)
+        amount_raw = payload.get("amount")
+        currency = payload.get("currency") or self.settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
+
+        if amount_raw is not None:
+            try:
+                if not decimal_amounts_equal(amount_raw, payment.amount):
+                    logging.warning(
+                        "%s: amount mismatch for payment %s (expected %s, got %s)",
+                        log_prefix,
+                        payment.payment_id,
+                        format_decimal_amount(payment.amount),
+                        format_decimal_amount(amount_raw),
+                    )
+            except Exception as exc:
+                logging.warning(
+                    "%s: failed to compare amounts for %s: %s",
+                    log_prefix,
+                    payment.payment_id,
+                    exc,
+                )
+
+        try:
+            await payment_dal.update_provider_payment_and_status(
+                session,
+                payment.payment_id,
+                transaction_id,
+                "succeeded",
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logging.exception(
+                "%s: failed to mark payment %s as succeeded.",
+                log_prefix,
+                transaction_id,
+            )
+            return None
+
+        payment_units = payment.purchased_gb or payment.subscription_duration_months or 1
+        sale_mode = payment.sale_mode or (
+            "traffic" if self.settings.traffic_sale_mode else "subscription"
+        )
+        outcome = await finalize_successful_payment(
+            PaymentSuccessRequest(
+                bot=self.bot,
+                settings=self.settings,
+                i18n=self.i18n,
+                session=session,
+                subscription_service=self.subscription_service,
+                referral_service=self.referral_service,
+                payment=payment,
+                user_id=payment.user_id,
+                amount=float(payment.amount),
+                currency=str(currency),
+                sale_mode=sale_mode,
+                months=payment_units,
+                traffic_amount=float(payment_units),
+                provider_subscription="wata",
+                provider_notification="wata",
+                db_user=payment.user,
+                log_prefix=log_prefix,
+            )
+        )
+        if outcome is None:
+            return None
+        return await payment_dal.get_payment_by_db_id(session, payment.payment_id) or payment
+
+    async def _mark_declined_from_payload(
+        self,
+        session: AsyncSession,
+        payment: Any,
+        payload: Mapping[str, Any],
+        *,
+        log_prefix: str,
+        notify_user: bool,
+    ) -> Optional[Any]:
+        transaction_id = _wata_transaction_id(payload) or str(payment.payment_id)
+        try:
+            await payment_dal.update_provider_payment_and_status(
+                session,
+                payment.payment_id,
+                transaction_id,
+                "failed",
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logging.exception(
+                "%s: failed to mark payment %s as failed.",
+                log_prefix,
+                transaction_id,
+            )
+            return None
+
+        if notify_user:
+            await notify_user_payment_failed(
+                bot=self.bot,
+                settings=self.settings,
+                i18n=self.i18n,
+                session=session,
+                payment=payment,
+            )
+        return await payment_dal.get_payment_by_db_id(session, payment.payment_id) or payment
+
+    def _local_payment_link_ttl_expired(self, payment: Any) -> bool:
+        created_at = getattr(payment, "created_at", None)
+        if isinstance(created_at, datetime):
+            created_dt = (
+                created_at.replace(tzinfo=timezone.utc)
+                if created_at.tzinfo is None
+                else created_at.astimezone(timezone.utc)
+            )
+        else:
+            created_dt = _parse_wata_datetime(created_at)
+        if created_dt is None:
+            return False
+        expires_at = created_dt + timedelta(minutes=self.payment_link_ttl_minutes)
+        return expires_at <= datetime.now(timezone.utc)
+
+    async def _expired_link_payload_for_payment(self, payment: Any) -> Optional[Mapping[str, Any]]:
+        provider_payment_id = str(getattr(payment, "provider_payment_id", "") or "").strip()
+        if not provider_payment_id:
+            return None
+
+        success, data = await self.get_payment_link(provider_payment_id)
+        if not success or not isinstance(data, dict):
+            status_code = data.get("status") if isinstance(data, dict) else None
+            if status_code == 404 and self._local_payment_link_ttl_expired(payment):
+                return {"id": provider_payment_id}
+            return None
+
+        expiration_raw = data.get("expirationDateTime") or data.get("expiration_date_time")
+        expiration_dt = _parse_wata_datetime(expiration_raw)
+        if expiration_dt is None:
+            return None
+        if expiration_dt > datetime.now(timezone.utc):
+            return None
+        return data
+
+    async def _mark_expired_link(
+        self,
+        session: AsyncSession,
+        payment: Any,
+        payload: Mapping[str, Any],
+        *,
+        log_prefix: str,
+    ) -> Optional[Any]:
+        provider_payment_id = (
+            first_value(payload, "id", "paymentLinkId", "payment_link_id")
+            or getattr(payment, "provider_payment_id", None)
+            or str(payment.payment_id)
+        )
+        try:
+            await payment_dal.update_provider_payment_and_status(
+                session,
+                payment.payment_id,
+                str(provider_payment_id),
+                "canceled",
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logging.exception(
+                "%s: failed to mark expired payment link %s as canceled.",
+                log_prefix,
+                provider_payment_id,
+            )
+            return None
+        return await payment_dal.get_payment_by_db_id(session, payment.payment_id) or payment
+
+    async def refresh_payment_status(self, session: AsyncSession, payment: Any) -> Any:
+        if str(getattr(payment, "provider", "") or "").lower() != "wata":
+            return payment
+        if not self.configured:
+            return payment
+
+        current_status = str(getattr(payment, "status", "") or "").lower()
+        if current_status == "succeeded" or current_status in {
+            "failed",
+            "canceled",
+            "cancelled",
+            "failed_creation",
+        }:
+            return payment
+
+        paid_payload = await self._find_transaction_for_payment(payment, status="Paid")
+        if paid_payload:
+            refreshed = await self._mark_paid_from_payload(
+                session,
+                payment,
+                paid_payload,
+                log_prefix="Wata status refresh",
+            )
+            return refreshed or payment
+
+        declined_payload = await self._find_transaction_for_payment(payment, status="Declined")
+        if declined_payload:
+            refreshed = await self._mark_declined_from_payload(
+                session,
+                payment,
+                declined_payload,
+                log_prefix="Wata status refresh",
+                notify_user=False,
+            )
+            return refreshed or payment
+
+        expired_link_payload = await self._expired_link_payload_for_payment(payment)
+        if expired_link_payload:
+            refreshed = await self._mark_expired_link(
+                session,
+                payment,
+                expired_link_payload,
+                log_prefix="Wata status refresh",
+            )
+            return refreshed or payment
+
+        return payment
+
     async def webhook_route(self, request: web.Request) -> web.Response:
         if not self.configured:
             return web.Response(status=503, text="wata_disabled")
@@ -287,12 +742,11 @@ class WataService(HttpClientMixin):
             return web.Response(status=400, text="bad_request")
 
         transaction_id = str(payload.get("transactionId") or "").strip()
+        payment_link_id = str(payload.get("paymentLinkId") or payload.get("id") or "").strip()
         status = str(payload.get("transactionStatus") or "").strip().lower()
         order_id_raw = payload.get("orderId")
-        amount_raw = payload.get("amount")
-        currency = payload.get("currency") or self.settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
 
-        if not status or not (transaction_id or order_id_raw):
+        if not status or not (transaction_id or order_id_raw or payment_link_id):
             logging.error("Wata webhook: missing transaction status or ids: %s", payload)
             return web.Response(status=400, text="missing_fields")
 
@@ -302,106 +756,63 @@ class WataService(HttpClientMixin):
                 order_id_raw=order_id_raw,
                 provider_payment_id=transaction_id or None,
             )
+            if not payment and payment_link_id:
+                payment = await lookup_payment_by_order_or_provider_id(
+                    session,
+                    provider_payment_id=payment_link_id,
+                )
             if not payment:
                 logging.error(
-                    "Wata webhook: payment not found (order_id=%s, transaction_id=%s)",
+                    "Wata webhook: payment not found "
+                    "(order_id=%s, transaction_id=%s, payment_link_id=%s)",
                     order_id_raw,
                     transaction_id,
+                    payment_link_id,
                 )
                 return web.Response(status=404, text="payment_not_found")
 
-            if payment.status == "succeeded" and status == "paid":
+            if payment.status == "succeeded":
                 return web.Response(text="ok")
 
-            resolved_transaction_id = transaction_id or str(payment.payment_id)
+            if status in _WATA_IN_PROGRESS_STATUSES:
+                if transaction_id and payment.provider_payment_id != transaction_id:
+                    try:
+                        await payment_dal.update_provider_payment_and_status(
+                            session,
+                            payment.payment_id,
+                            transaction_id,
+                            payment.status,
+                        )
+                        await session.commit()
+                    except Exception:
+                        await session.rollback()
+                        logging.exception(
+                            "Wata webhook: failed to persist transaction id %s for payment %s.",
+                            transaction_id,
+                            payment.payment_id,
+                        )
+                        return web.Response(status=500, text="processing_error")
+                return web.Response(text="ok")
 
             if status == "paid":
-                if amount_raw is not None:
-                    try:
-                        if not decimal_amounts_equal(amount_raw, payment.amount):
-                            logging.warning(
-                                "Wata webhook: amount mismatch for payment %s "
-                                "(expected %s, got %s)",
-                                payment.payment_id,
-                                format_decimal_amount(payment.amount),
-                                format_decimal_amount(amount_raw),
-                            )
-                    except Exception as exc:
-                        logging.warning(
-                            "Wata webhook: failed to compare amounts for %s: %s",
-                            payment.payment_id,
-                            exc,
-                        )
-
-                try:
-                    await payment_dal.update_provider_payment_and_status(
-                        session,
-                        payment.payment_id,
-                        resolved_transaction_id,
-                        "succeeded",
-                    )
-                    await session.commit()
-                except Exception:
-                    await session.rollback()
-                    logging.exception(
-                        "Wata webhook: failed to mark payment %s as succeeded.",
-                        resolved_transaction_id,
-                    )
-                    return web.Response(status=500, text="processing_error")
-
-                payment_units = payment.purchased_gb or payment.subscription_duration_months or 1
-                sale_mode = payment.sale_mode or (
-                    "traffic" if self.settings.traffic_sale_mode else "subscription"
-                )
-
-                outcome = await finalize_successful_payment(
-                    PaymentSuccessRequest(
-                        bot=self.bot,
-                        settings=self.settings,
-                        i18n=self.i18n,
-                        session=session,
-                        subscription_service=self.subscription_service,
-                        referral_service=self.referral_service,
-                        payment=payment,
-                        user_id=payment.user_id,
-                        amount=float(payment.amount),
-                        currency=str(currency),
-                        sale_mode=sale_mode,
-                        months=payment_units,
-                        traffic_amount=float(payment_units),
-                        provider_subscription="wata",
-                        provider_notification="wata",
-                        db_user=payment.user,
-                        log_prefix="Wata webhook",
-                    )
-                )
-                if outcome is None:
+                if not await self._mark_paid_from_payload(
+                    session,
+                    payment,
+                    payload,
+                    log_prefix="Wata webhook",
+                ):
                     return web.Response(status=500, text="processing_error")
                 return web.Response(text="ok")
 
             if status == "declined":
-                try:
-                    await payment_dal.update_provider_payment_and_status(
-                        session,
-                        payment.payment_id,
-                        resolved_transaction_id,
-                        "failed",
-                    )
-                    await session.commit()
-                except Exception:
-                    await session.rollback()
-                    logging.exception(
-                        "Wata webhook: failed to mark payment %s as failed.",
-                        resolved_transaction_id,
-                    )
+                if not await self._mark_declined_from_payload(
+                    session,
+                    payment,
+                    payload,
+                    log_prefix="Wata webhook",
+                    notify_user=True,
+                ):
                     return web.Response(status=500, text="processing_error")
-                await notify_user_payment_failed(
-                    bot=self.bot,
-                    settings=self.settings,
-                    i18n=self.i18n,
-                    session=session,
-                    payment=payment,
-                )
                 return web.Response(text="ok")
 
             logging.warning(
@@ -409,7 +820,7 @@ class WataService(HttpClientMixin):
                 status,
                 transaction_id,
             )
-            return web.Response(status=202, text="status_ignored")
+            return web.Response(text="status_ignored")
 
 
 @router.callback_query(F.data.startswith("pay_wata:"))
@@ -428,6 +839,14 @@ async def pay_wata_callback_handler(
         await notify_callback_parse_error(callback, translator)
         return
 
+    if not SPEC.is_available_to_user(
+        settings,
+        user_id=callback.from_user.id,
+        require_configured=False,
+    ):
+        await notify_service_unavailable(callback, translator)
+        return
+
     if not wata_service or not wata_service.configured:
         logging.error("Wata service is not configured or unavailable.")
         await notify_service_unavailable(callback, translator)
@@ -438,9 +857,52 @@ async def pay_wata_callback_handler(
         logging.error("Invalid pay_wata data in callback: %s", callback.data)
         await notify_callback_parse_error(callback, translator)
         return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=wata_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
+        await notify_callback_parse_error(callback, translator)
+        return
 
     currency_code = settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
     payment_description = describe_payment(translator, parts)
+
+    reuse_amounts = payment_record_amounts(months=parts.months, sale_mode=parts.sale_mode)
+    months_for_lookup = (
+        reuse_amounts.months if sale_mode_base(parts.sale_mode) == "subscription" else None
+    )
+    reusable_payment = await payment_dal.find_recent_pending_provider_payment(
+        session,
+        user_id=callback.from_user.id,
+        provider="wata",
+        pending_status="pending_wata",
+        amount=parts.price,
+        sale_mode=parts.sale_mode,
+        months=months_for_lookup,
+        purchased_gb=reuse_amounts.purchased_gb,
+        purchased_hwid_devices=reuse_amounts.purchased_hwid_devices,
+        tariff_key=reuse_amounts.tariff_key,
+        since_minutes=wata_service.payment_link_ttl_minutes,
+    )
+    if reusable_payment is not None:
+        reusable_url = await wata_service.try_reuse_pending_link(reusable_payment)
+        if reusable_url:
+            await safe_callback_answer(callback)
+            await render_payment_link(
+                callback,
+                translator=translator,
+                current_lang=current_lang,
+                i18n=i18n,
+                parts=parts,
+                payment_url=reusable_url,
+                log_prefix=_LOG,
+            )
+            return
+
     record_payload = build_payment_record_payload(
         user_id=callback.from_user.id,
         amount=parts.price,
@@ -450,6 +912,7 @@ async def pay_wata_callback_handler(
         months=parts.months,
         provider="wata",
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     try:
@@ -462,6 +925,8 @@ async def pay_wata_callback_handler(
         )
         await notify_payment_record_failure(callback, translator)
         return
+
+    await safe_callback_answer(callback)
 
     success, response_data = await wata_service.create_payment_link(
         payment_db_id=payment_record.payment_id,
@@ -478,8 +943,8 @@ async def pay_wata_callback_handler(
         session=session,
         payment=payment_record,
         api_success=success,
-        payment_url=first_value(response_data, "url"),
-        provider_payment_id=first_value(response_data, "id"),
+        payment_url=first_value(response_data, "url", "paymentUrl", "payment_url"),
+        provider_payment_id=first_value(response_data, "id", "paymentLinkId"),
         log_prefix=_LOG,
     )
 
@@ -491,6 +956,45 @@ async def create_webapp_payment(ctx: WebAppPaymentContext) -> web.Response:
         return payment_unavailable()
 
     currency = settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
+
+    reuse_amounts = payment_record_amounts(
+        months=ctx.months,
+        sale_mode=ctx.sale_mode,
+        traffic_gb=ctx.traffic_gb,
+    )
+    months_for_lookup = (
+        reuse_amounts.months if sale_mode_base(ctx.sale_mode) == "subscription" else None
+    )
+    try:
+        reusable_payment = await payment_dal.find_recent_pending_provider_payment(
+            ctx.session,
+            user_id=ctx.user_id,
+            provider="wata",
+            pending_status="pending_wata",
+            amount=ctx.price,
+            sale_mode=ctx.sale_mode,
+            months=months_for_lookup,
+            purchased_gb=reuse_amounts.purchased_gb,
+            purchased_hwid_devices=reuse_amounts.purchased_hwid_devices,
+            tariff_key=reuse_amounts.tariff_key,
+            since_minutes=service.payment_link_ttl_minutes,
+        )
+    except Exception:
+        logging.exception("Wata WebApp: lookup of reusable payment failed")
+        reusable_payment = None
+
+    if reusable_payment is not None:
+        try:
+            reusable_url = await service.try_reuse_pending_link(reusable_payment)
+        except Exception:
+            logging.exception("Wata WebApp: failed to verify reusable link")
+            reusable_url = None
+        if reusable_url:
+            return payment_link_response(
+                payment_url=reusable_url,
+                payment_id=reusable_payment.payment_id,
+            )
+
     try:
         payment = await create_webapp_payment_record(
             ctx,
@@ -514,8 +1018,10 @@ async def create_webapp_payment(ctx: WebAppPaymentContext) -> web.Response:
         session=ctx.session,
         payment=payment,
         api_success=success,
-        payment_url=first_value(response_data, "url") if success else None,
-        provider_payment_id=first_value(response_data, "id"),
+        payment_url=first_value(response_data, "url", "paymentUrl", "payment_url")
+        if success
+        else None,
+        provider_payment_id=first_value(response_data, "id", "paymentLinkId"),
         log_prefix="Wata",
     )
 
@@ -623,14 +1129,17 @@ _CONFIG_MANIFEST = (
         "WATA_FAILED_URL", "url", "Failed URL", subsection="Wata", attr="FAILED_URL"
     ),
     ProviderManifestField(
-        "WATA_PAYMENT_LINK_TTL_DAYS",
+        "WATA_LINK_TTL_MINUTES",
         "int",
-        "Payment link lifetime (days)",
-        description="1..30; Wata defaults to 3 days and allows up to 30 days.",
+        "Payment link lifetime (minutes)",
+        description=(
+            "15..43200; default 15 minutes. Wata requires more than 10 minutes "
+            "and allows up to 30 days."
+        ),
         subsection="Wata",
-        min=1,
-        max=30,
-        attr="PAYMENT_LINK_TTL_DAYS",
+        min=_WATA_LINK_MIN_TTL_MINUTES,
+        max=_WATA_LINK_MAX_TTL_MINUTES,
+        attr="LINK_TTL_MINUTES",
     ),
     ProviderManifestField(
         "WATA_WEBHOOK_VERIFY_SIGNATURE",

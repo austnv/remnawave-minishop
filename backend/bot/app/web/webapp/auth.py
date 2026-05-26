@@ -1013,13 +1013,11 @@ def _telegram_id_for_user(user: User) -> Optional[int]:
 
 
 def _panel_description_for_user(user: User) -> str:
-    lines = [
-        user.email or "",
-        user.username or "",
-        user.first_name or "",
-        user.last_name or "",
-    ]
-    return "\n".join(line for line in lines if line).strip()
+    return panel_description_from_profile(
+        user.username,
+        user.first_name,
+        user.last_name,
+    )
 
 
 def _telegram_photo_url_value(telegram_user: Dict[str, Any]) -> Optional[str]:
@@ -1042,9 +1040,7 @@ async def _sync_panel_identity_for_user(
     if not subscription_service or not subscription_service.panel_service:
         return False
 
-    payload: Dict[str, Any] = {
-        "description": _panel_description_for_user(user),
-    }
+    payload: Dict[str, Any] = {}
     telegram_id = _telegram_id_for_user(user)
     if telegram_id:
         payload["telegramId"] = telegram_id
@@ -1058,11 +1054,19 @@ async def _sync_panel_identity_for_user(
             payload["status"] = "ACTIVE"
 
     try:
-        await subscription_service.panel_service.update_user_details_on_panel(
+        updated_panel_user = await subscription_service.panel_service.update_user_details_on_panel(
             user.panel_user_uuid,
             payload,
             log_response=False,
         )
+        if not updated_panel_user or (
+            isinstance(updated_panel_user, dict) and updated_panel_user.get("error")
+        ):
+            logger.warning(
+                "Panel identity update returned no success payload for user %s",
+                user.user_id,
+            )
+            return False
         return True
     except Exception as exc:
         logger.warning(
@@ -1198,11 +1202,9 @@ def _apply_telegram_profile_to_user(
     telegram_user: Dict[str, Any],
     settings: Settings,
 ) -> None:
-    language_code = (
+    language_code = _normalize_language(
         telegram_user.get("language_code") or user.language_code or settings.DEFAULT_LANGUAGE
     )
-    if language_code not in {"ru", "en"}:
-        language_code = user.language_code or settings.DEFAULT_LANGUAGE
 
     user.telegram_id = int(telegram_user["id"])
     user.username = sanitize_username(telegram_user.get("username"))
@@ -1248,13 +1250,11 @@ async def _link_telegram_to_user(
         return merged_user
 
     if not existing_telegram_user and int(current_user.user_id) < 0:
-        language_code = (
+        language_code = _normalize_language(
             telegram_user.get("language_code")
             or current_user.language_code
             or settings.DEFAULT_LANGUAGE
         )
-        if language_code not in {"ru", "en"}:
-            language_code = current_user.language_code or settings.DEFAULT_LANGUAGE
         target_user, _ = await user_dal.create_user(
             session,
             {
@@ -1400,9 +1400,9 @@ async def _ensure_user_from_telegram(
     referral_param: Optional[str] = None,
 ) -> User:
     user_id = int(telegram_user["id"])
-    language_code = telegram_user.get("language_code") or settings.DEFAULT_LANGUAGE
-    if language_code not in {"ru", "en"}:
-        language_code = settings.DEFAULT_LANGUAGE
+    language_code = _normalize_language(
+        telegram_user.get("language_code") or settings.DEFAULT_LANGUAGE
+    )
 
     update_data = {
         "telegram_id": user_id,

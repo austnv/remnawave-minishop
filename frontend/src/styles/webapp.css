@@ -26,6 +26,33 @@ a {
   padding-bottom: 86px;
 }
 
+.public-install-shell {
+  width: min(100%, 440px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  overflow-x: hidden;
+  padding: max(16px, env(safe-area-inset-top)) max(var(--screen-gutter), var(--safe-inline))
+    max(18px, env(safe-area-inset-bottom)) max(var(--screen-gutter), var(--safe-inline));
+}
+
+.public-install-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.public-install-brand strong {
+  color: var(--accent);
+  font-size: 15px;
+  line-height: 1.2;
+}
+
 .loader {
   display: grid;
   min-height: 100dvh;
@@ -440,12 +467,19 @@ a {
 }
 
 .trial-card {
-  padding: 13px 14px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.trial-offer-card {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
 }
 
 .trial-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 11px;
 }
 
@@ -469,6 +503,46 @@ a {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.28;
+}
+
+.trial-card-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.trial-card-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.trial-card-facts span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--surface-subtle-border);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+
+.trial-card-facts small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.trial-card-facts strong {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.trial-card-action {
+  margin-top: 2px;
 }
 
 .devices-summary-card {
@@ -515,6 +589,13 @@ a {
 
 .devices-progress {
   margin-top: 0;
+}
+
+.devices-topup-validity {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .devices-list {
@@ -624,6 +705,7 @@ a {
   min-height: 82px;
   place-items: center;
   gap: 4px;
+  background: var(--surface-muted);
   padding: 10px 8px;
 }
 
@@ -680,6 +762,12 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.method-grid-single .method-card,
+.method-grid-many .method-card:first-child,
+.method-grid-many .method-card:last-child:nth-child(even) {
+  grid-column: 1 / -1;
 }
 
 .option-list {
@@ -1986,6 +2074,43 @@ a {
   animation: toast-enter 0.22s ease-out both;
 }
 
+.motion-height-stage {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+.motion-height-stage.motion-height-locked {
+  overflow: hidden;
+  transition: height var(--motion-stage-duration, 360ms) cubic-bezier(0.22, 0.72, 0.2, 1);
+  will-change: height;
+}
+
+.motion-height-stage.motion-height-instant {
+  transition: none;
+}
+
+.motion-enter-card {
+  animation: motion-card-enter var(--motion-enter-duration, 340ms) cubic-bezier(0.22, 0.72, 0.2, 1)
+    backwards;
+  animation-delay: var(--motion-delay, 0ms);
+  transform-origin: var(--motion-origin, center top);
+  will-change: opacity, transform;
+}
+
+.motion-fade-up {
+  animation: motion-fade-up var(--motion-enter-duration, 160ms) ease-out both;
+}
+
+.motion-scale-in {
+  animation: motion-scale-in var(--motion-enter-duration, 240ms) cubic-bezier(0.22, 0.72, 0.2, 1)
+    both;
+}
+
+.motion-shimmer {
+  animation: motion-shimmer var(--motion-shimmer-duration, 1.15s) ease-in-out infinite;
+}
+
 @keyframes section-enter {
   from {
     opacity: 0;
@@ -2007,6 +2132,56 @@ a {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes motion-card-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.985);
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes motion-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes motion-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.975);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motion-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
   }
 }
 
@@ -2207,11 +2382,16 @@ a {
   .dialog-backdrop,
   .dialog-card,
   .auth-mode-panel,
+  .motion-enter-card,
+  .motion-fade-up,
+  .motion-scale-in,
+  .motion-shimmer,
   .toast {
     animation: none !important;
   }
 
-  .auth-card {
+  .auth-card,
+  .motion-height-stage.motion-height-locked {
     transition: none !important;
   }
 }
@@ -2267,6 +2447,26 @@ a {
     max-width: 1080px;
     margin-left: auto;
     margin-right: auto;
+  }
+
+  .public-install-shell {
+    width: auto;
+    max-width: none;
+    min-height: 100dvh;
+    margin: 0;
+    overflow-x: visible;
+    padding: max(28px, env(safe-area-inset-top)) var(--desktop-page-gutter) 40px;
+  }
+
+  .public-install-shell > .public-install-brand,
+  .public-install-shell > main {
+    max-width: 1080px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .public-install-shell > .public-install-brand {
+    width: min(100%, 1080px);
   }
 
   /* Auth screen: keep it as a focused card in the centre, hide rail. */

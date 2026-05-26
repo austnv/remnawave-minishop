@@ -106,6 +106,7 @@ class Subscription(Base):
     user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
     panel_user_uuid = Column(String, nullable=False, index=True)
     panel_subscription_uuid = Column(String, unique=True, index=True, nullable=True)
+    install_share_token = Column(String(32), unique=True, index=True, nullable=True)
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=False, index=True)
     duration_months = Column(Integer, nullable=True)
@@ -202,6 +203,11 @@ class Payment(Base):
     tariff_key = Column(String, nullable=True, index=True)
     purchased_gb = Column(Float, nullable=True)
     purchased_hwid_devices = Column(Integer, nullable=True)
+    hwid_valid_from = Column(DateTime(timezone=True), nullable=True)
+    hwid_valid_until = Column(DateTime(timezone=True), nullable=True)
+    hwid_pricing_period_months = Column(Integer, nullable=True)
+    hwid_proration_ratio = Column(Float, nullable=True)
+    hwid_full_price = Column(Float, nullable=True)
     promo_code_id = Column(Integer, ForeignKey("promo_codes.promo_code_id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
@@ -228,6 +234,14 @@ class TrafficTopup(Base):
 
 class HwidDevicePurchase(Base):
     __tablename__ = "hwid_device_purchases"
+    __table_args__ = (
+        Index(
+            "ix_hwid_device_purchases_subscription_window",
+            "subscription_id",
+            "valid_from",
+            "valid_until",
+        ),
+    )
 
     purchase_id = Column(Integer, primary_key=True, autoincrement=True)
     subscription_id = Column(
@@ -235,6 +249,8 @@ class HwidDevicePurchase(Base):
     )
     payment_id = Column(Integer, ForeignKey("payments.payment_id"), nullable=True, index=True)
     purchased_devices = Column(Integer, nullable=False)
+    valid_from = Column(DateTime(timezone=True), nullable=True)
+    valid_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     subscription = relationship("Subscription")
@@ -275,6 +291,8 @@ class TariffChange(Base):
     days_before = Column(Integer, nullable=True)
     days_after = Column(Integer, nullable=True)
     converted_bytes = Column(BigInteger, nullable=True)
+    converted_hwid_value_rub = Column(Numeric, nullable=True)
+    converted_hwid_days = Column(Integer, nullable=True)
     eff_price_before = Column(Numeric, nullable=True)
     eff_price_after = Column(Numeric, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -481,6 +499,21 @@ class AppSettingOverride(Base):
 
     key = Column(String(128), primary_key=True)
     value = Column(Text, nullable=True)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    updated_by = Column(BigInteger, nullable=True)
+
+
+class LocaleOverride(Base):
+    __tablename__ = "locale_overrides"
+
+    lang = Column(String(16), primary_key=True)
+    key = Column(String(255), primary_key=True)
+    value = Column(Text, nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

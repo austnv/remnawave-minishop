@@ -17,12 +17,16 @@ from bot.keyboards.inline.user_keyboards import (
     get_language_selection_keyboard,
     get_main_menu_inline_keyboard,
 )
-from bot.middlewares.i18n import JsonI18n
+from bot.middlewares.i18n import JsonI18n, normalize_locale_language_code
 from bot.services.panel_api_service import PanelApiService
 from bot.services.promo_code_service import PromoCodeService
 from bot.services.referral_service import ReferralService
 from bot.services.subscription_service import SubscriptionService
 from bot.utils.callback_answer import safe_answer_callback
+from bot.utils.install_links import (
+    append_install_share_link_text,
+    ensure_user_install_guide_links,
+)
 from bot.utils.text_sanitizer import sanitize_display_name, sanitize_username
 from config.settings import Settings
 from db.dal import user_dal
@@ -715,6 +719,23 @@ async def start_command_handler(
                     ),
                     config_link=config_link_text,
                 )
+                install_links = await ensure_user_install_guide_links(session, settings, user_id)
+                install_share_url = install_links.public_share_url
+                if install_share_url:
+                    try:
+                        await session.commit()
+                        promo_success_text = append_install_share_link_text(
+                            promo_success_text,
+                            _,
+                            install_share_url,
+                        )
+                    except Exception:
+                        await session.rollback()
+                        logging.exception(
+                            "Failed to persist install guide share token for promo user %s.",
+                            user_id,
+                        )
+                        install_share_url = None
 
                 from bot.keyboards.inline.user_keyboards import get_connect_and_main_keyboard
 
@@ -726,6 +747,7 @@ async def start_command_handler(
                         settings,
                         config_link_display,
                         connect_button_url=connect_button_url,
+                        install_share_url=install_share_url,
                     ),
                     parse_mode="HTML",
                 )
@@ -891,11 +913,23 @@ async def select_language_callback_handler(
 
     try:
         lang_payload = callback.data.split("_", 2)[2]
-        lang_code, _, return_target = lang_payload.partition(":")
+        raw_lang_code, _, return_target = lang_payload.partition(":")
+        lang_code = normalize_locale_language_code(
+            raw_lang_code,
+            set(i18n.locales_data.keys()),
+            prefer_known_base=True,
+        )
     except IndexError:
         await safe_answer_callback(
             callback,
             "Error processing language selection.",
+            show_alert=True,
+        )
+        return
+    if lang_code not in i18n.locales_data:
+        await safe_answer_callback(
+            callback,
+            "Unsupported language.",
             show_alert=True,
         )
         return

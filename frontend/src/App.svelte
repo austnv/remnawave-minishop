@@ -1,24 +1,31 @@
 <script>
-  import { onMount, setContext } from "svelte";
+  import { onMount, setContext, tick } from "svelte";
   import { createAuthStore } from "./lib/webapp/stores/authStore.js";
   import { createBillingStore } from "./lib/webapp/stores/billingStore.js";
   import { createDevicesStore } from "./lib/webapp/stores/devicesStore.js";
+  import { createInstallGuidesStore } from "./lib/webapp/stores/installGuidesStore.js";
   import { createSupportStore } from "./lib/webapp/stores/supportStore.js";
   import { createAccountStore } from "./lib/webapp/stores/accountStore.js";
   import { Tooltip } from "$components/ui/primitives.js";
+  import { CheckCircle2 } from "$components/ui/icons.js";
 
   import BrandMark from "$lib/webapp/BrandMark.svelte";
+  import Button from "$components/ui/button.svelte";
+  import Dialog from "$components/ui/dialog.svelte";
   import PreviewBoard from "./PreviewBoard.svelte";
   import WebAppShell from "./webapp/WebAppShell.svelte";
   import AuthScreen from "./webapp/auth/AuthScreen.svelte";
   import PaymentDialogs from "./webapp/PaymentDialogs.svelte";
   import TariffDialogs from "./webapp/TariffDialogs.svelte";
+  import AppLaunchScreen from "./webapp/screens/AppLaunchScreen.svelte";
   import DevicesScreen from "./webapp/screens/DevicesScreen.svelte";
   import HomeScreen from "./webapp/screens/HomeScreen.svelte";
+  import InstallGuideScreen from "./webapp/screens/InstallGuideScreen.svelte";
   import InviteScreen from "./webapp/screens/InviteScreen.svelte";
   import SettingsScreen from "./webapp/screens/SettingsScreen.svelte";
   import SupportScreen from "./webapp/screens/SupportScreen.svelte";
   import SupportTicketScreen from "./webapp/screens/SupportTicketScreen.svelte";
+  import TrialActivationScreen from "./webapp/screens/TrialActivationScreen.svelte";
 
   import {
     LANGUAGE_FLAGS,
@@ -28,15 +35,25 @@
     TELEGRAM_SDK_ACTION_TIMEOUT_MS,
     TELEGRAM_SDK_BOOT_TIMEOUT_MS,
     TELEGRAM_WEBAPP_SCRIPT_URL,
+    uniqueLanguageCodes,
     WEBAPP_LANGUAGE_ORDER,
   } from "./lib/webapp/constants.js";
 
   import {
     applyFavicon,
+    applyDocumentTitle,
     normalizeBrand,
     readJsonScript,
     structuredCloneSafe,
   } from "./lib/webapp/browser.js";
+  import {
+    buildExternalAppLaunchUrl,
+    hasControlChars,
+    isExternalAppLaunchPath,
+    isHttpUrl,
+    openUrlWithHiddenAnchor,
+    readExternalAppLaunchTarget,
+  } from "./lib/webapp/appLinks.js";
   import { createApiClient } from "./lib/webapp/publicApi.js";
   import { createI18n } from "./lib/webapp/i18n.js";
   import { normalizedEmail, telegramName } from "./lib/webapp/formatters.js";
@@ -52,6 +69,15 @@
 
   /** Used-traffic percent from which top-up modals and CTAs unlock in the web app home screen */
   const TRAFFIC_TOPUP_UNLOCK_PERCENT = 80;
+  const ACTIVATION_HANDOFF_STORAGE_KEY = "rw_webapp_activation_handoff_v1";
+  const ACTIVATION_HANDOFF_TTL_MS = 48 * 60 * 60 * 1000;
+  const ACTIVATION_PENDING_WATCH_INTERVAL_MS = 2000;
+  const ACTIVATION_PENDING_WATCH_MAX_ATTEMPTS = 45;
+  const ACTIVATION_RESUME_CHECK_COOLDOWN_MS = 1500;
+  import {
+    activationPaymentFailed,
+    createActivationHandoff,
+  } from "./lib/webapp/activationHandoff.js";
   import { buildGravatarUrl } from "./lib/webapp/gravatar.js";
   import { createBillingActions } from "./lib/webapp/billingActions.js";
   import { invalidateWebappTariffOptionCaches } from "./lib/webapp/billingOptionCache.js";
@@ -68,15 +94,19 @@
   import { mockApi as runMockApi } from "./lib/webapp/mockApi.js";
   import { DEV_MOCK, applyPreviewMock } from "./lib/webapp/previewMock.js";
   import {
+    adminPaymentIdFromPath,
+    adminPaymentsUserIdFromPath,
     adminSectionFromPath,
     adminUserIdFromPath,
     normalizeSection,
+    publicInstallTokenFromPath,
     sectionFromPath,
     supportTicketIdFromPath,
     syncSectionPath,
   } from "./lib/webapp/routes.js";
 
   const query = new URLSearchParams(window.location.search);
+  const isAppLaunchRoute = isExternalAppLaunchPath(window.location.pathname);
   applyPreviewMock(query.get("mock"));
   const isPreviewBoard = query.get("preview") === "all";
   const injectedConfig = readJsonScript("webapp-config");
@@ -95,11 +125,23 @@
   let telegramSdkStatus = "idle";
   let telegramMiniAppInitData = "";
 
-  let mode = isPreviewBoard ? "preview" : "loading";
+  let mode = isAppLaunchRoute ? "appLaunch" : isPreviewBoard ? "preview" : "loading";
   let activeTab = "home";
   let screen = "home";
   let data = isPreviewBoard ? structuredCloneSafe(DEV_MOCK.data) : null;
+  let appLaunchTarget = isAppLaunchRoute ? readExternalAppLaunchTarget() : "";
+  let publicInstallSubscription = null;
+  let publicInstallToken = "";
   let trialBusy = false;
+  let trialActivationResult = null;
+  let trialActivationError = "";
+  let activationSuccessDialogOpen = false;
+  let activationSuccessUseInstallGuides = false;
+  let activationPendingWatchTimer = null;
+  let activationPendingWatchAttempts = 0;
+  let activationPendingWatchBusy = false;
+  let activationResumeRefreshBusy = false;
+  let activationResumeLastCheckAt = 0;
   let promoCode = "";
   let promoBusy = false;
   let promoStatus = "";
@@ -161,6 +203,10 @@
     api: (path, options) => apiClient.api(path, options),
     t: (...args) => t(...args),
   });
+  const activationHandoff = createActivationHandoff({
+    storageKey: ACTIVATION_HANDOFF_STORAGE_KEY,
+    ttlMs: ACTIVATION_HANDOFF_TTL_MS,
+  });
 
   const authStore = createAuthStore({
     publicApi,
@@ -178,10 +224,15 @@
     t,
     showToast,
     openExternalLink,
+    onSubscriptionActivationPending: rememberActivationPending,
+    onSubscriptionActivated: handleSubscriptionActivated,
     tg,
+    getTg: () => tg || telegramSdk.refresh(),
+    telegramSdk,
   });
   const devicesStore = createDevicesStore({ api, t, showToast });
   const supportStore = createSupportStore({ api, t, showToast });
+  const installGuidesStore = createInstallGuidesStore({ api, t, showToast });
   const accountStore = createAccountStore({
     api,
     publicApi,
@@ -207,6 +258,7 @@
   setContext("billingStore", billingStore);
   setContext("devicesStore", devicesStore);
   setContext("supportStore", supportStore);
+  setContext("installGuidesStore", installGuidesStore);
   setContext("accountStore", accountStore);
 
   $: ({
@@ -300,6 +352,7 @@
     : plans;
   $: devicesEnabled = Boolean(appSettings?.my_devices_enabled);
   $: supportEnabled = Boolean(appSettings?.support_tickets_enabled ?? true);
+  $: installGuidesEnabled = Boolean(appSettings?.subscription_guides_enabled);
   $: supportStore.setActive(Boolean(mode === "app" && screen === "support" && supportEnabled));
   $: subscription = data?.subscription || DEV_MOCK.data.subscription;
   $: hasActiveTariffSubscription = Boolean(
@@ -373,11 +426,20 @@
   }
   $: referral = data?.referral || DEV_MOCK.data.referral;
   $: currentLang = normalizeLangCode(user?.language_code || CFG.language || "ru");
-  $: languageOptions = WEBAPP_LANGUAGE_ORDER.map((code) => ({
-    value: code,
-    label: LANGUAGE_LABELS[code] || code.toUpperCase(),
-    flag: LANGUAGE_FLAGS[code] || "🏳️",
-  }));
+  $: languageCodes = uniqueLanguageCodes(
+    WEBAPP_LANGUAGE_ORDER,
+    CFG.languages,
+    Object.keys(I18N || {}),
+    [currentLang]
+  );
+  $: languageOptions = languageCodes.map((code) => {
+    const serverLanguage = (CFG.languages || []).find((language) => language.code === code);
+    return {
+      value: code,
+      label: serverLanguage?.label || LANGUAGE_LABELS[code] || code.toUpperCase(),
+      flag: serverLanguage?.flag || LANGUAGE_FLAGS[code] || "🏳️",
+    };
+  });
   $: currentLanguageOption =
     languageOptions.find((option) => option.value === currentLang) || languageOptions[0];
   $: userLanguage = languageName(currentLang);
@@ -414,6 +476,7 @@
         ? t("wa_auth_telegram_not_configured")
         : "";
   $: applyFavicon(faviconBrand);
+  $: applyDocumentTitle(brandTitle);
   $: syncBodyScrollLock(
     paymentModalOpen ||
       changeModalOpen ||
@@ -477,12 +540,209 @@
     }
   }
 
+  function canUseInstallGuides(settings = appSettings, sub = subscription) {
+    const enabled =
+      settings === appSettings
+        ? installGuidesEnabled
+        : Boolean(settings?.subscription_guides_enabled);
+    return Boolean(enabled && sub?.active);
+  }
+
+  function hasPendingActivationHandoff(payload = data) {
+    return activationHandoff.hasPending(payload);
+  }
+
+  function rememberActivationPending(context = {}) {
+    activationHandoff.rememberPending(context, data);
+  }
+
+  function clearPendingActivationHandoff() {
+    activationHandoff.clearPending();
+  }
+
+  async function maybeShowActivationSuccessDialog(context = {}) {
+    if (activationSuccessDialogOpen) return false;
+    await tick();
+    const payload = context.payload || data;
+    const subscriptionKey = activationHandoff.subscriptionKey(payload);
+    if (!subscriptionKey) return false;
+    const state = activationHandoff.read();
+    const pending = state.pending;
+    if (activationHandoff.isAcknowledged(subscriptionKey, state)) {
+      if (pending && activationHandoff.pendingMatchesUser(pending, payload)) {
+        activationHandoff.write({ ...state, pending: null });
+      }
+      return false;
+    }
+    if (
+      !context.force &&
+      (!pending ||
+        !activationHandoff.isPendingFresh(pending) ||
+        !activationHandoff.pendingMatchesUser(pending, payload))
+    ) {
+      return false;
+    }
+    activationHandoff.acknowledge(subscriptionKey, context, payload, state);
+    stopPendingActivationWatch();
+    navigateToActivationTarget({ replace: true });
+    activationSuccessDialogOpen = true;
+    return true;
+  }
+
+  function stopPendingActivationWatch() {
+    if (activationPendingWatchTimer) {
+      window.clearTimeout(activationPendingWatchTimer);
+      activationPendingWatchTimer = null;
+    }
+    activationPendingWatchAttempts = 0;
+    activationPendingWatchBusy = false;
+  }
+
+  function schedulePendingActivationWatch() {
+    if (activationPendingWatchTimer || !hasPendingActivationHandoff()) return;
+    activationPendingWatchTimer = window.setTimeout(() => {
+      activationPendingWatchTimer = null;
+      void checkPendingActivationWatch();
+    }, ACTIVATION_PENDING_WATCH_INTERVAL_MS);
+  }
+
+  function startPendingActivationWatch() {
+    if (
+      mode !== "app" ||
+      !hasPendingActivationHandoff() ||
+      activationSuccessDialogOpen ||
+      screen === "admin"
+    ) {
+      stopPendingActivationWatch();
+      return;
+    }
+    if (activationPendingWatchTimer || activationPendingWatchBusy) return;
+    schedulePendingActivationWatch();
+  }
+
+  async function checkPendingActivationWatch() {
+    if (activationPendingWatchBusy) return;
+    if (
+      mode !== "app" ||
+      !hasPendingActivationHandoff() ||
+      activationSuccessDialogOpen ||
+      screen === "admin"
+    ) {
+      stopPendingActivationWatch();
+      return;
+    }
+    if (activationPendingWatchAttempts >= ACTIVATION_PENDING_WATCH_MAX_ATTEMPTS) {
+      stopPendingActivationWatch();
+      return;
+    }
+
+    const state = activationHandoff.read();
+    const pending = state.pending;
+    activationPendingWatchAttempts += 1;
+    activationPendingWatchBusy = true;
+    try {
+      let shouldRefreshProfile = !pending?.paymentId;
+      if (pending?.paymentId && billing.fetchPaymentStatus) {
+        const paymentStatus = await billing.fetchPaymentStatus(pending.paymentId);
+        if (paymentStatus?.paid || paymentStatus?.status === "succeeded") {
+          shouldRefreshProfile = true;
+        } else if (activationPaymentFailed(paymentStatus)) {
+          clearPendingActivationHandoff();
+          stopPendingActivationWatch();
+          return;
+        }
+      }
+      if (shouldRefreshProfile) {
+        await loadData({ fresh: true });
+        const shown = await maybeShowActivationSuccessDialog({
+          source: "watch",
+          paymentId: pending?.paymentId,
+        });
+        if (shown || !hasPendingActivationHandoff()) {
+          stopPendingActivationWatch();
+          return;
+        }
+      }
+    } catch (_error) {
+      void _error;
+    } finally {
+      activationPendingWatchBusy = false;
+    }
+    schedulePendingActivationWatch();
+  }
+
+  function canRefreshPendingActivationOnResume() {
+    return Boolean(
+      mode === "app" &&
+      screen !== "admin" &&
+      !activationSuccessDialogOpen &&
+      !paymentModalOpen &&
+      !topupModalOpen &&
+      !deviceTopupModalOpen &&
+      !changeModalOpen &&
+      !changeConfirmOpen &&
+      hasPendingActivationHandoff()
+    );
+  }
+
+  async function refreshPendingActivationOnResume() {
+    if (!canRefreshPendingActivationOnResume()) return;
+    const now = Date.now();
+    if (
+      activationResumeRefreshBusy ||
+      now - activationResumeLastCheckAt < ACTIVATION_RESUME_CHECK_COOLDOWN_MS
+    ) {
+      return;
+    }
+    activationResumeLastCheckAt = now;
+    activationResumeRefreshBusy = true;
+    try {
+      await loadData({ fresh: true });
+      const shown = await maybeShowActivationSuccessDialog({ source: "resume" });
+      if (!shown) startPendingActivationWatch();
+    } catch (_error) {
+      void _error;
+    } finally {
+      activationResumeRefreshBusy = false;
+    }
+  }
+
+  function refreshAppLaunchTarget() {
+    appLaunchTarget = readExternalAppLaunchTarget();
+    return appLaunchTarget;
+  }
+
+  function openAppLaunchTarget(nextTarget = "") {
+    const target = String(nextTarget || refreshAppLaunchTarget() || "").trim();
+    if (!target) return false;
+    appLaunchTarget = target;
+    openUrlWithHiddenAnchor(target);
+    return true;
+  }
+
   onMount(() => {
     if (isPreviewBoard) return;
+    if (isAppLaunchRoute) return;
     const onAnyPointerDown = () => {
       if (mode === "login") loginEmailTooltipOpen = false;
     };
+    const onActivationResume = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshPendingActivationOnResume();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") onActivationResume();
+    };
     const onPopState = () => {
+      const shareToken = publicInstallTokenFromPath(window.location.pathname);
+      if (shareToken) {
+        void loadPublicInstall(shareToken);
+        return;
+      }
+      if (mode === "publicInstall") {
+        void boot();
+        return;
+      }
       const section = sectionFromPath(window.location.pathname);
       if (mode === "login") {
         setPasswordLoginMode(isPasswordLoginPath(), true);
@@ -509,27 +769,37 @@
             ? "home"
             : section === "support" && !supportEnabled
               ? "home"
-              : section;
-        activeTab = nextSection;
+              : section === "install" && !canUseInstallGuides()
+                ? "home"
+                : section;
+        activeTab = nextSection === "install" || nextSection === "trial" ? "home" : nextSection;
         screen = nextSection;
         if (nextSection === "devices") devicesStore.loadDevices(devicesEnabled);
         if (nextSection === "support") {
           supportStore.loadList();
           supportStore.startPolling({ includeList: true });
         }
+        if (nextSection === "install") installGuidesStore.load(true);
       }
     };
     window.addEventListener("popstate", onPopState);
     window.addEventListener("pointerdown", onAnyPointerDown);
+    window.addEventListener("focus", onActivationResume);
+    window.addEventListener("pageshow", onActivationResume);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     boot();
     return () => {
       window.removeEventListener("popstate", onPopState);
       window.removeEventListener("pointerdown", onAnyPointerDown);
+      window.removeEventListener("focus", onActivationResume);
+      window.removeEventListener("pageshow", onActivationResume);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       authStore.stopTelegramLoginWatchdog();
       authStore.clearCooldownTimer();
       accountStore.clearLinkEmailResendTimer();
       accountStore.clearSetPasswordResendTimer();
       supportStore.closePolling();
+      stopPendingActivationWatch();
       clearLanguageClickGuard();
       syncBodyScrollLock(false);
       destroyAdminMount();
@@ -701,12 +971,12 @@
       await appendStylesheetWithFallback(
         "subscription-webapp-admin-css",
         cssHref,
-        "subscription_webapp_admin.css",
+        "subscription_webapp_admin.css"
       );
       await appendScriptWithFallback(
         "subscription-webapp-admin-js",
         jsSrc,
-        "subscription_webapp_admin.js",
+        "subscription_webapp_admin.js"
       );
       const loaded = readAdminBundleApi();
       if (!loaded) throw new Error("admin_bundle_missing_mount");
@@ -735,11 +1005,14 @@
     onClose: closeAdminPanel,
     onToast: (text) => showToast(text),
     initialSection: adminSectionFromPath(window.location.pathname),
+    initialPaymentId: adminPaymentIdFromPath(window.location.pathname),
+    initialPaymentUserId: adminPaymentsUserIdFromPath(window.location.pathname),
     initialUserId: adminUserIdFromPath(window.location.pathname),
     onSectionChange: handleAdminSectionChange,
     onSettingsSaved: handleAdminPersistedSaved,
     onTariffsSaved: handleAdminPersistedSaved,
     onThemesSaved: handleAdminPersistedSaved,
+    onTranslationsSaved: handleAdminTranslationsSaved,
     brandTitle,
     brand,
     appFaviconUrl: CFG.faviconUrl,
@@ -776,6 +1049,11 @@
   }
 
   async function boot() {
+    const shareToken = publicInstallTokenFromPath(window.location.pathname);
+    if (shareToken) {
+      await loadPublicInstall(shareToken);
+      return;
+    }
     await runWebappBoot({
       MOCK,
       setMode: (next) => {
@@ -806,6 +1084,11 @@
       getToken: () => token,
       getCsrfToken: () => csrfToken,
     });
+    if (mode === "app" && screen !== "admin") {
+      if (hasPendingActivationHandoff()) await loadData({ fresh: true });
+      const shown = await maybeShowActivationSuccessDialog({ source: "boot" });
+      if (!shown) startPendingActivationWatch();
+    }
   }
 
   function stripTopupQueryFromUrl() {
@@ -846,8 +1129,8 @@
     syncPasswordLoginPath(nextEnabled, replace);
   }
 
-  async function loadData() {
-    const payload = await api("/me");
+  async function loadData(options = {}) {
+    const payload = await api(options?.fresh ? "/me?fresh=1" : "/me");
     if (!payload.ok) throw new Error(payload.error || "load_failed");
     data = payload;
     billingStore.update((s) => ({
@@ -866,6 +1149,12 @@
     if (section === "support" && payload.settings?.support_tickets_enabled === false) {
       section = "home";
     }
+    if (
+      section === "install" &&
+      !(payload.settings?.subscription_guides_enabled && payload.subscription?.active)
+    ) {
+      section = "home";
+    }
     const initialAdminSection =
       section === "admin" ? adminSectionFromPath(window.location.pathname) : null;
     if (section === "admin" && payload.user?.is_admin) {
@@ -881,7 +1170,12 @@
     }
     const initialSupportTicketId =
       section === "support" ? supportTicketIdFromPath(window.location.pathname) : null;
-    activeTab = section === "admin" ? "settings" : section;
+    activeTab =
+      section === "admin"
+        ? "settings"
+        : section === "install" || section === "trial"
+          ? "home"
+          : section;
     screen = section;
     mode = "app";
     if (payload.settings?.support_tickets_enabled !== false) {
@@ -906,6 +1200,9 @@
     }
     if (section === "devices" && payload.settings?.my_devices_enabled) {
       await devicesStore.loadDevices(true);
+    }
+    if (section === "install") {
+      await installGuidesStore.load(true);
     }
     if (section === "support") {
       if (initialSupportTicketId)
@@ -945,6 +1242,20 @@
         stripTopupQueryFromUrl();
       }
     }
+    return payload;
+  }
+
+  async function loadPublicInstall(shareToken) {
+    mode = "publicInstall";
+    screen = "install";
+    activeTab = "home";
+    publicInstallToken = shareToken;
+    publicInstallSubscription = {
+      install_share_token: shareToken,
+      share_url: typeof window !== "undefined" ? `${window.location.origin}/s/${shareToken}` : "",
+    };
+    const response = await installGuidesStore.loadPublic(shareToken, true);
+    publicInstallSubscription = response?.subscription || publicInstallSubscription;
   }
 
   function showLogin() {
@@ -996,10 +1307,49 @@
   function openExternalLink(url) {
     if (!url) return;
     if (tg?.openLink) {
-      tg.openLink(url);
+      tg.openLink(url, { try_instant_view: false });
       return;
     }
     window.location.assign(url);
+  }
+
+  function openAppLink(url) {
+    const raw = String(url || "").trim();
+    if (!raw || hasControlChars(raw) || /^(javascript|data|vbscript):/i.test(raw)) {
+      return;
+    }
+    if (isHttpUrl(raw)) {
+      openExternalLink(raw);
+      return;
+    }
+
+    const isTelegramMiniApp = hasTelegramLaunchParams();
+    const currentTg = tg || telegramSdk.refresh();
+    const gatewayUrl = isTelegramMiniApp ? buildExternalAppLaunchUrl(raw, null, currentLang) : "";
+    if (gatewayUrl) {
+      if (currentTg?.openLink) {
+        try {
+          tg = currentTg;
+          currentTg.openLink(gatewayUrl);
+          return;
+        } catch {
+          // Fall back to regular browser navigation below.
+        }
+      }
+      window.location.assign(gatewayUrl);
+      return;
+    }
+
+    if (/^tg:\/\//i.test(raw) && currentTg?.openTelegramLink) {
+      try {
+        tg = currentTg;
+        currentTg.openTelegramLink(raw);
+        return;
+      } catch {
+        // Fall back to the generic deeplink path below.
+      }
+    }
+    openUrlWithHiddenAnchor(raw);
   }
 
   function openConnectLink() {
@@ -1009,6 +1359,80 @@
       return;
     }
     openExternalLink(url);
+  }
+
+  function openPublicConnectLink() {
+    const url = publicInstallSubscription?.connect_url || publicInstallSubscription?.config_link;
+    if (!url) {
+      showToast(t("wa_connect_link_unavailable"));
+      return;
+    }
+    openExternalLink(url);
+  }
+
+  function openInstallOrConnect() {
+    if (canUseInstallGuides()) {
+      goInstall();
+      return;
+    }
+    openConnectLink();
+  }
+
+  function openTrialInstallOrConnect() {
+    if (canUseInstallGuides()) {
+      goInstall();
+      return;
+    }
+    const url = trialActivationResult?.connect_url || trialActivationResult?.config_link;
+    if (url) {
+      openExternalLink(url);
+      return;
+    }
+    openConnectLink();
+  }
+
+  function openActivationConnectLink() {
+    const url =
+      subscription?.connect_url ||
+      subscription?.config_link ||
+      trialActivationResult?.connect_url ||
+      trialActivationResult?.config_link;
+    if (!url) {
+      showToast(t("wa_connect_link_unavailable"));
+      return;
+    }
+    openExternalLink(url);
+  }
+
+  function navigateToActivationTarget({ replace = true } = {}) {
+    const useInstallGuides = canUseInstallGuides();
+    activationSuccessUseInstallGuides = useInstallGuides;
+    billingStore.closePaymentModal();
+    activeTab = "home";
+    if (useInstallGuides) {
+      screen = "install";
+      syncSectionPath("install", replace);
+      installGuidesStore.load(true);
+      return;
+    }
+    screen = "home";
+    syncSectionPath("home", replace);
+  }
+
+  async function handleSubscriptionActivated(context = {}) {
+    await tick();
+    if (!subscription?.active) return;
+    await maybeShowActivationSuccessDialog({ ...context, force: true, source: "payment" });
+  }
+
+  function closeActivationSuccessDialog() {
+    const shouldOpenConnect = !activationSuccessUseInstallGuides;
+    activationSuccessDialogOpen = false;
+    if (activationSuccessUseInstallGuides) {
+      navigateToActivationTarget({ replace: true });
+      return;
+    }
+    if (shouldOpenConnect) openActivationConnectLink();
   }
 
   async function copyText(value, success = t("wa_copied")) {
@@ -1049,7 +1473,7 @@
         ? t("wa_promo_activated_until", { date: response.end_date_text })
         : t("wa_promo_activated");
       promoIsError = false;
-      await loadData();
+      await loadData({ fresh: true });
     } catch (error) {
       promoStatus = error?.message || t("wa_promo_activation_failed");
       promoIsError = true;
@@ -1062,16 +1486,22 @@
   async function activateTrial() {
     if (trialBusy) return;
     trialBusy = true;
+    trialActivationResult = null;
+    trialActivationError = "";
     try {
       const response = await api("/trial/activate", {
         method: "POST",
         body: JSON.stringify({}),
       });
       if (!response.ok) throw response;
+      trialActivationResult = response;
       showToast(t("wa_trial_activated"));
-      await loadData();
+      await loadData({ fresh: true });
+      await maybeShowActivationSuccessDialog({ source: "trial", force: true });
     } catch (error) {
-      showToast(error?.message || t("wa_trial_activation_failed"));
+      const message = error?.message || t("wa_trial_activation_failed");
+      trialActivationError = message;
+      showToast(message);
     } finally {
       trialBusy = false;
     }
@@ -1090,6 +1520,18 @@
     activeTab = "home";
     screen = "home";
     syncSectionPath("home");
+  }
+
+  function goInstall() {
+    if (!canUseInstallGuides()) {
+      openConnectLink();
+      return;
+    }
+    billingStore.closePaymentModal();
+    activeTab = "home";
+    screen = "install";
+    syncSectionPath("install");
+    installGuidesStore.load(true);
   }
 
   function goInvite() {
@@ -1228,6 +1670,7 @@
 
   async function handleAdminPersistedSaved(options = {}) {
     invalidateWebappTariffOptionCaches(billingStore);
+    installGuidesStore.reset();
     try {
       await loadData();
     } catch {
@@ -1239,6 +1682,29 @@
     if (shouldReloadFrontend && typeof window !== "undefined") {
       window.location.reload();
     }
+  }
+
+  async function refreshI18nScope(scope) {
+    if (MOCK) return;
+    const apiBase = String(CFG.apiBase || "/api").replace(/\/+$/, "");
+    try {
+      const response = await fetch(`${apiBase}/i18n?scope=${encodeURIComponent(scope)}`, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (payload?.ok && payload.i18n) i18n.mergeMessages(payload.i18n);
+      if (scope === "admin") adminI18nLoaded = true;
+    } catch (_error) {
+      void _error;
+    }
+  }
+
+  async function handleAdminTranslationsSaved(options = {}) {
+    adminI18nLoaded = false;
+    await Promise.all([refreshI18nScope("webapp"), refreshI18nScope("admin")]);
+    await handleAdminPersistedSaved({ ...options, deferFrontendReload: true });
   }
 
   function selectTariff(tariff) {
@@ -1254,6 +1720,9 @@
   }
 
   function primaryPayActionLabel() {
+    if (!subscription.active && appSettings?.trial_enabled && appSettings?.trial_available) {
+      return t("wa_pay_full_subscription", {}, "Оплатить полную подписку");
+    }
     if (trafficMode || selectedPlan?.sale_mode === "traffic_package") return t("wa_buy_traffic");
     return subscription.active ? t("wa_renew") : t("wa_pay_subscription");
   }
@@ -1276,6 +1745,36 @@
           <div class="loader">
             <BrandMark {brand} size="md" />
             <div>{t("wa_loading")}</div>
+          </div>
+        {:else if mode === "appLaunch"}
+          <AppLaunchScreen
+            {brand}
+            {appLaunchTarget}
+            {refreshAppLaunchTarget}
+            {openAppLaunchTarget}
+            {t}
+          />
+        {:else if mode === "publicInstall"}
+          <div class="public-install-shell">
+            <a class="public-install-brand" href="/" aria-label={brandTitle}>
+              <BrandMark {brand} />
+              <strong>{brandTitle}</strong>
+            </a>
+            <InstallGuideScreen
+              {currentLang}
+              telegramPlatform={tg?.platform || ""}
+              user={{}}
+              subscription={publicInstallSubscription || {
+                install_share_token: publicInstallToken,
+              }}
+              {goHome}
+              openConnectLink={openPublicConnectLink}
+              {openExternalLink}
+              {openAppLink}
+              {copyText}
+              {t}
+              publicMode
+            />
           </div>
         {:else if mode === "login"}
           <AuthScreen
@@ -1365,12 +1864,39 @@
                 {trafficMode}
                 {trialBusy}
                 {activateTrial}
-                {openConnectLink}
+                openConnectLink={openInstallOrConnect}
                 {openPaymentModal}
                 {openRegularTopupModal}
                 {openPremiumTopupModal}
                 {openTariffChangeModal}
                 {primaryPayActionLabel}
+                {t}
+              />
+            {:else if screen === "install"}
+              <InstallGuideScreen
+                {currentLang}
+                telegramPlatform={tg?.platform || ""}
+                {user}
+                {subscription}
+                {goHome}
+                {openConnectLink}
+                {openExternalLink}
+                {openAppLink}
+                {copyText}
+                {t}
+              />
+            {:else if screen === "trial"}
+              <TrialActivationScreen
+                {appSettings}
+                {brand}
+                {brandTitle}
+                {subscription}
+                {trialBusy}
+                trialResult={trialActivationResult}
+                trialError={trialActivationError}
+                {activateTrial}
+                openInstallOrConnect={openTrialInstallOrConnect}
+                {goHome}
                 {t}
               />
             {:else if screen === "invite"}
@@ -1543,6 +2069,32 @@
             {trafficMode}
             {t}
           />
+
+          <Dialog
+            open={activationSuccessDialogOpen}
+            title={t("wa_activation_success_title", {}, "Everything is successfully activated")}
+            description={activationSuccessUseInstallGuides
+              ? t(
+                  "wa_activation_success_install_hint",
+                  {},
+                  "Press OK and follow the setup instructions for your device."
+                )
+              : t(
+                  "wa_activation_success_connect_hint",
+                  {},
+                  "Press OK and we will open the Remnawave subscription page for setup."
+                )}
+            closeLabel={t("wa_close")}
+            onclose={closeActivationSuccessDialog}
+            class="activation-success-dialog"
+          >
+            <CheckCircle2 slot="titleIcon" size={23} />
+            <div class="activation-success-dialog-body">
+              <Button class="wide" onclick={closeActivationSuccessDialog}>
+                {t("wa_ok", {}, "OK")}
+              </Button>
+            </div>
+          </Dialog>
         {/if}
 
         {#if toastText}

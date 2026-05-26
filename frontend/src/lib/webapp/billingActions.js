@@ -15,6 +15,10 @@ export function createBillingActions({ api }) {
     return api("/payments", { method: "POST", body: JSON.stringify(body) });
   }
 
+  async function fetchPaymentStatus(paymentId) {
+    return api(`/payments/${encodeURIComponent(paymentId)}`);
+  }
+
   async function postTariffChange(body) {
     return api("/tariffs/change", { method: "POST", body: JSON.stringify(body) });
   }
@@ -49,7 +53,7 @@ export function createBillingActions({ api }) {
       months: plan.device_count || plan.months,
       device_count: plan.device_count || plan.months,
       tariff_key: plan.tariff_key || fallbackTariffKey,
-      sale_mode: "hwid_devices",
+      sale_mode: plan.sale_mode || "hwid_devices",
       method,
     };
   }
@@ -79,6 +83,7 @@ export function createBillingActions({ api }) {
     fetchDeviceTopupOptions,
     fetchTariffChangeOptions,
     postPayment,
+    fetchPaymentStatus,
     postTariffChange,
     postTariffChangePayment,
     planPaymentBody,

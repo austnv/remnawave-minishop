@@ -25,6 +25,8 @@ class TrafficPackage(BaseModel):
 class HwidDevicePackage(BaseModel):
     count: int
     price: float
+    prices: Dict[str, float] = Field(default_factory=dict)
+    min_price: Optional[float] = None
 
     @model_validator(mode="after")
     def validate_values(self) -> "HwidDevicePackage":
@@ -32,7 +34,31 @@ class HwidDevicePackage(BaseModel):
             raise ValueError("device package count must be greater than zero")
         if self.price < 0:
             raise ValueError("device package price must be non-negative")
+        normalized_prices: Dict[str, float] = {}
+        for period, value in (self.prices or {}).items():
+            period_key = str(period).strip()
+            if not period_key:
+                raise ValueError("device package price period must not be empty")
+            try:
+                period_months = int(period_key)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("device package price period must be an integer") from exc
+            if period_months <= 0:
+                raise ValueError("device package price period must be positive")
+            if float(value) < 0:
+                raise ValueError("device package period price must be non-negative")
+            normalized_prices[str(period_months)] = float(value)
+        self.prices = normalized_prices
+        if self.min_price is not None and self.min_price < 0:
+            raise ValueError("device package min_price must be non-negative")
         return self
+
+    def price_for_period(self, months: int) -> float:
+        months_int = max(1, int(months or 1))
+        value = self.prices.get(str(months_int))
+        if value is not None:
+            return float(value)
+        return float(self.price) * months_int
 
 
 class PackageSet(BaseModel):

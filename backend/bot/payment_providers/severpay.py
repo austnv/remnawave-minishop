@@ -25,6 +25,7 @@ from .base import (
     ServiceFactoryContext,
     WebAppPaymentContext,
     provider_env_file,
+    provider_runtime_enabled,
 )
 from .shared import (
     HttpClientMixin,
@@ -46,6 +47,7 @@ from .shared import (
     payment_failed,
     payment_unavailable,
     post_json_request,
+    quote_hwid_callback_parts,
     render_link_or_fail,
 )
 
@@ -135,7 +137,7 @@ class SeverPayService(HttpClientMixin):
 
     @property
     def configured(self) -> bool:
-        return bool(self.config.ENABLED and self.mid and self.token)
+        return bool(provider_runtime_enabled(self.config) and self.mid and self.token)
 
     @property
     def base_url(self) -> str:
@@ -395,6 +397,14 @@ async def pay_severpay_callback_handler(
         await notify_callback_parse_error(callback, translator)
         return
 
+    if not SPEC.is_available_to_user(
+        settings,
+        user_id=callback.from_user.id,
+        require_configured=False,
+    ):
+        await notify_service_unavailable(callback, translator)
+        return
+
     if not severpay_service or not severpay_service.configured:
         logging.error("SeverPay service is not configured or unavailable.")
         await notify_service_unavailable(callback, translator)
@@ -403,6 +413,16 @@ async def pay_severpay_callback_handler(
     parts = parse_payment_callback(callback.data or "")
     if not parts:
         logging.error("Invalid pay_severpay data in callback: %s", callback.data)
+        await notify_callback_parse_error(callback, translator)
+        return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=severpay_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
         await notify_callback_parse_error(callback, translator)
         return
 
@@ -417,6 +437,7 @@ async def pay_severpay_callback_handler(
         months=parts.months,
         provider="severpay",
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     try:

@@ -108,6 +108,53 @@ export async function mockApi(path, options = {}, context = {}) {
       user: adminUsers[0],
     },
   ];
+  const adminPayments = [
+    {
+      payment_id: 12,
+      user_id: 100200300,
+      user_label: "anna_ops",
+      telegram_id: 100200300,
+      traffic_regular_gb: null,
+      traffic_premium_gb: null,
+      provider: "yookassa",
+      provider_payment_id: "2f3a7c9e-yk-preview",
+      yookassa_payment_id: "2f3a7c9e-yk-preview",
+      idempotence_key: "admin-preview-payment-12",
+      amount: 790,
+      currency: "RUB",
+      status: "succeeded",
+      description: "Standard · 1 месяц",
+      subscription_duration_months: 1,
+      sale_mode: "subscription",
+      tariff_key: "standard",
+      purchased_gb: null,
+      purchased_hwid_devices: null,
+      promo_code: "SPRING",
+      created_at: "2026-05-01T14:15:00Z",
+      updated_at: "2026-05-01T14:17:00Z",
+    },
+    {
+      payment_id: 13,
+      user_id: 100200301,
+      user_label: "client_pro",
+      telegram_id: 87543123,
+      traffic_regular_gb: 25,
+      traffic_premium_gb: null,
+      provider: "platega",
+      provider_payment_id: "platega-demo-13",
+      amount: 199,
+      currency: "RUB",
+      status: "pending_platega",
+      description: "",
+      subscription_duration_months: null,
+      sale_mode: "traffic_package",
+      tariff_key: "standard",
+      purchased_gb: 25,
+      purchased_hwid_devices: null,
+      created_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+      updated_at: null,
+    },
+  ];
   function supportCounts(items = supportTickets) {
     const byStatus = { open: 0, awaiting_admin: 0, awaiting_user: 0, resolved: 0 };
     for (const item of items) {
@@ -242,19 +289,23 @@ export async function mockApi(path, options = {}, context = {}) {
         users_processed: 172,
         subscriptions_synced: 168,
       },
-      recent_payments: [
-        {
-          payment_id: 1,
-          user_id: 100200300,
-          user_label: "anna_ops",
-          amount: 790,
-          currency: "RUB",
-          provider: "yookassa",
-          status: "succeeded",
-          created_at: new Date().toISOString(),
-        },
-      ],
+      recent_payments: adminPayments.slice(0, 1),
     };
+  }
+  if (cleanPath === "/admin/payments") {
+    return {
+      ok: true,
+      payments: clone(adminPayments),
+      total: adminPayments.length,
+      page: 0,
+      page_size: 25,
+    };
+  }
+  if (cleanPath.startsWith("/admin/payments/")) {
+    const id = Number(cleanPath.split("/")[3]);
+    if (!Number.isFinite(id)) return { ok: false, error: "not_found" };
+    const payment = adminPayments.find((item) => item.payment_id === id) || adminPayments[0];
+    return { ok: true, payment: clone(payment) };
   }
   if (cleanPath === "/admin/users")
     return { ok: true, users: adminUsers, total: adminUsers.length, page: 0, page_size: 25 };
@@ -339,6 +390,15 @@ export async function mockApi(path, options = {}, context = {}) {
       },
     };
   }
+  if (path === "/admin/panel/internal-squads") {
+    return {
+      ok: true,
+      squads: [
+        { uuid: "db786ee8-816b-4760-80aa-1fc7a3669ff2", name: "Base RU" },
+        { uuid: "2f2f6e0a-1f2d-4e80-a33b-0ebf3a409012", name: "Trial warmup" },
+      ],
+    };
+  }
   if (path === "/admin/themes") {
     if (String(options.method || "GET").toUpperCase() === "PUT") {
       try {
@@ -384,6 +444,9 @@ export async function mockApi(path, options = {}, context = {}) {
     try {
       const body = options?.body ? JSON.parse(String(options.body)) : {};
       const updates = body.updates || {};
+      if (Object.prototype.hasOwnProperty.call(updates, "WEBAPP_TITLE")) {
+        DEV_MOCK.config.title = updates.WEBAPP_TITLE || "";
+      }
       if (Object.prototype.hasOwnProperty.call(updates, "WEBAPP_LOGO_URL")) {
         DEV_MOCK.config.logoUrl = updates.WEBAPP_LOGO_URL || "";
       }
@@ -409,10 +472,98 @@ export async function mockApi(path, options = {}, context = {}) {
     }
     return { ok: true, applied: 1, reverted: 0 };
   }
+  if (path === "/admin/translations" && String(options.method || "GET").toUpperCase() === "PATCH") {
+    return { ok: true, applied: 1, reverted: 0, file_written: true };
+  }
+  if (path === "/admin/translations") {
+    return {
+      ok: true,
+      path: "data/locales-overrides.json",
+      override_count: 1,
+      languages: [
+        { code: "en", label: "English", base: true },
+        { code: "ru", label: "Русский", base: true },
+      ],
+      groups: [
+        {
+          id: "webapp",
+          title: "Mini App",
+          description: "User-facing Mini App strings.",
+          audience: "user",
+          items: [
+            {
+              key: "wa_nav_home",
+              audience: "user",
+              values: {
+                ru: {
+                  base: "Главная",
+                  fallback: "Главная",
+                  effective: "Главная",
+                  override: "",
+                  overridden: false,
+                },
+                en: {
+                  base: "Home",
+                  fallback: "Главная",
+                  effective: "Dashboard",
+                  override: "Dashboard",
+                  overridden: true,
+                },
+              },
+            },
+          ],
+        },
+        {
+          id: "admin",
+          title: "Admin panel",
+          description: "Admin navigation and labels.",
+          audience: "internal",
+          items: [
+            {
+              key: "admin_nav_settings",
+              audience: "internal",
+              values: {
+                ru: {
+                  base: "Настройки",
+                  fallback: "Настройки",
+                  effective: "Настройки",
+                  override: "",
+                  overridden: false,
+                },
+                en: {
+                  base: "Settings",
+                  fallback: "Настройки",
+                  effective: "Settings",
+                  override: "",
+                  overridden: false,
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+  }
   if (path === "/admin/settings")
     return {
       ok: true,
       sections: [
+        {
+          id: "general",
+          order: 1,
+          fields: [
+            {
+              key: "WEBAPP_TITLE",
+              type: "string",
+              section: "general",
+              label: "Web App title",
+              value: DEV_MOCK.config.title || "",
+              i18n_label_key: "admin_settings_field_webapp_title_label",
+              i18n_placeholder_key: "admin_settings_field_webapp_title_placeholder",
+              placeholder: "My subscription",
+            },
+          ],
+        },
         {
           id: "appearance",
           order: 2,
@@ -471,6 +622,75 @@ export async function mockApi(path, options = {}, context = {}) {
               label: "Logo favicon URL",
               value: DEV_MOCK.config.faviconUrl || "",
             },
+          ],
+        },
+        {
+          id: "pricing",
+          order: 11,
+          fields: [
+            {
+              key: "TRIAL_ENABLED",
+              type: "bool",
+              section: "pricing",
+              subsection: "trial",
+              label: "Триал включён",
+              value: true,
+            },
+            {
+              key: "TRIAL_DURATION_DAYS",
+              type: "int",
+              section: "pricing",
+              subsection: "trial",
+              label: "Длительность триала (дней)",
+              value: 3,
+            },
+            {
+              key: "TRIAL_TRAFFIC_LIMIT_GB",
+              type: "float",
+              section: "pricing",
+              subsection: "trial",
+              label: "Лимит трафика триала (ГБ)",
+              value: 5,
+            },
+            {
+              key: "TRIAL_TRAFFIC_STRATEGY",
+              type: "string",
+              section: "pricing",
+              subsection: "trial",
+              label: "Стратегия сброса трафика триала",
+              value: "NO_RESET",
+            },
+            {
+              key: "TRIAL_SQUAD_UUIDS",
+              type: "string",
+              section: "pricing",
+              subsection: "trial",
+              label: "Internal Squads для триала",
+              value: "2f2f6e0a-1f2d-4e80-a33b-0ebf3a409012",
+            },
+            ...[
+              ["MONTH_1_ENABLED", "bool", true],
+              ["RUB_PRICE_1_MONTH", "float", 150],
+              ["STARS_PRICE_1_MONTH", "int", 0],
+              ["MONTH_3_ENABLED", "bool", true],
+              ["RUB_PRICE_3_MONTHS", "float", 400],
+              ["STARS_PRICE_3_MONTHS", "int", 0],
+              ["MONTH_6_ENABLED", "bool", false],
+              ["RUB_PRICE_6_MONTHS", "float", 750],
+              ["STARS_PRICE_6_MONTHS", "int", 0],
+              ["MONTH_12_ENABLED", "bool", false],
+              ["RUB_PRICE_12_MONTHS", "float", 1200],
+              ["STARS_PRICE_12_MONTHS", "int", 0],
+              ["TRAFFIC_PACKAGES", "string", "10:99,50:399"],
+              ["STARS_TRAFFIC_PACKAGES", "string", ""],
+            ].map(([key, type, value]) => ({
+              key,
+              type,
+              section: "pricing",
+              subsection: "legacy_tariffs",
+              label: key,
+              value,
+            })),
           ],
         },
       ],
@@ -603,7 +823,18 @@ export async function mockApi(path, options = {}, context = {}) {
     return { ok: true, ticket, messages: clone(supportMessages[ticket.ticket_id] || []) };
   }
   if (cleanPath === "/support/unread") return { ok: true, unread: 1 };
-  if (path === "/me") return clone(DEV_MOCK.data);
+  if (cleanPath === "/me") return clone(DEV_MOCK.data);
+  if (path === "/subscription-guides") return clone(DEV_MOCK.data.subscription_guides);
+  if (cleanPath.startsWith("/subscription-guides/public/")) {
+    const shareToken = decodeURIComponent(cleanPath.split("/").pop() || "");
+    const subscription = clone(DEV_MOCK.data.subscription);
+    subscription.install_share_token = shareToken;
+    subscription.share_url = `${window.location.origin}/s/${shareToken}`;
+    return {
+      ...clone(DEV_MOCK.data.subscription_guides),
+      subscription,
+    };
+  }
   if (path === "/auth/email/request") return { ok: true };
   if (path === "/auth/email/verify" || path === "/auth/email/magic") {
     return { ok: true, csrf_token: "local-preview-csrf" };
@@ -651,13 +882,26 @@ export async function mockApi(path, options = {}, context = {}) {
       remaining_text: "5 д. 0 ч.",
       end_date_text: "05.05.2026 12:00",
       days_left: 5,
+      config_link: "https://sub.example.com/sub/trial-preview-token",
+      connect_url: "https://sub.example.com/connect/trial-preview-token",
+      panel_short_uuid: "trial-preview-token",
+      install_share_token: "8f559061460e8fede78ef18dce887236",
+      install_share_url: "https://app.example.com/s/8f559061460e8fede78ef18dce887236",
       traffic_limit: "10 GB",
       traffic_limit_bytes: 10737418240,
       traffic_used: "0 B",
       traffic_used_bytes: 0,
     };
     DEV_MOCK.data.settings.trial_available = false;
-    return { ok: true, activated: true, end_date_text: "05.05.2026 12:00" };
+    return {
+      ok: true,
+      activated: true,
+      days: 5,
+      end_date_text: "05.05.2026 12:00",
+      traffic_gb: 10,
+      config_link: "https://sub.example.com/sub/trial-preview-token",
+      connect_url: "https://sub.example.com/connect/trial-preview-token",
+    };
   }
   if (path === "/auth/logout") return { ok: true };
   if (path === "/account/language" && String(options.method || "").toUpperCase() === "POST") {
@@ -703,6 +947,14 @@ export async function mockApi(path, options = {}, context = {}) {
       action: "open_link",
       payment_url: "https://example.com/payment-preview",
       payment_id: 10001,
+    };
+  }
+  if (/^\/payments\/\d+$/.test(path) && String(options.method || "GET").toUpperCase() === "GET") {
+    return {
+      ok: true,
+      payment_id: Number(path.split("/").pop()),
+      status: "pending_yookassa",
+      paid: false,
     };
   }
   if (path === "/tariffs/change" && String(options.method || "").toUpperCase() === "POST") {

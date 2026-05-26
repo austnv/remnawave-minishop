@@ -23,6 +23,7 @@ from .base import (
     ServiceFactoryContext,
     WebAppPaymentContext,
     provider_env_file,
+    provider_runtime_enabled,
 )
 from .shared import (
     HttpClientMixin,
@@ -45,6 +46,7 @@ from .shared import (
     payment_record_amounts,
     payment_unavailable,
     post_json_request,
+    quote_hwid_callback_parts,
     render_link_or_fail,
     safe_callback_answer,
 )
@@ -66,7 +68,9 @@ class PlategaConfig(ProviderEnvConfig):
     SECRET: Optional[str] = None
     PAYMENT_METHOD: int = Field(default=2)
     SBP_ENABLED: bool = Field(default=False)
+    SBP_ADMIN_ONLY_ENABLED: bool = Field(default=False)
     CRYPTO_ENABLED: bool = Field(default=False)
+    CRYPTO_ADMIN_ONLY_ENABLED: bool = Field(default=False)
     SBP_METHOD: int = Field(default=2)
     CRYPTO_METHOD: int = Field(default=13)
     RETURN_URL: Optional[str] = None
@@ -161,7 +165,15 @@ class PlategaService(HttpClientMixin):
 
     @property
     def configured(self) -> bool:
-        return bool(self.config.ENABLED and self.merchant_id and self.secret)
+        return bool(
+            provider_runtime_enabled(
+                self.config,
+                "SBP_ADMIN_ONLY_ENABLED",
+                "CRYPTO_ADMIN_ONLY_ENABLED",
+            )
+            and self.merchant_id
+            and self.secret
+        )
 
     @property
     def base_url(self) -> str:
@@ -395,15 +407,21 @@ def _resolve_platega_variant(
 ) -> Optional[Tuple[str, int]]:
     """Map the callback prefix to (variant, payment_method_id) or ``None`` if disabled."""
     if callback_prefix == "pay_platega_crypto":
-        if not config.CRYPTO_ENABLED:
+        if not (config.CRYPTO_ENABLED or config.CRYPTO_ADMIN_ONLY_ENABLED):
             return None
         return "crypto", config.CRYPTO_METHOD
     if callback_prefix == "pay_platega_sbp":
-        if not config.SBP_ENABLED:
+        if not (config.SBP_ENABLED or config.SBP_ADMIN_ONLY_ENABLED):
             return None
         return "sbp", config.sbp_method_resolved
     # Legacy "pay_platega:" callback — keep working as SBP.
     return "sbp", config.sbp_method_resolved
+
+
+def _platega_spec_for_callback_prefix(callback_prefix: str) -> PaymentProviderSpec:
+    if callback_prefix == "pay_platega_crypto":
+        return CRYPTO_SPEC
+    return SBP_SPEC
 
 
 @router.callback_query(
@@ -429,6 +447,15 @@ async def pay_platega_callback_handler(
         return
 
     callback_prefix, _, _ = (callback.data or "").partition(":")
+    spec = _platega_spec_for_callback_prefix(callback_prefix)
+    if not spec.is_available_to_user(
+        settings,
+        user_id=callback.from_user.id,
+        require_configured=False,
+    ):
+        await notify_service_unavailable(callback, translator)
+        return
+
     variant = (
         _resolve_platega_variant(callback_prefix, platega_service.config)
         if platega_service
@@ -449,6 +476,16 @@ async def pay_platega_callback_handler(
         logging.error("Invalid pay_platega data in callback: %s", callback.data)
         await notify_callback_parse_error(callback, translator)
         return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=platega_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
+        await notify_callback_parse_error(callback, translator)
+        return
 
     currency_code = settings.DEFAULT_CURRENCY_SYMBOL or "RUB"
     payment_description = describe_payment(translator, parts)
@@ -461,6 +498,7 @@ async def pay_platega_callback_handler(
         months=parts.months,
         provider="platega",
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     try:
@@ -538,11 +576,13 @@ async def _create_webapp_payment(ctx: WebAppPaymentContext, variant: str) -> web
     if not service or not service.configured:
         return payment_unavailable()
     if variant == "platega_crypto":
-        if not service.config.CRYPTO_ENABLED:
+        if not (service.config.CRYPTO_ENABLED or service.config.CRYPTO_ADMIN_ONLY_ENABLED):
             return payment_unavailable()
         platega_method_id = service.config.CRYPTO_METHOD
     else:
-        if variant == "platega_sbp" and not service.config.SBP_ENABLED:
+        if variant == "platega_sbp" and not (
+            service.config.SBP_ENABLED or service.config.SBP_ADMIN_ONLY_ENABLED
+        ):
             return payment_unavailable()
         platega_method_id = service.config.sbp_method_resolved
 
@@ -738,6 +778,8 @@ SBP_SPEC = PaymentProviderSpec(
     enabled=lambda config: bool(
         getattr(config, "ENABLED", False) and getattr(config, "SBP_ENABLED", False)
     ),
+    admin_only_enabled=lambda config: bool(getattr(config, "SBP_ADMIN_ONLY_ENABLED", False)),
+    admin_only_config_attr="SBP_ADMIN_ONLY_ENABLED",
     service_key="platega_service",
     callback_prefix="pay_platega_sbp",
     aliases=("platega",),
@@ -749,7 +791,7 @@ SBP_SPEC = PaymentProviderSpec(
     config_class=PlategaConfig,
     presentation_class=PlategaSbpPresentation,
     manifest_fields=_CONFIG_MANIFEST
-    + _platega_presentation_manifest("Platega SBP", "CreditCard", "PLATEGA_SBP"),
+    + _platega_presentation_manifest("Platega", "CreditCard", "PLATEGA_SBP"),
 )
 
 CRYPTO_SPEC = PaymentProviderSpec(
@@ -767,12 +809,14 @@ CRYPTO_SPEC = PaymentProviderSpec(
     enabled=lambda config: bool(
         getattr(config, "ENABLED", False) and getattr(config, "CRYPTO_ENABLED", False)
     ),
+    admin_only_enabled=lambda config: bool(getattr(config, "CRYPTO_ADMIN_ONLY_ENABLED", False)),
+    admin_only_config_attr="CRYPTO_ADMIN_ONLY_ENABLED",
     service_key="platega_service",
     callback_prefix="pay_platega_crypto",
     create_webapp_payment=create_crypto_webapp_payment,
     config_class=PlategaConfig,
     presentation_class=PlategaCryptoPresentation,
-    manifest_fields=_platega_presentation_manifest("Platega Crypto", "Bitcoin", "PLATEGA_CRYPTO"),
+    manifest_fields=_platega_presentation_manifest("Platega", "Bitcoin", "PLATEGA_CRYPTO"),
 )
 
 SPECS = (SBP_SPEC, CRYPTO_SPEC)

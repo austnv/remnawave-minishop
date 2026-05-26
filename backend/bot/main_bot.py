@@ -5,20 +5,17 @@ from typing import Awaitable, Callable, Optional
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import BotCommand, MenuButtonDefault, MenuButtonWebApp, WebAppInfo
-from sqlalchemy.orm import sessionmaker
 
 from bot.app.controllers.dispatcher_controller import build_dispatcher
 from bot.app.factories.build_services import build_core_services
 from bot.app.web.web_server import build_and_start_web_app
-from bot.handlers.admin.sync_admin import perform_sync
 from bot.infra.redis import close_redis
 from bot.middlewares.i18n import JsonI18n
 from bot.routers import build_root_router
-from bot.services.panel_api_service import PanelApiService
-from bot.services.settings_override_service import load_overrides_from_db
+from bot.services.locale_override_service import load_locale_overrides
 from bot.utils.message_queue import init_queue_manager
 from config.settings import Settings
-from db.database_setup import init_db_connection
+from db.database_setup import init_db, init_db_connection
 
 TELEGRAM_STARTUP_RETRY_DELAY_SECONDS = 2.0
 
@@ -156,6 +153,7 @@ async def on_startup_configured(dispatcher: Dispatcher):
         raise SystemExit("WEBHOOK_BASE_URL is required. Polling mode is disabled.")
 
     if settings.SUBSCRIPTION_MINI_APP_URL:
+
         async def _configure_mini_app_menu() -> None:
             menu_text = i18n_instance.gettext(
                 settings.DEFAULT_LANGUAGE,
@@ -169,6 +167,7 @@ async def on_startup_configured(dispatcher: Dispatcher):
             )
             await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
             logging.info("STARTUP: Mini app domain registered and default menu button restored.")
+
         await _run_telegram_startup_step(
             "registering mini app menu button",
             _configure_mini_app_menu,
@@ -186,6 +185,7 @@ async def on_startup_configured(dispatcher: Dispatcher):
             )
         await bot.set_my_commands(bot_commands)
         logging.info("STARTUP: bot command descriptions set.")
+
     await _run_telegram_startup_step(
         "setting bot commands",
         _configure_bot_commands,
@@ -200,40 +200,7 @@ async def on_startup_configured(dispatcher: Dispatcher):
     except Exception:
         logging.exception("STARTUP: Failed to initialize message queue manager.")
 
-    # Automatic sync on startup — runs in background so the dispatcher can
-    # start serving Telegram webhooks immediately even if the panel is slow.
-    # perform_sync is single-flight, so concurrent admin-triggered runs will
-    # be skipped while this one is in progress.
     logging.info("STARTUP: Bot on_startup_configured completed.")
-
-
-async def _background_startup_sync(
-    *,
-    panel_service: PanelApiService,
-    session_factory: sessionmaker,
-    settings: Settings,
-    i18n_instance: JsonI18n,
-) -> None:
-    try:
-        async with session_factory() as session:
-            sync_result = await perform_sync(
-                panel_service=panel_service,
-                session=session,
-                settings=settings,
-                i18n_instance=i18n_instance,
-            )
-        status = sync_result.get("status")
-        details = sync_result.get("details", "N/A")
-        if status == "completed":
-            logging.info(f"STARTUP: Background sync completed successfully. Details: {details}")
-        elif status == "skipped":
-            logging.info(f"STARTUP: Background sync skipped: {details}")
-        else:
-            logging.warning(
-                f"STARTUP: Background sync finished with status '{status}'. Details: {details}"
-            )
-    except Exception:
-        logging.exception("STARTUP: Background sync failed.")
 
 
 async def on_shutdown_configured(dispatcher: Dispatcher):
@@ -299,9 +266,10 @@ async def run_bot(settings_param: Settings):
     if local_async_session_factory is None:
         logging.critical("Failed to initialize database connection and session factory. Exiting.")
         return
-    await load_overrides_from_db(settings_param, local_async_session_factory)
+    await init_db(settings_param, local_async_session_factory)
     dp, bot, extra = build_dispatcher(settings_param, local_async_session_factory)
     i18n_instance = extra["i18n_instance"]
+    await load_locale_overrides(i18n_instance, local_async_session_factory)
 
     # Get bot username for YooKassa default return URL if needed
     actual_bot_username = "your_bot_username"

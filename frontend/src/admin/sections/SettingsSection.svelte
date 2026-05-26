@@ -1,5 +1,14 @@
 <script>
-  import { Check, ChevronRight, Copy, Eye, EyeOff, Search, X } from "$components/ui/icons.js";
+  import {
+    Check,
+    ChevronRight,
+    Copy,
+    Eye,
+    EyeOff,
+    FileText,
+    Search,
+    X,
+  } from "$components/ui/icons.js";
   import * as UiIcons from "$components/ui/icons.js";
   import { Accordion, Switch } from "$components/ui/primitives.js";
   import Dialog from "$components/ui/dialog.svelte";
@@ -13,13 +22,17 @@
 
   export let at;
   export let onSettingsSaved;
-  export let isCompact = false;
   export let currentLang = "ru";
 
   const settingsStore = getContext("settingsStore");
 
   $: ({ settingsSections, settingsLoading, settingsDirty, settingsSaving } = $settingsStore);
-  $: visibleSettingsSections = settingsSections.filter((section) => section.id !== "appearance");
+
+  const SETTINGS_SECTION_IDS_HIDDEN_IN_GENERAL_SETTINGS = new Set(["appearance", "pricing"]);
+
+  $: visibleSettingsSections = settingsSections.filter(
+    (section) => !SETTINGS_SECTION_IDS_HIDDEN_IN_GENERAL_SETTINGS.has(section.id)
+  );
 
   let settingsOpenSections = [];
   let settingsOpenSubsections = {};
@@ -28,6 +41,24 @@
   let iconPickerSearch = "";
   let copiedWebhookKey = "";
   let copiedWebhookTimer = null;
+
+  const PLATEGA_SBP_KEYS = new Set([
+    "PLATEGA_SBP_ENABLED",
+    "PLATEGA_SBP_ADMIN_ONLY_ENABLED",
+    "PLATEGA_SBP_METHOD",
+  ]);
+  const PLATEGA_CRYPTO_KEYS = new Set([
+    "PLATEGA_CRYPTO_ENABLED",
+    "PLATEGA_CRYPTO_ADMIN_ONLY_ENABLED",
+    "PLATEGA_CRYPTO_METHOD",
+  ]);
+  const PLATEGA_LEGACY_KEYS = new Set(["PLATEGA_PAYMENT_METHOD"]);
+  const SEMANTIC_FIELD_GROUP_ORDER = {
+    platega_common: 1,
+    platega_sbp: 2,
+    platega_crypto: 3,
+    platega_legacy: 4,
+  };
 
   $: settingsAllOpen =
     visibleSettingsSections.length > 0 &&
@@ -40,14 +71,7 @@
   );
 
   onMount(() => {
-    settingsStore.loadSettings().then(() => {
-      if ($settingsStore.settingsSections.length) {
-        const ids = $settingsStore.settingsSections
-          .filter((s) => s.id !== "appearance")
-          .map((s) => s.id);
-        settingsOpenSections = isCompact ? ids.slice(0, 1) : ids.slice();
-      }
-    });
+    settingsStore.loadSettings();
   });
 
   onDestroy(() => {
@@ -131,6 +155,17 @@
     closeIconPicker();
   }
 
+  async function handleJsonFile(field, event) {
+    const file = event?.currentTarget?.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      settingsStore.markDirty(field.key, text);
+    } finally {
+      event.currentTarget.value = "";
+    }
+  }
+
   function normalizeWebhookPath(path) {
     const normalized = String(path || "").trim();
     if (!normalized) return "";
@@ -207,6 +242,85 @@
     }));
   }
 
+  function fieldGroupMeta(
+    id,
+    titleKey,
+    titleFallback,
+    descriptionKey = "",
+    descriptionFallback = ""
+  ) {
+    return { id, titleKey, titleFallback, descriptionKey, descriptionFallback };
+  }
+
+  function plategaSemanticGroup(field) {
+    const key = String(field?.key || "");
+    if (PLATEGA_SBP_KEYS.has(key) || key.startsWith("PAYMENT_PLATEGA_SBP_")) {
+      return fieldGroupMeta(
+        "platega_sbp",
+        "settings_group_platega_sbp",
+        "SBP/card button",
+        "settings_group_platega_sbp_hint",
+        "Visibility, method ID, and labels for the SBP/card payment button."
+      );
+    }
+    if (PLATEGA_CRYPTO_KEYS.has(key) || key.startsWith("PAYMENT_PLATEGA_CRYPTO_")) {
+      return fieldGroupMeta(
+        "platega_crypto",
+        "settings_group_platega_crypto",
+        "Crypto button",
+        "settings_group_platega_crypto_hint",
+        "Visibility, method ID, and labels for the crypto payment button."
+      );
+    }
+    if (PLATEGA_LEGACY_KEYS.has(key)) {
+      return fieldGroupMeta(
+        "platega_legacy",
+        "settings_group_platega_legacy",
+        "Legacy compatibility",
+        "settings_group_platega_legacy_hint",
+        "Fallback method for old Platega callbacks and deployments."
+      );
+    }
+    return fieldGroupMeta(
+      "platega_common",
+      "settings_group_platega_common",
+      "Common settings",
+      "settings_group_platega_common_hint",
+      "Shared merchant credentials, redirects, and API endpoint."
+    );
+  }
+
+  function semanticFieldGroup(section, group, field) {
+    if (section?.id === "payments" && group?.id === "Platega") {
+      return plategaSemanticGroup(field);
+    }
+    return null;
+  }
+
+  function semanticFieldGroups(section, group) {
+    const fields = group?.fields || [];
+    const result = new Map();
+    for (const field of fields) {
+      const meta = semanticFieldGroup(section, group, field) || fieldGroupMeta("_default", "", "");
+      if (!result.has(meta.id)) {
+        result.set(meta.id, { ...meta, fields: [] });
+      }
+      result.get(meta.id).fields.push(field);
+    }
+    return Array.from(result.values()).sort(
+      (a, b) =>
+        (SEMANTIC_FIELD_GROUP_ORDER[a.id] || 999) - (SEMANTIC_FIELD_GROUP_ORDER[b.id] || 999)
+    );
+  }
+
+  function fieldGroupTitle(group) {
+    return group.titleKey ? at(group.titleKey, {}, group.titleFallback) : "";
+  }
+
+  function fieldGroupDescription(group) {
+    return group.descriptionKey ? at(group.descriptionKey, {}, group.descriptionFallback) : "";
+  }
+
   function adminLocaleKey(key) {
     const raw = String(key || "");
     return raw.startsWith("admin_") ? raw.slice("admin_".length) : raw;
@@ -227,6 +341,7 @@
       notifications: "Уведомления",
       support: "Поддержка",
       devices: "Устройства",
+      subscription_guides: "Connection guides",
     };
     return adminText(`settings_section_${id}`, {}, map[id] || id);
   }
@@ -264,7 +379,9 @@
 
   function fieldPlaceholderText(field) {
     const fallback = field.placeholder || "";
-    return field.i18n_placeholder_key ? adminText(field.i18n_placeholder_key, {}, fallback) : fallback;
+    return field.i18n_placeholder_key
+      ? adminText(field.i18n_placeholder_key, {}, fallback)
+      : fallback;
   }
 
   function subsectionTitle(group) {
@@ -279,6 +396,13 @@
         ? adminText(choice.i18n_label_key, {}, choice.label)
         : choice.label,
     }));
+  }
+
+  function setBoolField(field, checked) {
+    settingsStore.markDirty(field.key, checked);
+    if (checked && field.mutually_exclusive_key) {
+      settingsStore.markDirty(field.mutually_exclusive_key, false);
+    }
   }
 </script>
 
@@ -323,6 +447,35 @@
   </div>
 {/snippet}
 
+{#snippet renderGroupedFields(section, group)}
+  {@const fieldGroups = semanticFieldGroups(section, group)}
+  {#if fieldGroups.length === 1 && !fieldGroups[0].titleKey}
+    {#each fieldGroups[0].fields as field}
+      {@render renderField(field)}
+    {/each}
+  {:else}
+    <div class="admin-settings-field-groups">
+      {#each fieldGroups as fieldGroup}
+        <section class="admin-settings-field-group">
+          {#if fieldGroup.titleKey}
+            <header class="admin-settings-field-group-head">
+              <strong>{fieldGroupTitle(fieldGroup)}</strong>
+              {#if fieldGroupDescription(fieldGroup)}
+                <small>{fieldGroupDescription(fieldGroup)}</small>
+              {/if}
+            </header>
+          {/if}
+          <div class="admin-settings-field-group-body">
+            {#each fieldGroup.fields as field}
+              {@render renderField(field)}
+            {/each}
+          </div>
+        </section>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet renderField(field)}
   {@const revealed = isSecretRevealed(field.key)}
   <div class="admin-setting" class:is-overridden={isOverridden(field)}>
@@ -346,7 +499,7 @@
         <div class="admin-setting-switch">
           <Switch.Root
             checked={Boolean(valueFor(field))}
-            onCheckedChange={(checked) => settingsStore.markDirty(field.key, checked)}
+            onCheckedChange={(checked) => setBoolField(field, checked)}
             class="admin-switch-root"
           >
             <Switch.Thumb class="admin-switch-thumb" />
@@ -415,6 +568,41 @@
         <textarea
           class="admin-setting-textarea"
           rows="4"
+          placeholder={fieldPlaceholderText(field)}
+          value={valueFor(field) ?? ""}
+          oninput={(e) => settingsStore.markDirty(field.key, e.currentTarget.value)}
+        ></textarea>
+      {:else if field.type === "json"}
+        <div class="admin-json-toolbar">
+          <input
+            id={"json-file-" + field.key}
+            class="admin-json-file-input"
+            type="file"
+            accept="application/json,.json"
+            onchange={(event) => handleJsonFile(field, event)}
+          />
+          <label
+            class="admin-btn admin-btn-sm admin-btn-ghost admin-json-upload"
+            for={"json-file-" + field.key}
+          >
+            <FileText size={13} />
+            {at("settings_json_upload", {}, "Load .json")}
+          </label>
+          {#if valueFor(field)}
+            <AdminButton
+              size="sm"
+              variant="ghost"
+              onclick={() => settingsStore.markDirty(field.key, "")}
+            >
+              <X size={12} />
+              {at("clear", {}, "Clear")}
+            </AdminButton>
+          {/if}
+        </div>
+        <textarea
+          class="admin-setting-textarea admin-setting-json-textarea"
+          rows="10"
+          spellcheck="false"
           placeholder={fieldPlaceholderText(field)}
           value={valueFor(field) ?? ""}
           oninput={(e) => settingsStore.markDirty(field.key, e.currentTarget.value)}
@@ -527,9 +715,7 @@
               {#if rootGroup.webhook}
                 {@render renderWebhookHint(rootGroup.webhook)}
               {/if}
-              {#each rootGroup.fields as field}
-                {@render renderField(field)}
-              {/each}
+              {@render renderGroupedFields(section, rootGroup)}
             {/if}
             {#if labelGroups.length}
               <Accordion.Root
@@ -573,9 +759,7 @@
                         {#if group.webhook}
                           {@render renderWebhookHint(group.webhook)}
                         {/if}
-                        {#each group.fields as field}
-                          {@render renderField(field)}
-                        {/each}
+                        {@render renderGroupedFields(section, group)}
                       </div>
                     </Accordion.Content>
                   </Accordion.Item>

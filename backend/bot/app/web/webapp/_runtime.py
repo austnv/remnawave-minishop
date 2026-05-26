@@ -49,7 +49,11 @@ from bot.services.referral_service import ReferralService
 from bot.services.subscription_service import SubscriptionService
 from bot.utils.config_link import prepare_config_links
 from bot.utils.request_security import parse_ip_entries, request_client_ip
-from bot.utils.text_sanitizer import sanitize_display_name, sanitize_username
+from bot.utils.text_sanitizer import (
+    panel_description_from_profile,
+    sanitize_display_name,
+    sanitize_username,
+)
 from config.settings import Settings
 from db.dal import payment_dal, security_dal, subscription_dal, support_dal, user_dal
 from db.dal.user_dal import UserMergeConflictError
@@ -59,6 +63,7 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "templates" / "subscription_webapp.html"
 ASSET_DIR = TEMPLATE_PATH.parent
+APP_DEEPLINK_TEMPLATE_PATH = ASSET_DIR / "open_app_gateway.html"
 APP_ROOT = Path(__file__).resolve().parents[5]
 WEBAPP_LOGO_PROXY_PATH = "/webapp-logo"
 WEBAPP_LOGO_CACHE_DIR = APP_ROOT / "data" / "webapp-logo"

@@ -370,3 +370,91 @@ class TariffMixin:
             }
 
         return {"mode": "traffic_to_period", "remaining_days": remaining_days}
+
+    @staticmethod
+    def _aware_utc(value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    async def _hwid_conversion_credit(
+        self,
+        session: AsyncSession,
+        sub: Subscription,
+        *,
+        at: datetime,
+    ) -> Dict[str, Any]:
+        entries = await tariff_dal.get_hwid_device_value_entries(
+            session,
+            subscription_id=sub.subscription_id,
+            at=at,
+        )
+        value_rub = 0.0
+        purchase_ids: List[int] = []
+        skipped_devices = 0
+        for entry in entries:
+            currency = str(entry.get("currency") or "").upper()
+            if currency in {"XTR", "STARS", "STAR"}:
+                skipped_devices += int(entry.get("purchased_devices") or 0)
+                continue
+            amount = float(entry.get("amount") or 0)
+            if amount <= 0:
+                continue
+            valid_from = (
+                self._aware_utc(entry.get("valid_from"))
+                or self._aware_utc(entry.get("created_at"))
+                or at
+            )
+            valid_until = self._aware_utc(entry.get("valid_until"))
+            if not valid_until or valid_until <= at or valid_from >= valid_until:
+                continue
+            total_seconds = max(1.0, (valid_until - valid_from).total_seconds())
+            remaining_start = max(at, valid_from)
+            remaining_seconds = max(0.0, (valid_until - remaining_start).total_seconds())
+            if remaining_seconds <= 0:
+                continue
+            value_rub += amount * (remaining_seconds / total_seconds)
+            purchase_ids.append(int(entry["purchase_id"]))
+        return {
+            "value_rub": value_rub,
+            "purchase_ids": purchase_ids,
+            "skipped_devices": skipped_devices,
+        }
+
+    async def calculate_tariff_switch_options_with_hwid(
+        self,
+        session: AsyncSession,
+        sub: Subscription,
+        target_tariff: Tariff,
+    ) -> Dict[str, Any]:
+        options = dict(self.calculate_tariff_switch_options(sub, target_tariff))
+        now = datetime.now(timezone.utc)
+        credit = await self._hwid_conversion_credit(session, sub, at=now)
+        value_rub = float(credit.get("value_rub") or 0)
+        options["converted_hwid_value_rub"] = round(value_rub, 2)
+        options["convertible_hwid_purchase_ids"] = list(credit.get("purchase_ids") or [])
+        options["nonconverted_hwid_devices"] = int(credit.get("skipped_devices") or 0)
+        if value_rub <= 0:
+            return options
+
+        if options.get("mode") == "period_to_period":
+            target_monthly = float(options.get("target_monthly_rub") or 0)
+            hwid_days = (
+                math.floor((value_rub / target_monthly) * 30) if target_monthly > 0 else 0
+            )
+            options["converted_hwid_days"] = max(0, hwid_days)
+            options["recalc_days"] = int(options.get("recalc_days") or 0) + max(0, hwid_days)
+            options["paid_diff_rub"] = max(
+                0,
+                math.ceil(float(options.get("paid_diff_rub") or 0) - value_rub),
+            )
+            return options
+
+        if options.get("mode") == "period_to_traffic":
+            rub_per_gb = float(options.get("rub_per_gb") or 0)
+            hwid_gb = math.floor(value_rub / rub_per_gb) if rub_per_gb > 0 else 0
+            options["converted_hwid_gb"] = max(0, hwid_gb)
+            options["converted_gb"] = int(options.get("converted_gb") or 0) + max(0, hwid_gb)
+        return options

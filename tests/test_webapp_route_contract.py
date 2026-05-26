@@ -1,5 +1,7 @@
 import asyncio
+import json
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +11,8 @@ from aiohttp.test_utils import make_mocked_request
 from bot.app.web import admin_api, subscription_webapp
 from bot.app.web.admin_api_impl import auth as admin_auth_routes
 from bot.app.web.webapp_auth import create_webapp_session_token
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class _Request(dict):
@@ -31,6 +35,26 @@ class _AsyncSessionFactory:
         return False
 
 
+class _I18n:
+    locales_data = {
+        "en": {
+            "wa_app_launch_title": "Localized launch",
+            "wa_app_launch_opening_hint": "Localized opening hint",
+            "wa_app_launch_hint": "Localized manual hint",
+            "wa_app_launch_button": "Localized open",
+            "wa_app_launch_retry_button": "Localized retry",
+            "wa_app_launch_done_title": "Localized done",
+            "wa_app_launch_done_hint": "Localized done hint",
+            "wa_app_launch_close_button": "Localized close",
+            "wa_app_launch_unavailable_title": "Localized unavailable",
+            "wa_app_launch_unavailable_hint": "Localized unavailable hint",
+        }
+    }
+
+    def gettext(self, lang_code, key, **kwargs):
+        return self.locales_data.get(lang_code, {}).get(key, key)
+
+
 def _route_map(app: web.Application) -> dict[tuple[str, str], str]:
     return {
         (route.method, route.resource.canonical): route.handler.__name__
@@ -50,6 +74,10 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("GET", "/"): "index_route",
             ("GET", "/login/password"): "index_route",
             ("GET", "/home"): "index_route",
+            ("GET", "/install"): "index_route",
+            ("GET", "/trial"): "index_route",
+            ("GET", "/open-app"): "app_deeplink_route",
+            ("GET", "/s/{share_token}"): "index_route",
             ("GET", "/invite"): "index_route",
             ("GET", "/devices"): "index_route",
             ("GET", "/settings"): "index_route",
@@ -77,6 +105,11 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("POST", "/api/auth/email/password"): "email_password_auth_route",
             ("POST", "/api/auth/logout"): "logout_route",
             ("GET", "/api/me"): "me_route",
+            ("GET", "/api/subscription-guides"): "subscription_guides_route",
+            (
+                "GET",
+                "/api/subscription-guides/public/{share_token}",
+            ): "public_subscription_guides_route",
             ("GET", "/api/account/avatar"): "account_avatar_route",
             ("POST", "/api/account/language"): "account_language_route",
             ("POST", "/api/account/email/request"): "account_email_request_route",
@@ -145,6 +178,8 @@ class WebAppRouteContractTests(unittest.TestCase):
             ("DELETE", "/api/admin/ads/{campaign_id}"): "admin_ad_delete_route",
             ("GET", "/api/admin/settings"): "admin_settings_get_route",
             ("PATCH", "/api/admin/settings"): "admin_settings_patch_route",
+            ("GET", "/api/admin/translations"): "admin_translations_get_route",
+            ("PATCH", "/api/admin/translations"): "admin_translations_patch_route",
             ("GET", "/api/admin/tariffs"): "admin_tariffs_get_route",
             ("PUT", "/api/admin/tariffs"): "admin_tariffs_save_route",
             ("GET", "/api/admin/themes"): "admin_themes_get_route",
@@ -175,6 +210,15 @@ class WebAppRouteContractTests(unittest.TestCase):
 
         self.assertEqual(match_info.handler.__name__, "index_route")
 
+    def test_admin_translations_page_route_is_registered(self):
+        app = web.Application()
+        subscription_webapp.setup_subscription_webapp_routes(app)
+
+        request = make_mocked_request("GET", "/admin/translations", app=app)
+        match_info = asyncio.run(app.router.resolve(request))
+
+        self.assertEqual(match_info.handler.__name__, "index_route")
+
     def test_webapp_favicon_asset_route_is_registered(self):
         app = web.Application()
         subscription_webapp.setup_subscription_webapp_routes(app)
@@ -187,6 +231,86 @@ class WebAppRouteContractTests(unittest.TestCase):
         match_info = asyncio.run(app.router.resolve(request))
 
         self.assertEqual(match_info.handler.__name__, "webapp_favicon_route")
+
+    def test_webapp_root_icon_alias_routes_are_registered(self):
+        app = web.Application()
+        subscription_webapp.setup_subscription_webapp_routes(app)
+
+        for path in (
+            "/favicon.ico",
+            "/apple-touch-icon.png",
+            "/apple-touch-icon-precomposed.png",
+            "/icon-192.png",
+            "/icon-512.png",
+        ):
+            request = make_mocked_request("GET", path, app=app)
+            match_info = asyncio.run(app.router.resolve(request))
+
+            self.assertEqual(match_info.handler.__name__, "webapp_current_favicon_route")
+
+    def test_app_deeplink_gateway_keeps_target_in_fragment(self):
+        request = _Request(
+            app={
+                "settings": SimpleNamespace(
+                    WEBAPP_ENABLED=True,
+                    WEBAPP_TITLE="/minishop",
+                    DEFAULT_LANGUAGE="en",
+                )
+            }
+        )
+        request["csp_nonce"] = "nonce-value"
+
+        response = asyncio.run(subscription_webapp.app_deeplink_route(request))
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertIn('nonce="nonce-value"', response.text)
+        self.assertNotIn("__MESSAGES_JSON__", response.text)
+        self.assertIn("window.location.hash", response.text)
+        self.assertIn("URLSearchParams", response.text)
+        self.assertIn("Settings added", response.text)
+        self.assertIn("window.close()", response.text)
+        self.assertIn(r"/^(?:javascript|data|vbscript|https?):/i", response.text)
+
+    def test_app_deeplink_gateway_uses_i18n_template(self):
+        request = _Request(
+            app={
+                "settings": SimpleNamespace(
+                    WEBAPP_ENABLED=True,
+                    WEBAPP_TITLE="/minishop",
+                    DEFAULT_LANGUAGE="en",
+                ),
+                "i18n": _I18n(),
+            }
+        )
+        request["csp_nonce"] = "nonce-value"
+
+        response = asyncio.run(subscription_webapp.app_deeplink_route(request))
+
+        self.assertEqual(response.status, 200)
+        self.assertIn("Localized launch", response.text)
+        self.assertIn("Localized done hint", response.text)
+        self.assertIn("<title>/minishop - Localized launch</title>", response.text)
+        self.assertTrue(
+            (REPO_ROOT / "backend/bot/app/web/templates/open_app_gateway.html").is_file()
+        )
+
+    def test_app_launch_i18n_keys_are_available_to_webapp_bootstrap(self):
+        required_keys = {
+            "wa_app_launch_title",
+            "wa_app_launch_opening_hint",
+            "wa_app_launch_hint",
+            "wa_app_launch_button",
+            "wa_app_launch_retry_button",
+            "wa_app_launch_done_title",
+            "wa_app_launch_done_hint",
+            "wa_app_launch_close_button",
+            "wa_app_launch_unavailable_title",
+            "wa_app_launch_unavailable_hint",
+        }
+        for locale in ("en", "ru"):
+            messages = json.loads((REPO_ROOT / f"locales/{locale}.json").read_text("utf-8"))
+            self.assertLessEqual(required_keys, set(messages))
 
 
 class AdminApiAuthContractTests(unittest.IsolatedAsyncioTestCase):

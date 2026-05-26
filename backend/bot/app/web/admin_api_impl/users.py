@@ -1,5 +1,16 @@
 # ruff: noqa: F401,F403,F405,I001
 from ._runtime import *  # noqa: F403,F405
+from .auth import _require_admin_user_id
+from .common import (
+    _build_admin_webapp_referral_link,
+    _error,
+    _ok,
+    _premium_traffic_list_payload,
+    _read_json,
+    _serialize_payment,
+    _serialize_subscription,
+    _serialize_user,
+)
 
 import hashlib
 from html import escape as html_escape
@@ -861,18 +872,62 @@ async def admin_user_delete_route(request: web.Request) -> web.Response:
     target_id = int(request.match_info["user_id"])
 
     settings: Settings = request.app["settings"]
+    panel_service = request.app.get("panel_service")
+    if panel_service is None:
+        subscription_service = request.app.get("subscription_service")
+        panel_service = getattr(subscription_service, "panel_service", None)
     async_session_factory: sessionmaker = request.app["async_session_factory"]
     async with async_session_factory() as session:
+        user = await user_dal.get_user_by_id(session, target_id)
+        if not user:
+            return _error(404, "not_found")
+
+        panel_user_uuids = await user_dal.get_panel_user_uuids_for_user(
+            session,
+            target_id,
+            user=user,
+        )
+        if panel_user_uuids and panel_service is None:
+            await session.rollback()
+            return _error(503, "panel_service_unavailable")
+
+        for panel_uuid in panel_user_uuids:
+            try:
+                panel_deleted = await panel_service.delete_user_from_panel(
+                    panel_uuid,
+                    log_response=False,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Admin webapp failed to delete panel user %s for user %s: %s",
+                    panel_uuid,
+                    target_id,
+                    exc,
+                )
+                await session.rollback()
+                return _error(502, "panel_delete_failed", str(exc))
+
+            if not panel_deleted:
+                await session.rollback()
+                return _error(
+                    502,
+                    "panel_delete_failed",
+                    f"Failed to delete panel user {panel_uuid}",
+                )
+
         ok = await user_dal.delete_user_and_relations(session, target_id)
         if not ok:
             await session.rollback()
             return _error(404, "not_found")
-        await message_log_dal.create_message_log(
+        await message_log_dal.create_message_log_no_commit(
             session,
             {
-                "user_id": actor_id,
+                "user_id": actor_id if actor_id != target_id else None,
                 "event_type": "admin_delete_user_webapp",
-                "content": f"Deleted user_id={target_id}",
+                "content": (
+                    f"Deleted user_id={target_id}; "
+                    f"panel_uuids={','.join(panel_user_uuids) or 'none'}"
+                ),
                 "is_admin_event": True,
             },
         )

@@ -29,6 +29,73 @@ class FakeResult:
 
 
 class UserDalMergeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_get_panel_user_uuids_for_user_includes_subscription_fallbacks_once(self):
+        user = SimpleNamespace(user_id=42, panel_user_uuid="panel-main")
+        session = SimpleNamespace(
+            execute=AsyncMock(
+                return_value=FakeResult(["panel-main", "panel-sub", "panel-sub", ""])
+            ),
+        )
+
+        result = await user_dal.get_panel_user_uuids_for_user(session, 42, user=user)
+
+        self.assertEqual(result, ["panel-main", "panel-sub"])
+        stmt = session.execute.await_args.args[0]
+        sql = str(
+            stmt.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        self.assertIn("subscriptions", sql)
+        self.assertIn("42", sql)
+
+    async def test_delete_user_and_relations_cleans_dependent_tables_before_parents(self):
+        user = SimpleNamespace(user_id=42)
+        session = SimpleNamespace(
+            execute=AsyncMock(side_effect=lambda stmt: FakeResult()),
+            delete=AsyncMock(),
+            flush=AsyncMock(),
+        )
+
+        with patch("db.dal.user_dal.get_user_by_id", AsyncMock(return_value=user)):
+            deleted = await user_dal.delete_user_and_relations(session, 42)
+
+        self.assertTrue(deleted)
+
+        delete_tables = []
+        update_tables = []
+        for call in session.execute.await_args_list:
+            stmt = call.args[0]
+            if isinstance(stmt, Delete):
+                delete_tables.append(stmt.table.name)
+            elif isinstance(stmt, Update):
+                update_tables.append(stmt.table.name)
+
+        self.assertLess(delete_tables.index("traffic_topups"), delete_tables.index("payments"))
+        self.assertLess(delete_tables.index("traffic_topups"), delete_tables.index("subscriptions"))
+        self.assertLess(
+            delete_tables.index("hwid_device_purchases"),
+            delete_tables.index("payments"),
+        )
+        self.assertLess(delete_tables.index("tariff_changes"), delete_tables.index("payments"))
+        self.assertLess(
+            delete_tables.index("traffic_warnings"),
+            delete_tables.index("subscriptions"),
+        )
+        self.assertLess(
+            delete_tables.index("promo_code_activations"),
+            delete_tables.index("payments"),
+        )
+        self.assertLess(
+            delete_tables.index("support_ticket_messages"),
+            delete_tables.index("support_tickets"),
+        )
+        self.assertIn("support_ticket_messages", update_tables)
+        self.assertIn("email_verification_codes", delete_tables)
+        session.delete.assert_awaited_once_with(user)
+        session.flush.assert_awaited_once()
+
     async def test_get_user_ids_without_active_subscription_uses_left_join_null_check(self):
         session = SimpleNamespace(
             execute=AsyncMock(return_value=FakeResult([2, 3])),

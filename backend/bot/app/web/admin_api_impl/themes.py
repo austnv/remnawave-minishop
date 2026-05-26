@@ -1,5 +1,6 @@
 # ruff: noqa: F401,F403,F405,I001
 from ._runtime import *  # noqa: F403,F405
+from .webapp_runtime import refresh_webapp_runtime_after_settings_change
 
 import asyncio
 import hashlib
@@ -65,11 +66,9 @@ def _bump_theme_asset_versions(
         previous_theme = previous_by_key.get(key)
         previous_version = int(getattr(previous_theme, "assets_version", 0) or 0)
         current_version = int(theme.get("assets_version") or 1)
-        theme_changed = (
-            previous_theme is None
-            or _theme_payload_for_version_compare(theme)
-            != _theme_payload_for_version_compare(previous_theme)
-        )
+        theme_changed = previous_theme is None or _theme_payload_for_version_compare(
+            theme
+        ) != _theme_payload_for_version_compare(previous_theme)
         if theme_changed or (default_changed and key == config.default_theme):
             theme["assets_version"] = max(previous_version + 1, current_version, 1)
         elif previous_version > current_version:
@@ -213,12 +212,7 @@ async def _persist_appearance_upload(
         logger.warning("Failed to persist uploaded appearance asset settings: %s", result)
         return False
 
-    cache = request.app.get("webapp_settings_cache")
-    if isinstance(cache, dict):
-        cache["ts"] = 0.0
-        cache["data"] = {}
-    request.app["webapp_logo_cache"] = None
-    prune_unused_appearance_assets(settings)
+    await refresh_webapp_runtime_after_settings_change(request, updates=updates, deletes=[])
     return True
 
 
@@ -484,10 +478,7 @@ async def admin_themes_save_route(request: web.Request) -> web.Response:
         logger.exception("Failed to write webapp themes to %s", settings.WEBAPP_THEMES_DIR)
         return _error(500, "write_failed", str(exc))
 
-    cache = request.app.get("webapp_settings_cache")
-    if isinstance(cache, dict):
-        cache["ts"] = 0.0
-        cache["data"] = {}
+    await refresh_webapp_runtime_after_settings_change(request, updates={}, deletes=[])
 
     return _ok(
         {

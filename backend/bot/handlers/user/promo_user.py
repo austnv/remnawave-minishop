@@ -16,7 +16,12 @@ from bot.services.promo_code_service import PromoCodeService
 from bot.services.subscription_service import SubscriptionService
 from bot.states.user_states import UserPromoStates
 from bot.utils.callback_answer import safe_answer_callback
+from bot.utils.install_links import (
+    append_install_share_link_text,
+    ensure_user_install_guide_links,
+)
 from config.settings import Settings
+from db.dal import user_dal
 
 from .start import send_main_menu
 
@@ -133,10 +138,12 @@ async def process_promo_code_input(
                 from bot.services.notification_service import NotificationService
 
                 notification_service = NotificationService(bot, settings, i18n)
+                db_user = await user_dal.get_user_by_id(session, user.id)
                 await notification_service.notify_suspicious_promo_attempt(
                     user_id=user.id,
                     username=user.username,
                     first_name=user.first_name,
+                    email=getattr(db_user, "email", None) if db_user else None,
                     suspicious_input=code_input,
                 )
             except Exception as e:
@@ -160,12 +167,30 @@ async def process_promo_code_input(
             end_date=(new_end_date.strftime("%d.%m.%Y %H:%M:%S") if new_end_date else "N/A"),
             config_link=config_link_text,
         )
+        install_links = await ensure_user_install_guide_links(session, settings, user.id)
+        install_share_url = install_links.public_share_url
+        if install_share_url:
+            try:
+                await session.commit()
+                response_to_user_text = append_install_share_link_text(
+                    response_to_user_text,
+                    _,
+                    install_share_url,
+                )
+            except Exception:
+                await session.rollback()
+                logging.exception(
+                    "Failed to persist install guide share token for promo user %s.",
+                    user.id,
+                )
+                install_share_url = None
         reply_markup = get_connect_and_main_keyboard(
             current_lang,
             i18n,
             settings,
             config_link_display,
             connect_button_url=connect_button_url,
+            install_share_url=install_share_url,
         )
     else:
         await session.commit()

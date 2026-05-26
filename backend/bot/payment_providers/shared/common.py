@@ -60,7 +60,7 @@ def build_payment_description(
             "payment_description_traffic",
             traffic_gb=human_value if human_value is not None else format_human_units(months),
         )
-    if base in {"hwid_device", "hwid_devices"}:
+    if base in {"hwid_device", "hwid_devices", "hwid_devices_renewal"}:
         return translator("payment_description_hwid_devices", count=int(float(months)))
     return translator("payment_description_subscription", months=int(float(months)))
 
@@ -75,6 +75,7 @@ def build_payment_record_payload(
     months: Any,
     provider: str,
     sale_mode: str,
+    hwid_quote: Optional[dict] = None,
 ) -> dict:
     """Assemble the payment-record dict that every callback handler used to inline.
 
@@ -85,7 +86,7 @@ def build_payment_record_payload(
     base = sale_mode_base(sale_mode)
     is_traffic = sale_mode_is_traffic(sale_mode)
     is_hwid = sale_mode_is_hwid_devices(sale_mode)
-    return {
+    payload = {
         "user_id": user_id,
         "amount": amount,
         "currency": currency,
@@ -98,6 +99,17 @@ def build_payment_record_payload(
         "purchased_gb": float(months) if is_traffic else None,
         "purchased_hwid_devices": int(float(months)) if is_hwid else None,
     }
+    if hwid_quote and is_hwid:
+        payload.update(
+            {
+                "hwid_valid_from": hwid_quote.get("valid_from"),
+                "hwid_valid_until": hwid_quote.get("valid_until"),
+                "hwid_pricing_period_months": hwid_quote.get("pricing_period_months"),
+                "hwid_proration_ratio": hwid_quote.get("proration_ratio"),
+                "hwid_full_price": hwid_quote.get("full_price"),
+            }
+        )
+    return payload
 
 
 @dataclass(frozen=True)
@@ -119,7 +131,7 @@ def sale_mode_is_traffic(sale_mode: str) -> bool:
 
 
 def sale_mode_is_hwid_devices(sale_mode: str) -> bool:
-    return sale_mode_base(sale_mode) in {"hwid_device", "hwid_devices"}
+    return sale_mode_base(sale_mode) in {"hwid_device", "hwid_devices", "hwid_devices_renewal"}
 
 
 def sale_mode_tariff_key(sale_mode: str) -> Optional[str]:
@@ -194,6 +206,11 @@ async def create_base_payment_record(
     tariff_key: Optional[str] = None,
     purchased_gb: Optional[float] = None,
     purchased_hwid_devices: Optional[int] = None,
+    hwid_valid_from: Optional[Any] = None,
+    hwid_valid_until: Optional[Any] = None,
+    hwid_pricing_period_months: Optional[int] = None,
+    hwid_proration_ratio: Optional[float] = None,
+    hwid_full_price: Optional[float] = None,
 ) -> Payment:
     payment = await payment_dal.create_payment_record(
         session,
@@ -209,6 +226,11 @@ async def create_base_payment_record(
             "tariff_key": tariff_key,
             "purchased_gb": purchased_gb,
             "purchased_hwid_devices": purchased_hwid_devices,
+            "hwid_valid_from": hwid_valid_from,
+            "hwid_valid_until": hwid_valid_until,
+            "hwid_pricing_period_months": hwid_pricing_period_months,
+            "hwid_proration_ratio": hwid_proration_ratio,
+            "hwid_full_price": hwid_full_price,
         },
     )
     await session.commit()
@@ -241,6 +263,11 @@ async def create_webapp_payment_record(
         tariff_key=amounts.tariff_key,
         purchased_gb=amounts.purchased_gb,
         purchased_hwid_devices=amounts.purchased_hwid_devices,
+        hwid_valid_from=ctx.hwid_valid_from,
+        hwid_valid_until=ctx.hwid_valid_until,
+        hwid_pricing_period_months=ctx.hwid_pricing_period_months,
+        hwid_proration_ratio=ctx.hwid_proration_ratio,
+        hwid_full_price=ctx.hwid_full_price,
     )
 
 

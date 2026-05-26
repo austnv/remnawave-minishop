@@ -1,6 +1,8 @@
 # ruff: noqa: F401,F403,F405,I001
 from ._runtime import *  # noqa: F403,F405
 
+from bot.app.web.webapp.cache_helpers import invalidate_webapp_user_caches
+
 
 async def apply_promo_route(request: web.Request) -> web.Response:
     user_id = _require_user_id(request)
@@ -67,9 +69,14 @@ async def create_payment_route(request: web.Request) -> web.Response:
     traffic_mode = bool(settings.traffic_sale_mode)
     sale_mode = "subscription"
     traffic_gb_for_payment: Optional[float] = None
+    hwid_quote: Optional[Dict[str, Any]] = None
     requested_sale_mode = _sale_mode_base(str(payment_payload.sale_mode or ""))
 
-    if tariffs_config and requested_sale_mode in {"hwid_device", "hwid_devices"}:
+    if tariffs_config and requested_sale_mode in {
+        "hwid_device",
+        "hwid_devices",
+        "hwid_devices_renewal",
+    }:
         tariff_key = str(payment_payload.tariff_key or "").strip()
         if not tariff_key:
             return _json_error(400, "invalid_plan", "Tariff is not selected")
@@ -77,6 +84,8 @@ async def create_payment_route(request: web.Request) -> web.Response:
             tariff = tariffs_config.require(tariff_key)
         except Exception:
             return _json_error(400, "invalid_plan", "Tariff is not available")
+        if tariff.billing_model != "period":
+            return _json_error(400, "invalid_plan", "Device top-up is not available")
         try:
             device_count = int(
                 float(
@@ -87,23 +96,10 @@ async def create_payment_route(request: web.Request) -> web.Response:
             )
         except (TypeError, ValueError):
             return _json_error(400, "invalid_plan", "Invalid device package")
-        packages = tariff.hwid_device_packages
-        rub_packages = {
-            int(package.count): float(package.price)
-            for package in (packages.rub if packages else [])
-        }
-        stars_packages = {
-            int(package.count): int(float(package.price))
-            for package in (packages.stars if packages else [])
-        }
-        price = rub_packages.get(device_count)
-        stars_price = stars_packages.get(device_count)
-        if price is None and method != "stars":
+        if not tariff.hwid_device_packages:
             return _json_error(400, "invalid_plan", "Device package is not available")
-        if method == "stars" and (stars_price is None or int(stars_price) <= 0):
-            return _json_error(400, "invalid_plan", "Stars price is not configured")
         payment_units = device_count
-        sale_mode = f"hwid_devices@{tariff.key}"
+        sale_mode = f"{requested_sale_mode}@{tariff.key}"
     elif tariffs_config and requested_sale_mode in {"topup", "premium_topup"}:
         tariff_key = str(payment_payload.tariff_key or "").strip()
         if not tariff_key:
@@ -251,6 +247,42 @@ async def create_payment_route(request: web.Request) -> web.Response:
         if not db_user or db_user.is_banned:
             return _json_error(403, "access_denied", "Access denied")
         lang = db_user.language_code or settings.DEFAULT_LANGUAGE
+        if _sale_mode_is_hwid_devices(sale_mode):
+            sub = await subscription_dal.get_active_subscription_by_user_id(
+                session, user_id, db_user.panel_user_uuid
+            )
+            sale_tariff_key = _sale_mode_tariff_key(sale_mode)
+            if not sub or not sub.tariff_key or sub.tariff_key != sale_tariff_key:
+                return _json_error(
+                    400, "subscription_required", "Active tariff subscription is required"
+                )
+            try:
+                active_tariff = tariffs_config.require(sub.tariff_key) if tariffs_config else None
+            except Exception:
+                active_tariff = None
+            if not active_tariff or active_tariff.billing_model != "period":
+                return _json_error(400, "invalid_plan", "Device top-up is not available")
+            currency = "stars" if method == "stars" else "rub"
+            hwid_quote = await subscription_service.quote_hwid_device_topup(
+                session,
+                user_id=user_id,
+                device_count=int(payment_units),
+                tariff_key=sale_tariff_key,
+                renewal=_sale_mode_base(sale_mode) == "hwid_devices_renewal",
+                currency=currency,
+            )
+            if not hwid_quote:
+                return _json_error(400, "invalid_plan", "Device package is not available")
+            if method == "stars":
+                stars_price = int(hwid_quote["price"])
+                price = 0.0
+                if stars_price <= 0:
+                    return _json_error(400, "invalid_plan", "Stars price is not configured")
+            else:
+                price = float(hwid_quote["price"])
+                stars_price = None
+        admin_ids = {int(item) for item in (settings.ADMIN_IDS or [])}
+        is_admin = bool(db_user.telegram_id and int(db_user.telegram_id) in admin_ids)
         return await _create_subscription_payment(
             request=request,
             session=session,
@@ -262,6 +294,8 @@ async def create_payment_route(request: web.Request) -> web.Response:
             lang=lang,
             sale_mode=sale_mode,
             traffic_gb=traffic_gb_for_payment,
+            is_admin=is_admin,
+            hwid_quote=hwid_quote,
         )
 
 
@@ -311,7 +345,12 @@ async def activate_trial_route(request: web.Request) -> web.Response:
                 notification_service = NotificationService(
                     request.app["bot"], settings, i18n_instance
                 )
-                await notification_service.notify_trial_activation(user_id, end_date)
+                await notification_service.notify_trial_activation(
+                    user_id,
+                    end_date,
+                    username=db_user.username,
+                    email=getattr(db_user, "email", None),
+                )
             except Exception:
                 logger.exception("Failed to send WebApp trial activation notification")
 
@@ -323,6 +362,8 @@ async def activate_trial_route(request: web.Request) -> web.Response:
         except Exception:
             await session.rollback()
             logger.exception("Failed to mark WebApp trial activation for ad attribution")
+
+        await invalidate_webapp_user_caches(settings, user_id)
 
         return web.json_response(
             {
@@ -448,7 +489,9 @@ async def tariff_change_options_route(request: web.Request) -> web.Response:
         for tariff in config.enabled_tariffs:
             if tariff.key == current.key:
                 continue
-            options = subscription_service.calculate_tariff_switch_options(sub, tariff)
+            options = await subscription_service.calculate_tariff_switch_options_with_hwid(
+                session, sub, tariff
+            )
             targets.append(_serialize_tariff_change_target(settings, config, tariff, options, lang))
         return web.json_response(
             {
@@ -525,7 +568,9 @@ async def tariff_change_payment_route(request: web.Request) -> web.Response:
                 400, "subscription_required", "Active tariff subscription is required"
             )
         target = config.require(tariff_key)
-        options = subscription_service.calculate_tariff_switch_options(sub, target)
+        options = await subscription_service.calculate_tariff_switch_options_with_hwid(
+            session, sub, target
+        )
         price = float(options.get("paid_diff_rub") or 0)
         if price <= 0:
             return _json_error(
@@ -567,23 +612,241 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
                 400, "subscription_required", "Active tariff subscription is required"
             )
         tariff = config.require(sub.tariff_key)
+        if tariff.billing_model != "period":
+            return _json_error(
+                400, "device_topup_unavailable", "Device top-up is not available"
+            )
+        lang = db_user.language_code or settings.DEFAULT_LANGUAGE
         active = await subscription_service.get_active_subscription_details(session, user_id)
-        plans = _serialize_hwid_device_packages(
-            settings,
-            tariff,
-            tariff.hwid_device_packages,
-            db_user.language_code or settings.DEFAULT_LANGUAGE,
-        )
+        renewal_available = bool(active and active.get("device_topup_renewal_available"))
+        packages = tariff.hwid_device_packages
+        rub_counts = {int(package.count) for package in (packages.rub if packages else [])}
+        stars_counts = {int(package.count) for package in (packages.stars if packages else [])}
+        plans = []
+        for count in sorted(rub_counts | stars_counts):
+            rub_quote = (
+                await subscription_service.quote_hwid_device_topup(
+                    session,
+                    user_id=user_id,
+                    device_count=count,
+                    tariff_key=tariff.key,
+                    renewal=renewal_available,
+                    currency="rub",
+                )
+                if count in rub_counts
+                else None
+            )
+            stars_quote = (
+                await subscription_service.quote_hwid_device_topup(
+                    session,
+                    user_id=user_id,
+                    device_count=count,
+                    tariff_key=tariff.key,
+                    renewal=renewal_available,
+                    currency="stars",
+                )
+                if count in stars_counts
+                else None
+            )
+            if not rub_quote and not stars_quote:
+                continue
+            sale_mode_for_plan = "hwid_devices_renewal" if renewal_available else "hwid_devices"
+            plan = {
+                "id": f"{tariff.key}:hwid:{count}{':renewal' if renewal_available else ''}",
+                "tariff_key": tariff.key,
+                "tariff_name": tariff.name(lang),
+                "billing_model": tariff.billing_model,
+                "sale_mode": sale_mode_for_plan,
+                "months": count,
+                "device_count": count,
+                "price": float(rub_quote.get("price") if rub_quote else 0),
+                "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
+                "title": f"+{count}",
+                "subtitle": tariff.name(lang),
+                "valid_from": (
+                    (rub_quote or stars_quote)["valid_from"].isoformat()
+                    if (rub_quote or stars_quote).get("valid_from")
+                    else None
+                ),
+                "valid_until": (
+                    (rub_quote or stars_quote)["valid_until"].isoformat()
+                    if (rub_quote or stars_quote).get("valid_until")
+                    else None
+                ),
+                "proration_ratio": float((rub_quote or stars_quote).get("proration_ratio") or 0),
+            }
+            if stars_quote and int(stars_quote.get("price") or 0) > 0:
+                plan["stars_price"] = int(stars_quote["price"])
+            plans.append(plan)
         return web.json_response(
             {
                 "ok": True,
                 "tariff_key": tariff.key,
-                "tariff_name": tariff.name(db_user.language_code or settings.DEFAULT_LANGUAGE),
+                "tariff_name": tariff.name(lang),
                 "current_limit": _coerce_int_or_none(active.get("max_devices")) if active else None,
-                "extra_hwid_devices": int(sub.extra_hwid_devices or 0),
+                "extra_hwid_devices": int(active.get("extra_hwid_devices") or 0)
+                if active
+                else int(sub.extra_hwid_devices or 0),
+                "extra_hwid_devices_valid_until": active.get("extra_hwid_devices_valid_until")
+                if active
+                else None,
+                "extra_hwid_devices_valid_until_text": active.get(
+                    "extra_hwid_devices_valid_until_text"
+                )
+                if active
+                else None,
+                "renewal_available": renewal_available,
+                "renewal_recommended_count": int(active.get("extra_hwid_devices") or 0)
+                if active and renewal_available
+                else 0,
                 "plans": plans,
             }
         )
+
+
+def _yookassa_payment_payload_for_processing(payload: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(payload or {})
+    if not isinstance(normalized.get("amount"), dict):
+        amount_value = normalized.get("amount_value")
+        amount_currency = normalized.get("amount_currency")
+        if amount_value is not None or amount_currency:
+            normalized["amount"] = {
+                "value": str(amount_value if amount_value is not None else 0),
+                "currency": amount_currency or "RUB",
+            }
+    return normalized
+
+
+def _payment_status_can_be_refreshed(payment: Payment) -> bool:
+    normalized = str(getattr(payment, "status", "") or "").lower()
+    if normalized == "succeeded":
+        return False
+    if normalized in {"failed", "canceled", "cancelled", "failed_creation"}:
+        return False
+    return normalized.startswith("pending") or normalized in {"waiting_for_capture", "created"}
+
+
+async def _refresh_yookassa_payment_status(
+    request: web.Request,
+    session: AsyncSession,
+    payment: Payment,
+) -> Payment:
+    if str(getattr(payment, "provider", "") or "").lower() != "yookassa":
+        return payment
+    if not _payment_status_can_be_refreshed(payment):
+        return payment
+
+    yookassa_payment_id = payment.yookassa_payment_id or payment.provider_payment_id
+    yookassa_service = request.app.get("yookassa_service")
+    if (
+        not yookassa_payment_id
+        or not yookassa_service
+        or not getattr(yookassa_service, "configured", False)
+        or not hasattr(yookassa_service, "get_payment_info")
+    ):
+        return payment
+
+    try:
+        provider_payload = await yookassa_service.get_payment_info(yookassa_payment_id)
+    except Exception:
+        logger.exception("Failed to refresh YooKassa payment %s status", payment.payment_id)
+        return payment
+
+    if not provider_payload:
+        return payment
+
+    provider_payload = _yookassa_payment_payload_for_processing(provider_payload)
+    provider_status = str(provider_payload.get("status") or "").lower()
+    if provider_status == "succeeded" and provider_payload.get("paid") is True:
+        from bot.payment_providers.yookassa import (
+            payment_processing_lock,
+            process_successful_payment,
+        )
+
+        async with payment_processing_lock:
+            current = await payment_dal.get_payment_by_db_id(session, payment.payment_id)
+            if not current:
+                return payment
+            if current.status == "succeeded":
+                return current
+            try:
+                await process_successful_payment(
+                    session,
+                    request.app["bot"],
+                    provider_payload,
+                    request.app["i18n"],
+                    request.app["settings"],
+                    request.app["panel_service"],
+                    request.app["subscription_service"],
+                    request.app["referral_service"],
+                    request.app.get("lknpd_service"),
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception(
+                    "Failed to process refreshed YooKassa payment %s",
+                    payment.payment_id,
+                )
+                return current
+            return await payment_dal.get_payment_by_db_id(session, payment.payment_id) or current
+
+    if provider_status in {"canceled", "cancelled"}:
+        from bot.payment_providers.yookassa import (
+            payment_processing_lock,
+            process_cancelled_payment,
+        )
+
+        async with payment_processing_lock:
+            current = await payment_dal.get_payment_by_db_id(session, payment.payment_id)
+            if not current:
+                return payment
+            if not _payment_status_can_be_refreshed(current):
+                return current
+            try:
+                await process_cancelled_payment(
+                    session,
+                    request.app["bot"],
+                    provider_payload,
+                    request.app["i18n"],
+                    request.app["settings"],
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception(
+                    "Failed to process refreshed cancelled YooKassa payment %s",
+                    payment.payment_id,
+                )
+                return current
+            return await payment_dal.get_payment_by_db_id(session, payment.payment_id) or current
+
+    return payment
+
+
+async def _refresh_wata_payment_status(
+    request: web.Request,
+    session: AsyncSession,
+    payment: Payment,
+) -> Payment:
+    if str(getattr(payment, "provider", "") or "").lower() != "wata":
+        return payment
+    if not _payment_status_can_be_refreshed(payment):
+        return payment
+
+    wata_service = request.app.get("wata_service")
+    if (
+        not wata_service
+        or not getattr(wata_service, "configured", False)
+        or not hasattr(wata_service, "refresh_payment_status")
+    ):
+        return payment
+
+    try:
+        return await wata_service.refresh_payment_status(session, payment)
+    except Exception:
+        logger.exception("Failed to refresh Wata payment %s status", payment.payment_id)
+        return payment
 
 
 async def payment_status_route(request: web.Request) -> web.Response:
@@ -598,6 +861,10 @@ async def payment_status_route(request: web.Request) -> web.Response:
         payment = await payment_dal.get_payment_by_db_id(session, payment_id)
         if not payment or payment.user_id != user_id:
             return _json_error(404, "not_found", "Payment not found")
+        payment = await _refresh_yookassa_payment_status(request, session, payment)
+        payment = await _refresh_wata_payment_status(request, session, payment)
+        if payment.status == "succeeded":
+            await invalidate_webapp_user_caches(request.app["settings"], user_id)
         return web.json_response(
             {
                 "ok": True,
@@ -623,7 +890,11 @@ def _sale_mode_is_traffic(sale_mode: str) -> bool:
 
 
 def _sale_mode_is_hwid_devices(sale_mode: str) -> bool:
-    return _sale_mode_base(sale_mode) in {"hwid_device", "hwid_devices"}
+    return _sale_mode_base(sale_mode) in {
+        "hwid_device",
+        "hwid_devices",
+        "hwid_devices_renewal",
+    }
 
 
 async def _create_subscription_payment(
@@ -638,6 +909,8 @@ async def _create_subscription_payment(
     lang: str,
     sale_mode: str = "subscription",
     traffic_gb: Optional[float] = None,
+    is_admin: bool = False,
+    hwid_quote: Optional[Dict[str, Any]] = None,
 ) -> web.Response:
     settings: Settings = request.app["settings"]
     sale_mode = str(sale_mode or "subscription")
@@ -655,11 +928,11 @@ async def _create_subscription_payment(
 
     provider_spec = get_provider_spec(method)
     if provider_spec and provider_spec.create_webapp_payment:
-        if not provider_spec.is_visible(settings, request.app):
+        if not provider_spec.is_visible_for_user(settings, request.app, is_admin=is_admin):
             logger.warning(
                 "WebApp payment method unavailable: method=%s enabled=%s configured=%s",
                 method,
-                provider_spec.is_enabled(settings),
+                provider_spec.is_effectively_enabled(settings),
                 provider_spec.is_service_configured(request.app),
             )
             return _json_error(400, "payment_unavailable", "Payment method unavailable")
@@ -675,6 +948,15 @@ async def _create_subscription_payment(
                 description=description,
                 sale_mode=sale_mode,
                 traffic_gb=traffic_gb,
+                hwid_valid_from=hwid_quote.get("valid_from") if hwid_quote else None,
+                hwid_valid_until=hwid_quote.get("valid_until") if hwid_quote else None,
+                hwid_pricing_period_months=hwid_quote.get("pricing_period_months")
+                if hwid_quote
+                else None,
+                hwid_proration_ratio=hwid_quote.get("proration_ratio")
+                if hwid_quote
+                else None,
+                hwid_full_price=hwid_quote.get("full_price") if hwid_quote else None,
             )
         )
 

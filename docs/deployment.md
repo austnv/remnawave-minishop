@@ -21,10 +21,35 @@ docker compose logs -f backend worker frontend
 - `worker` только после успешных миграций;
 - `frontend` как отдельный nginx-образ без Python runtime.
 
-Для обратного прокси с Caddy используйте отдельный `deploy/compose/docker-compose-caddy.yml`.
+Основной путь миграций — отдельный сервис `migrate`. `backend` и `worker` также выполняют
+безопасную проверку схемы на старте под PostgreSQL advisory lock, поэтому прямой запуск сервиса
+без compose тоже применит недостающие миграции и не создаст гонку на схеме БД.
 
-Миграции не запускаются внутри backend. Их выполняет отдельный сервис `migrate`, поэтому старт
-приложения не создает гонки на схеме БД.
+## Готовые папки запуска
+
+Для production удобнее использовать не корневой compose, а отдельные примеры в
+[`deploy/examples`](../deploy/examples). В каждой папке лежат свой `docker-compose.yml`,
+`.env.example`, README и нужный конфиг рядом:
+
+| Папка | Назначение | Запуск |
+| --- | --- | --- |
+| [`deploy/examples/caddy`](../deploy/examples/caddy) | Caddy с автоматическим HTTPS. | `cp .env.example .env`, заполнить `.env`, `docker compose up -d`. |
+| [`deploy/examples/nginx`](../deploy/examples/nginx) | Nginx в Docker-сети приложения, TLS-сертификаты кладутся в `ssl/`. | `cp .env.example .env`, заполнить `.env`, положить сертификаты, `docker compose up -d`. |
+| [`deploy/examples/newt`](../deploy/examples/newt) | Pangolin/Newt без входящих портов на сервере приложения. | `cp .env.example .env`, заполнить Newt credentials, создать ресурсы в Pangolin, `docker compose up -d`. |
+| [`deploy/examples/no-proxy`](../deploy/examples/no-proxy) | Прямая публикация портов backend/frontend. | `cp .env.example .env`, заполнить публичные URL и порты, `docker compose up -d`. |
+
+Пример для Caddy:
+
+```bash
+cd deploy/examples/caddy
+cp .env.example .env
+nano .env
+docker compose up -d
+docker compose logs -f caddy backend worker frontend
+```
+
+Корневой `docker-compose.yml` оставлен для локальной сборки из исходников. Примеры в
+`deploy/examples` используют готовые GHCR-образы и не требуют указывать `-f`.
 
 ## Миграции
 
@@ -47,7 +72,8 @@ docker compose logs migrate
 ```
 
 `backend` и `worker` зависят от `migrate` через `service_completed_successfully`; если миграции
-падают, приложение не стартует поверх неподготовленной БД.
+падают, приложение не стартует поверх неподготовленной БД. При прямом запуске `backend` или
+`worker` без compose тот же `init_db` применяет недостающие миграции перед стартом логики сервиса.
 
 ## Сервисы
 
@@ -57,8 +83,8 @@ docker compose logs migrate
 - `postgres`: PostgreSQL 17.
 - `redis`: Redis 7 для FSM, кеша, rate-limit, очередей и locks.
 
-`deploy/compose/docker-compose-caddy.yml` добавляет `caddy` как внешний HTTP/HTTPS reverse proxy.
-Перед запуском замените example-домены прямо в `deploy/docker/caddy/Caddyfile`.
+В production-примерах внешний доступ добавляют `caddy`, `nginx`, `newt` или прямые `ports` в
+соответствующей папке из [`deploy/examples`](../deploy/examples).
 
 ## Логи и проверка
 
@@ -77,7 +103,8 @@ curl http://127.0.0.1:8080/health
 ```
 
 В обычном compose backend публикуется на `127.0.0.1:${WEB_SERVER_PORT:-8080}`, frontend на
-`127.0.0.1:${FRONTEND_PORT:-8082}`. В Caddy-варианте проверяйте `HTTP_BIND`.
+`127.0.0.1:${FRONTEND_PORT:-8082}`. В новых production-примерах проверяйте bind-переменные
+конкретной папки: `HTTP_BIND`, `HTTPS_BIND`, `WEB_SERVER_BIND` или `FRONTEND_BIND`.
 
 ## Обновление
 
@@ -122,6 +149,30 @@ IMAGE_TAG=3.2.0 scripts/docker-push-images.sh
 `scripts/docker-push-images.ps1`. Если публикуете образы в другой registry, namespace или с другим
 префиксом имени, переопределите `IMAGE_NAMESPACE`, `IMAGE_REGISTRY` или `IMAGE_PREFIX`.
 
+Для Docker Hub аккаунта `3252a8` есть отдельный скрипт, который сразу собирает и публикует все три
+образа:
+
+```bash
+docker login
+IMAGE_TAG=3.2.0 bash scripts/dockerhub-build-push-images.sh
+```
+
+PowerShell-вариант:
+
+```powershell
+$env:IMAGE_TAG = "3.2.0"
+docker login
+powershell -ExecutionPolicy Bypass -File .\scripts\dockerhub-build-push-images.ps1
+```
+
+По умолчанию он публикует:
+
+```text
+docker.io/3252a8/remnawave-minishop-backend:<tag>
+docker.io/3252a8/remnawave-minishop-worker:<tag>
+docker.io/3252a8/remnawave-minishop-frontend:<tag>
+```
+
 Если PowerShell блокирует локальные скрипты ошибкой `PSSecurityException` / Execution Policy,
 запустите те же скрипты с обходом политики только для текущего процесса:
 
@@ -162,6 +213,7 @@ distributed lock; код подготовлен к нескольким репл
 
 ```bash
 mkdir -p data/themes data/webapp-logo data/webapp-emoji data/tariffs
+touch data/locales-overrides.json
 chown -R 10001:10001 data
 chmod -R u+rwX data
 docker compose up -d --force-recreate backend worker
@@ -192,67 +244,45 @@ docker compose up -d backend worker
 
 ## Обратный прокси
 
-Вариант `deploy/compose/docker-compose-caddy.yml` проксирует:
+Готовые reverse-proxy примеры лежат в:
 
-- webhook-домен целиком в `backend:8080`;
-- Mini App-домен целиком в `frontend:80`;
+- [`deploy/examples/caddy`](../deploy/examples/caddy) - Caddy, автоматический HTTPS;
+- [`deploy/examples/nginx`](../deploy/examples/nginx) - Nginx, сертификаты кладутся рядом в `ssl/`;
+- [`deploy/examples/newt`](../deploy/examples/newt) - Newt/Pangolin, без входящих портов на сервере приложения.
+
+Во всех вариантах схема одинаковая:
+
+- webhook/backend-домен целиком идет в `backend:8080`;
+- Mini App/frontend-домен целиком идет в `frontend:80`;
 - API/auth/theme routes Mini App дальше проксируются frontend nginx в `backend:8081`.
 
-Встроенный `deploy/docker/caddy/Caddyfile` намеренно повторяет старую двухдоменную структуру:
+Минимальная логика Caddy:
 
 ```caddyfile
-# Replace the example domains with your real webhook and Mini App hostnames.
-app.example.com {
-	encode zstd gzip
-
+webhooks.example.com {
 	reverse_proxy backend:8080
 }
 
-web.example.com {
-	encode zstd gzip
-
+app.example.com {
 	reverse_proxy frontend:80
 }
 ```
 
-Готовый пример для внешнего Nginx лежит в
-[`deploy/docker/nginx/remnawave-minishop.conf`](../deploy/docker/nginx/remnawave-minishop.conf).
-Он рассчитан на Nginx в той же Docker network, поэтому использует DNS-имена сервисов:
-
-```nginx
-upstream remnawave_backend_webhooks {
-    server backend:8080;
-}
-
-upstream remnawave_frontend {
-    server frontend:80;
-}
-```
-
-Webhook и health-маршруты должны идти в `backend:8080`. Статические ассеты Mini App отдавайте через
-`frontend:80`; frontend nginx уже проксирует `/api/*`, `/auth/*` и ассеты тем/логотипов в
-`backend:8081`.
+Минимальная логика Nginx такая же: `webhooks.example.com` проксируется в `backend:8080`,
+`app.example.com` - в `frontend:80`. В `deploy/examples/nginx/nginx.conf.template` уже есть
+заголовки `X-Forwarded-*`, редирект HTTP -> HTTPS и пути сертификатов.
 
 ## Newt
 
-Если `newt` запущен в одной Compose network с приложением, указывайте внутренние имена сервисов,
-а не порты на хосте.
+Для Newt используйте [`deploy/examples/newt`](../deploy/examples/newt). В compose уже есть сервис
+`newt`, а в `.env.example` - поля `PANGOLIN_ENDPOINT`, `NEWT_ID` и `NEWT_SECRET`.
 
-Если используете Caddy-вариант и хотите публиковать стек одной точкой через Newt/Pangolin, укажите:
-
-```text
-http://caddy:80
-```
-
-Если публикуете через Newt/Pangolin без Caddy, настройте отдельные ресурсы:
+В Pangolin создайте два HTTP-ресурса для этого Newt site:
 
 ```text
 Mini App / frontend: http://frontend:80
 Webhooks / backend:  http://backend:8080
 ```
-
-Такой вариант нормальный: Caddy не обязателен. Он нужен только если вы хотите заранее объединить
-frontend и backend-маршруты в один внутренний upstream.
 
 `backend:8081` является внутренним WebApp API/auth-сервером для frontend nginx; обычно его не нужно
 указывать в Newt напрямую.

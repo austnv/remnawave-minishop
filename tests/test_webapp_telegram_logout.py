@@ -33,3 +33,30 @@ def test_logout_handler_is_noop_inside_telegram_mini_app():
     mark_logout_pos = source.index("markManualLogout();")
 
     assert guard_pos < mark_logout_pos
+
+
+def test_open_app_route_uses_fallback_screen_without_auth_flow():
+    main_source = _read("frontend/src/main.js")
+    app_source = _read("frontend/src/App.svelte")
+    screen_source = _read("frontend/src/webapp/screens/AppLaunchScreen.svelte")
+
+    assert "loadBootstrap().finally" in main_source
+    assert "AppLaunchScreen" in app_source
+    assert 'mode = isAppLaunchRoute ? "appLaunch"' in app_source
+    assert "window.close()" in screen_source
+
+    launch_guard_pos = app_source.index("if (isAppLaunchRoute) return;")
+    boot_pos = app_source.index("boot();", launch_guard_pos)
+
+    assert launch_guard_pos < boot_pos
+
+
+def test_frontend_nginx_proxies_open_app_gateway_to_backend():
+    source = _read("deploy/docker/frontend/nginx.conf")
+
+    open_app_pos = source.index("location = /open-app")
+    fallback_pos = source.index("location / {")
+    block = source[open_app_pos:fallback_pos]
+
+    assert open_app_pos < fallback_pos
+    assert "proxy_pass http://backend:8081;" in block

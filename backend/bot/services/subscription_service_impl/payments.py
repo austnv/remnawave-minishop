@@ -26,6 +26,11 @@ class PaymentContextMixin:
         tariff_key: Optional[str],
         purchased_gb: Optional[float] = None,
         purchased_hwid_devices: Optional[int] = None,
+        hwid_valid_from: Optional[datetime] = None,
+        hwid_valid_until: Optional[datetime] = None,
+        hwid_pricing_period_months: Optional[int] = None,
+        hwid_proration_ratio: Optional[float] = None,
+        hwid_full_price: Optional[float] = None,
     ) -> None:
         payment = await payment_dal.get_payment_by_db_id(session, payment_db_id)
         if not payment:
@@ -34,6 +39,16 @@ class PaymentContextMixin:
         payment.tariff_key = tariff_key
         payment.purchased_gb = purchased_gb
         payment.purchased_hwid_devices = purchased_hwid_devices
+        if hwid_valid_from is not None:
+            payment.hwid_valid_from = hwid_valid_from
+        if hwid_valid_until is not None:
+            payment.hwid_valid_until = hwid_valid_until
+        if hwid_pricing_period_months is not None:
+            payment.hwid_pricing_period_months = hwid_pricing_period_months
+        if hwid_proration_ratio is not None:
+            payment.hwid_proration_ratio = hwid_proration_ratio
+        if hwid_full_price is not None:
+            payment.hwid_full_price = hwid_full_price
         await session.flush()
 
     async def get_user_language(self, session: AsyncSession, user_id: int) -> str:
@@ -95,6 +110,7 @@ class PaymentContextMixin:
         except Exception:
             provider_label = self._PROVIDER_LABELS.get((provider or "").lower())
         dashboard_url = (self.settings.SUBSCRIPTION_MINI_APP_URL or "").strip() or None
+        i18n = getattr(self, "i18n", None)
 
         try:
             content = render_payment_success(
@@ -108,8 +124,9 @@ class PaymentContextMixin:
                 end_date_text=end_date_text,
                 dashboard_url=dashboard_url,
                 provider_label=provider_label,
+                i18n=i18n,
             )
-            email_service = EmailAuthService(self.settings)
+            email_service = EmailAuthService(self.settings, i18n)
             await email_service.send_rendered_email(email=recipient, content=content)
         except Exception:
             logging.exception("Failed to send payment success email to user %s", db_user.user_id)

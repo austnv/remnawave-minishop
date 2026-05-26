@@ -8,7 +8,9 @@ from bot.app.web import subscription_webapp  # noqa: F401
 from bot.app.web.webapp import account as account_routes
 from bot.app.web.webapp.auth import (
     _link_telegram_to_user,
+    _panel_description_for_user,
     _sync_merged_panel_identity_for_user,
+    _sync_panel_identity_for_user,
 )
 
 
@@ -29,6 +31,71 @@ class AccountLinkingPanelTests(unittest.IsolatedAsyncioTestCase):
 
         async def __aexit__(self, exc_type, exc, tb):
             return None
+
+    async def test_panel_identity_sync_reports_failed_update_response(self):
+        user = SimpleNamespace(
+            user_id=42,
+            panel_user_uuid="panel-42",
+            email="linked@example.com",
+            telegram_id=42,
+            username="alice",
+            first_name=None,
+            last_name=None,
+        )
+        panel_service = SimpleNamespace(update_user_details_on_panel=AsyncMock(return_value=None))
+        request = SimpleNamespace(
+            app={"subscription_service": SimpleNamespace(panel_service=panel_service)}
+        )
+
+        result = await _sync_panel_identity_for_user(request, user)
+
+        self.assertFalse(result)
+        panel_service.update_user_details_on_panel.assert_awaited_once()
+
+    async def test_panel_identity_sync_reports_successful_update_response(self):
+        user = SimpleNamespace(
+            user_id=42,
+            panel_user_uuid="panel-42",
+            email="linked@example.com",
+            telegram_id=42,
+            username="alice",
+            first_name=None,
+            last_name=None,
+        )
+        panel_service = SimpleNamespace(
+            update_user_details_on_panel=AsyncMock(return_value={"uuid": "panel-42"})
+        )
+        request = SimpleNamespace(
+            app={"subscription_service": SimpleNamespace(panel_service=panel_service)}
+        )
+
+        result = await _sync_panel_identity_for_user(request, user)
+
+        self.assertTrue(result)
+        panel_service.update_user_details_on_panel.assert_awaited_once()
+        _, payload = panel_service.update_user_details_on_panel.await_args.args[:2]
+        self.assertNotIn("description", payload)
+        self.assertEqual(payload["email"], "linked@example.com")
+
+    def test_panel_description_for_user_excludes_email(self):
+        user = SimpleNamespace(
+            email="linked@example.com",
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+        )
+
+        self.assertEqual(_panel_description_for_user(user), "alice\nAlice")
+
+    def test_panel_description_for_user_filters_broken_lines(self):
+        user = SimpleNamespace(
+            email="linked@example.com",
+            username="alice??",
+            first_name="????",
+            last_name="Smith",
+        )
+
+        self.assertEqual(_panel_description_for_user(user), "alice??\nSmith")
 
     async def test_merged_panel_identity_deletes_source_before_updating_target(self):
         calls = []

@@ -369,6 +369,25 @@
     {#if !deviceTopupOptions}
       <DialogOptionsSkeleton label={t("wa_tariff_options_loading")} rows={3} />
     {:else if deviceTopupOptions?.plans?.length}
+      {#if deviceTopupOptions?.renewal_available}
+        <div class="topup-carryover-note">
+          <p>
+            {t("wa_hwid_devices_renewal_offer", {
+              count: Number(deviceTopupOptions.renewal_recommended_count || 0),
+              date: deviceTopupOptions.extra_hwid_devices_valid_until_text || "",
+            })}
+          </p>
+        </div>
+      {:else if Number(deviceTopupOptions?.extra_hwid_devices || 0) > 0 && deviceTopupOptions?.extra_hwid_devices_valid_until_text}
+        <div class="topup-carryover-note">
+          <p>
+            {t("wa_hwid_devices_valid_until", {
+              count: Number(deviceTopupOptions.extra_hwid_devices || 0),
+              date: deviceTopupOptions.extra_hwid_devices_valid_until_text,
+            })}
+          </p>
+        </div>
+      {/if}
       <div class="option-list">
         {#each deviceTopupOptions.plans as plan}
           <button

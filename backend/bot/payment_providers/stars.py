@@ -35,6 +35,7 @@ from .shared import (
     payment_failed,
     payment_record_amounts,
     payment_unavailable,
+    quote_hwid_callback_parts,
     safe_callback_answer,
     sale_mode_base,
     sale_mode_tariff_key,
@@ -80,9 +81,10 @@ class StarsService:
         stars_price: int,
         description: str,
         sale_mode: str = "subscription",
+        hwid_quote: Optional[dict] = None,
     ) -> Optional[int]:
+        amounts = payment_record_amounts(months=months, sale_mode=sale_mode)
         sale_base = sale_mode_base(sale_mode)
-        is_traffic = sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
         payment_record_data = {
             "user_id": user_id,
             "amount": float(stars_price),
@@ -93,7 +95,15 @@ class StarsService:
             "provider": "telegram_stars",
             "sale_mode": sale_mode,
             "tariff_key": sale_mode_tariff_key(sale_mode),
-            "purchased_gb": float(months) if is_traffic else None,
+            "purchased_gb": amounts.purchased_gb,
+            "purchased_hwid_devices": amounts.purchased_hwid_devices,
+            "hwid_valid_from": hwid_quote.get("valid_from") if hwid_quote else None,
+            "hwid_valid_until": hwid_quote.get("valid_until") if hwid_quote else None,
+            "hwid_pricing_period_months": hwid_quote.get("pricing_period_months")
+            if hwid_quote
+            else None,
+            "hwid_proration_ratio": hwid_quote.get("proration_ratio") if hwid_quote else None,
+            "hwid_full_price": hwid_quote.get("full_price") if hwid_quote else None,
         }
         try:
             db_payment_record = await payment_dal.create_payment_record(
@@ -197,11 +207,25 @@ async def pay_stars_callback_handler(
         await notify_callback_parse_error(callback, translator)
         return
 
-    if not settings.STARS_ENABLED:
+    if not SPEC.is_available_to_user(
+        settings,
+        user_id=callback.from_user.id,
+        require_configured=False,
+    ):
         await notify_service_unavailable(callback, translator)
         return
 
     parts = parse_payment_callback(callback.data or "")
+    if not parts:
+        await notify_callback_parse_error(callback, translator)
+        return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=stars_service.subscription_service,
+        currency="stars",
+    )
     if not parts:
         await notify_callback_parse_error(callback, translator)
         return
@@ -217,6 +241,7 @@ async def pay_stars_callback_handler(
         stars_price=stars_price,
         description=payment_description,
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     if payment_db_id:
@@ -440,9 +465,8 @@ SPEC = PaymentProviderSpec(
     webapp_icon="Sparkles",
     telegram_labels={"ru": "Звёзды Telegram", "en": "Telegram Stars"},
     pending_status="pending_stars",
-    # STARS_ENABLED stays on the global Settings — subscription_options reads
-    # it together with STARS_PRICE_* fields, so it has cross-cutting bizlogic
-    # reach beyond just the provider flag.
+    # Stars toggles stay on global Settings because stars_subscription_options
+    # reads them together with STARS_PRICE_* fields.
     enabled=lambda settings: bool(getattr(settings, "STARS_ENABLED", False)),
     service_key="stars_service",
     callback_prefix="pay_stars",

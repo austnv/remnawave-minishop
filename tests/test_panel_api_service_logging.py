@@ -47,6 +47,20 @@ class PanelApiServiceLoggingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(service._request.await_args.kwargs["log_full_response"])
 
+    async def test_create_panel_user_omits_empty_description(self):
+        service = self._make_service()
+        service._request = AsyncMock(return_value={"response": {"uuid": "user-uuid"}})
+
+        await service.create_panel_user(
+            username_on_panel="tg_42",
+            telegram_id=42,
+            description="",
+        )
+
+        payload = service._request.await_args.kwargs["json"]
+        self.assertNotIn("description", payload)
+        self.assertEqual(payload["telegramId"], 42)
+
     async def test_get_user_by_uuid_uses_short_ttl_cache_and_update_invalidates(self):
         service = self._make_service()
         service._request = AsyncMock(return_value={"response": {"uuid": "user-uuid"}})
@@ -78,6 +92,52 @@ class PanelApiServiceLoggingTests(unittest.IsolatedAsyncioTestCase):
         await service.get_user_devices("user-uuid")
 
         self.assertEqual(service._request.await_count, 3)
+
+    async def test_get_subscription_page_config_by_short_uuid_uses_panel_endpoint(self):
+        service = self._make_service()
+        panel_payload = {"config": {"version": "1"}}
+        service._request = AsyncMock(return_value={"response": panel_payload})
+
+        result = await service.get_subscription_page_config_by_short_uuid(
+            "short-uuid",
+            request_headers={"user-agent": "Mozilla/5.0"},
+        )
+
+        self.assertEqual(result, panel_payload)
+        service._request.assert_awaited_once_with(
+            "GET",
+            "/subscriptions/subpage-config/short-uuid",
+            json={"requestHeaders": {"user-agent": "Mozilla/5.0"}},
+            log_full_response=False,
+        )
+
+    async def test_get_subscription_page_config_list_uses_panel_endpoint(self):
+        service = self._make_service()
+        panel_payload = {"configs": [{"uuid": "default"}]}
+        service._request = AsyncMock(return_value={"response": panel_payload})
+
+        result = await service.get_subscription_page_config_list()
+
+        self.assertEqual(result, panel_payload)
+        service._request.assert_awaited_once_with(
+            "GET",
+            "/subscription-page-configs",
+            log_full_response=False,
+        )
+
+    async def test_get_subscription_page_config_by_uuid_uses_panel_endpoint(self):
+        service = self._make_service()
+        panel_payload = {"uuid": "default", "config": {"version": "1"}}
+        service._request = AsyncMock(return_value={"response": panel_payload})
+
+        result = await service.get_subscription_page_config_by_uuid("default")
+
+        self.assertEqual(result, panel_payload)
+        service._request.assert_awaited_once_with(
+            "GET",
+            "/subscription-page-configs/default",
+            log_full_response=False,
+        )
 
     async def test_get_all_panel_users_uses_singleflight_cache_and_update_invalidates(self):
         service = self._make_service()

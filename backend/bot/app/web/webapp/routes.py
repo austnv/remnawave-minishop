@@ -6,6 +6,10 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/", index_route)
     app.router.add_get("/login/password", index_route)
     app.router.add_get("/home", index_route)
+    app.router.add_get("/install", index_route)
+    app.router.add_get("/trial", index_route)
+    app.router.add_get("/open-app", app_deeplink_route)
+    app.router.add_get(r"/s/{share_token:[a-f0-9]{32}}", index_route)
     app.router.add_get("/invite", index_route)
     app.router.add_get("/devices", index_route)
     app.router.add_get("/settings", index_route)
@@ -15,15 +19,22 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get(
         (
             "/admin/{section:stats|users|payments|promos|ads|broadcast|logs|tariffs|"
-            "appearance|settings|support}"
+            "appearance|settings|translations|support}"
         ),
         index_route,
     )
     app.router.add_get("/admin/users/{user_id:-?[0-9]+}", index_route)
+    app.router.add_get("/admin/payments/users/{user_id:-?[0-9]+}", index_route)
+    app.router.add_get("/admin/payments/{payment_id:\\d+}", index_route)
     app.router.add_get("/admin/support/{ticket_id:\\d+}", index_route)
     app.router.add_get("/auth/telegram/start", telegram_oauth_start_route)
     app.router.add_get("/auth/telegram/callback", telegram_oauth_callback_route)
     app.router.add_get("/health", health_route)
+    app.router.add_get("/favicon.ico", webapp_current_favicon_route)
+    app.router.add_get("/apple-touch-icon.png", webapp_current_favicon_route)
+    app.router.add_get("/apple-touch-icon-precomposed.png", webapp_current_favicon_route)
+    app.router.add_get("/icon-192.png", webapp_current_favicon_route)
+    app.router.add_get("/icon-512.png", webapp_current_favicon_route)
     app.router.add_get(WEBAPP_LOGO_PROXY_PATH, webapp_logo_route)
     app.router.add_get(
         rf"{WEBAPP_UPLOADED_LOGO_PATH}/{{filename:[A-Za-z0-9_.-]+}}",
@@ -60,6 +71,11 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/api/bootstrap", bootstrap_route)
     app.router.add_get("/api/i18n", i18n_route)
     app.router.add_get("/api/me", me_route)
+    app.router.add_get("/api/subscription-guides", subscription_guides_route)
+    app.router.add_get(
+        r"/api/subscription-guides/public/{share_token:[a-f0-9]{32}}",
+        public_subscription_guides_route,
+    )
     app.router.add_get("/api/account/avatar", account_avatar_route)
     app.router.add_post("/api/account/language", account_language_route)
     app.router.add_post("/api/account/email/request", account_email_request_route)

@@ -27,6 +27,10 @@ from bot.keyboards.inline.user_keyboards import (
 from bot.middlewares.i18n import JsonI18n
 from bot.services.panel_api_service import PanelApiService
 from bot.services.subscription_service import SubscriptionService
+from bot.utils.install_links import (
+    append_install_share_link_text,
+    ensure_user_install_guide_links,
+)
 from config.settings import Settings
 from db.dal import subscription_dal, user_billing_dal
 from db.models import Subscription
@@ -326,6 +330,7 @@ async def select_tariff_period_callback(
         settings,
         sale_mode=sale_mode_with_callback_context(f"subscription@{tariff.key}", callback_context),
         back_callback=f"tariff:select:{tariff.key}{callback_suffix_for_context(callback_context)}",
+        user_id=callback.from_user.id,
     )
     await callback.message.edit_text(get_text("choose_payment_method"), reply_markup=markup)
     await callback.answer()
@@ -378,6 +383,7 @@ async def select_tariff_package_callback(
         settings,
         sale_mode=sale_mode,
         back_callback=back_callback,
+        user_id=callback.from_user.id,
     )
     await callback.message.edit_text(get_text("choose_payment_method_traffic"), reply_markup=markup)
     await callback.answer()
@@ -490,6 +496,7 @@ async def select_tariff_premium_package_callback(
         settings,
         sale_mode=f"premium_topup@{tariff.key}",
         back_callback="tariff_topup:list",
+        user_id=callback.from_user.id,
     )
     await callback.message.edit_text(get_text("choose_payment_method_traffic"), reply_markup=markup)
     await callback.answer()
@@ -518,10 +525,14 @@ async def hwid_devices_list_callback(
         await callback.answer(get_text("hwid_devices_unlimited_no_topup"), show_alert=True)
         return
     tariff = config.require(active["tariff_key"])
+    if tariff.billing_model != "period":
+        await callback.answer(get_text("no_hwid_device_packages_available"), show_alert=True)
+        return
     packages = tariff.hwid_device_packages.rub if tariff.hwid_device_packages else []
     if not packages:
         await callback.answer(get_text("no_hwid_device_packages_available"), show_alert=True)
         return
+    renewal_available = bool(active.get("device_topup_renewal_available"))
     markup = get_hwid_device_packages_keyboard(
         tariff,
         packages,
@@ -529,14 +540,31 @@ async def hwid_devices_list_callback(
         i18n,
         settings,
         back_callback="main_action:my_devices",
+        renewal=renewal_available,
     )
-    await callback.message.edit_text(get_text("select_hwid_device_package"), reply_markup=markup)
+    text_key = (
+        "select_hwid_device_renewal_package"
+        if renewal_available
+        else "select_hwid_device_package"
+    )
+    await callback.message.edit_text(
+        get_text(
+            text_key,
+            date=active.get("extra_hwid_devices_valid_until_text") or "",
+        ),
+        reply_markup=markup,
+    )
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("hwid_devices:package:"))
+@router.callback_query(F.data.startswith("hwid_devices:renewal_package:"))
 async def hwid_devices_package_callback(
-    callback: types.CallbackQuery, i18n_data: dict, settings: Settings, session: AsyncSession
+    callback: types.CallbackQuery,
+    i18n_data: dict,
+    settings: Settings,
+    session: AsyncSession,
+    subscription_service: SubscriptionService,
 ):
     current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
     i18n: JsonI18n = i18n_data.get("i18n_instance")
@@ -545,8 +573,11 @@ async def hwid_devices_package_callback(
     if not config or not callback.message:
         await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
         return
-    _, _, tariff_key, count_raw = callback.data.split(":", 3)
+    _, action, tariff_key, count_raw = callback.data.split(":", 3)
     tariff = config.require(tariff_key)
+    if tariff.billing_model != "period":
+        await callback.answer(get_text("no_hwid_device_packages_available"), show_alert=True)
+        return
     count = int(count_raw)
     package = next(
         (
@@ -559,16 +590,39 @@ async def hwid_devices_package_callback(
     if not package:
         await callback.answer(get_text("error_try_again"), show_alert=True)
         return
+    sale_mode_base = "hwid_devices_renewal" if action == "renewal_package" else "hwid_devices"
+    rub_quote = await subscription_service.quote_hwid_device_topup(
+        session,
+        user_id=callback.from_user.id,
+        device_count=count,
+        tariff_key=tariff.key,
+        renewal=action == "renewal_package",
+        currency="rub",
+    )
+    stars_quote = await subscription_service.quote_hwid_device_topup(
+        session,
+        user_id=callback.from_user.id,
+        device_count=count,
+        tariff_key=tariff.key,
+        renewal=action == "renewal_package",
+        currency="stars",
+    )
+    if not rub_quote and not stars_quote:
+        await callback.answer(get_text("error_try_again"), show_alert=True)
+        return
     markup = get_payment_method_keyboard(
         count,
-        package.price,
-        None,
+        float(rub_quote.get("price") if rub_quote else 0),
+        int(stars_quote["price"])
+        if stars_quote and int(stars_quote.get("price") or 0) > 0
+        else None,
         settings.DEFAULT_CURRENCY_SYMBOL,
         current_lang,
         i18n,
         settings,
-        sale_mode=f"hwid_devices@{tariff.key}",
+        sale_mode=f"{sale_mode_base}@{tariff.key}",
         back_callback="hwid_devices:list",
+        user_id=callback.from_user.id,
     )
     await callback.message.edit_text(
         get_text("choose_payment_method_hwid_devices"), reply_markup=markup
@@ -646,7 +700,9 @@ async def tariff_change_select_callback(
     if not db_sub:
         await callback.answer("Error", show_alert=True)
         return
-    options = subscription_service.calculate_tariff_switch_options(db_sub, target)
+    options = await subscription_service.calculate_tariff_switch_options_with_hwid(
+        session, db_sub, target
+    )
     rows = []
     if options["mode"] == "period_to_period":
         rows.append(
@@ -733,7 +789,9 @@ async def tariff_change_confirm_apply_callback(
     if not db_sub:
         await callback.answer("Error", show_alert=True)
         return
-    options = subscription_service.calculate_tariff_switch_options(db_sub, target)
+    options = await subscription_service.calculate_tariff_switch_options_with_hwid(
+        session, db_sub, target
+    )
     if mode == "recalc_days":
         action_text = f"после перехода останется {options.get('recalc_days', 0)} дн."
     elif mode == "convert_days_to_gb":
@@ -839,6 +897,7 @@ async def tariff_change_pay_callback(
         settings,
         sale_mode=f"tariff_upgrade@{tariff_key}",
         back_callback=f"tariff_change:confirm_pay:{tariff_key}:{amount_raw}",
+        user_id=callback.from_user.id,
     )
     await callback.message.edit_text("Выберите способ оплаты", reply_markup=markup)
     await callback.answer()
@@ -1026,12 +1085,50 @@ async def my_subscription_command_handler(
         local_sub = await subscription_dal.get_active_subscription_by_user_id(
             session, event.from_user.id
         )
+        install_links = await ensure_user_install_guide_links(
+            session,
+            settings,
+            event.from_user.id,
+            local_subscription=local_sub,
+        )
+        install_url = install_links.personal_url
+        install_share_url = install_links.public_share_url
+        if install_share_url:
+            try:
+                await session.commit()
+                text = append_install_share_link_text(text, get_text, install_share_url)
+            except Exception:
+                await session.rollback()
+                logging.exception(
+                    "Failed to persist install guide share token for user %s.",
+                    event.from_user.id,
+                )
+                install_share_url = None
+
         # Build rows to prepend above the base "back" markup
         prepend_rows = []
 
         # 1) Connect button: prefer the actual subscription URL; fall back to mini-app
         cfg_link_val = connect_button_url or config_link_display
-        if cfg_link_val:
+        if install_url:
+            prepend_rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=get_text("connect_button"),
+                        web_app=WebAppInfo(url=install_url),
+                    )
+                ]
+            )
+            if install_share_url:
+                prepend_rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=get_text("install_guide_share_button"),
+                            url=install_share_url,
+                        )
+                    ]
+                )
+        elif cfg_link_val:
             prepend_rows.append(
                 [
                     InlineKeyboardButton(
@@ -1115,7 +1212,8 @@ async def my_subscription_command_handler(
                 try:
                     tariff_for_devices = settings.tariffs_config.require(local_sub.tariff_key)
                     if (
-                        tariff_for_devices.hwid_device_packages
+                        tariff_for_devices.billing_model == "period"
+                        and tariff_for_devices.hwid_device_packages
                         and tariff_for_devices.hwid_device_packages.rub
                     ):
                         prepend_rows.append(
@@ -1331,7 +1429,8 @@ async def my_devices_command_handler(
         try:
             tariff_for_devices = settings.tariffs_config.require(active["tariff_key"])
             if (
-                tariff_for_devices.hwid_device_packages
+                tariff_for_devices.billing_model == "period"
+                and tariff_for_devices.hwid_device_packages
                 and tariff_for_devices.hwid_device_packages.rub
             ):
                 devices_kb.append(

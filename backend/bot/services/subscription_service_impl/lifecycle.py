@@ -23,8 +23,15 @@ class SubscriptionLifecycleMixin:
         if not sub:
             return None
         before_tariff_key = sub.tariff_key
-        options = self.calculate_tariff_switch_options(sub, target)
         now = datetime.now(timezone.utc)
+        options = await self.calculate_tariff_switch_options_with_hwid(session, sub, target)
+        converted_hwid_purchase_ids = list(options.get("convertible_hwid_purchase_ids") or [])
+        if converted_hwid_purchase_ids:
+            await tariff_dal.expire_hwid_device_purchases(
+                session,
+                purchase_ids=converted_hwid_purchase_ids,
+                at=now,
+            )
         premium_topup_balance = int(sub.premium_topup_balance_bytes or 0)
         premium_topup_used = int(getattr(sub, "premium_topup_used_bytes", 0) or 0)
         premium_baseline = target.premium_monthly_bytes
@@ -44,8 +51,20 @@ class SubscriptionLifecycleMixin:
         }
         converted_bytes = None
         base_hwid_limit = self._base_hwid_limit_for_tariff(target)
-        extra_hwid_devices = int(sub.extra_hwid_devices or 0)
+        try:
+            extra_hwid_devices = await tariff_dal.sum_active_hwid_devices(
+                session,
+                subscription_id=sub.subscription_id,
+                at=now,
+            )
+        except Exception:
+            logging.exception(
+                "Failed to recalculate HWID devices during tariff switch for user %s",
+                user_id,
+            )
+            extra_hwid_devices = int(sub.extra_hwid_devices or 0)
         update_data["hwid_device_limit"] = base_hwid_limit
+        update_data["extra_hwid_devices"] = extra_hwid_devices
 
         if target.billing_model == "period":
             update_data["tier_baseline_bytes"] = target.monthly_bytes
@@ -154,6 +173,8 @@ class SubscriptionLifecycleMixin:
                 if updated.end_date and target.billing_model == "period"
                 else None,
                 "converted_bytes": converted_bytes,
+                "converted_hwid_value_rub": options.get("converted_hwid_value_rub"),
+                "converted_hwid_days": options.get("converted_hwid_days"),
                 "eff_price_before": sub.effective_monthly_price_rub,
                 "eff_price_after": updated.effective_monthly_price_rub,
             },
@@ -236,7 +257,7 @@ class SubscriptionLifecycleMixin:
                 payment_db_id=payment_db_id,
                 provider=provider,
             )
-        if sale_mode_base in {"hwid_device", "hwid_devices"}:
+        if sale_mode_base in {"hwid_device", "hwid_devices", "hwid_devices_renewal"}:
             target_devices = int(traffic_gb if traffic_gb is not None else months)
             return await self.activate_hwid_device_topup(
                 session=session,
@@ -246,6 +267,7 @@ class SubscriptionLifecycleMixin:
                 payment_db_id=payment_db_id,
                 provider=provider,
                 tariff_key=tariff_key,
+                renewal=sale_mode_base == "hwid_devices_renewal",
             )
         if sale_mode_base == "tariff_upgrade":
             if not tariff_key:
@@ -378,7 +400,25 @@ class SubscriptionLifecycleMixin:
             )
 
         topup_balance_bytes = int(getattr(current_active_sub, "topup_balance_bytes", 0) or 0)
-        extra_hwid_devices = int(getattr(current_active_sub, "extra_hwid_devices", 0) or 0)
+        extra_hwid_devices = 0
+        hwid_devices_valid_until = None
+        if current_active_sub:
+            try:
+                hwid_summary = await tariff_dal.get_hwid_device_entitlement_summary(
+                    session,
+                    subscription_id=current_active_sub.subscription_id,
+                    at=datetime.now(timezone.utc),
+                )
+                extra_hwid_devices = int(hwid_summary.get("active_devices") or 0)
+                hwid_devices_valid_until = hwid_summary.get("active_until")
+            except Exception:
+                logging.exception(
+                    "Failed to recalculate active HWID devices for renewal of user %s",
+                    user_id,
+                )
+                extra_hwid_devices = int(
+                    getattr(current_active_sub, "extra_hwid_devices", 0) or 0
+                )
         premium_topup_balance_bytes = int(
             getattr(current_active_sub, "premium_topup_balance_bytes", 0) or 0
         )
@@ -497,6 +537,8 @@ class SubscriptionLifecycleMixin:
             "subscription_url": final_subscription_url,
             "applied_promo_bonus_days": applied_promo_bonus_days,
             "tariff_key": tariff.key if tariff else None,
+            "hwid_devices_renewal_recommended_count": extra_hwid_devices,
+            "hwid_devices_valid_until": hwid_devices_valid_until,
         }
 
     async def extend_active_subscription_days(
@@ -760,9 +802,50 @@ class SubscriptionLifecycleMixin:
             if local_active_sub
             else False
         )
+        hwid_entitlement_summary: Dict[str, Any] = {}
+        active_extra_hwid_devices = (
+            int(local_active_sub.extra_hwid_devices or 0) if local_active_sub else 0
+        )
+        if local_active_sub:
+            try:
+                hwid_entitlement_summary = await tariff_dal.get_hwid_device_entitlement_summary(
+                    session,
+                    subscription_id=local_active_sub.subscription_id,
+                    at=datetime.now(timezone.utc),
+                )
+                active_extra_hwid_devices = int(
+                    hwid_entitlement_summary.get("active_devices") or 0
+                )
+                if active_extra_hwid_devices != int(local_active_sub.extra_hwid_devices or 0):
+                    await subscription_dal.update_subscription(
+                        session,
+                        local_active_sub.subscription_id,
+                        {"extra_hwid_devices": active_extra_hwid_devices},
+                    )
+                    local_active_sub.extra_hwid_devices = active_extra_hwid_devices
+            except Exception:
+                logging.exception(
+                    "Failed to load HWID entitlement summary for subscription %s",
+                    local_active_sub.subscription_id,
+                )
+            base_hwid_limit_for_payload = (
+                local_active_sub.hwid_device_limit
+                if local_active_sub.hwid_device_limit is not None
+                else self._base_hwid_limit_for_tariff(tariff)
+            )
+            expected_hwid_limit = self._effective_hwid_limit(
+                base_hwid_limit_for_payload,
+                active_extra_hwid_devices,
+            )
+            if expected_hwid_limit is not None:
+                hwid_limit = expected_hwid_limit
 
         return {
             "user_id": panel_user_data.get("uuid"),
+            "panel_subscription_uuid": panel_user_data.get("subscriptionUuid")
+            or panel_user_data.get("shortUuid")
+            or (local_active_sub.panel_subscription_uuid if local_active_sub else None),
+            "panel_short_uuid": panel_user_data.get("shortUuid"),
             "end_date": panel_end_date,
             "status_from_panel": panel_user_data.get("status", "UNKNOWN").upper(),
             "config_link": display_link,
@@ -816,9 +899,11 @@ class SubscriptionLifecycleMixin:
             "base_hwid_device_limit": local_active_sub.hwid_device_limit
             if local_active_sub
             else None,
-            "extra_hwid_devices": int(local_active_sub.extra_hwid_devices or 0)
-            if local_active_sub
-            else 0,
+            "extra_hwid_devices": active_extra_hwid_devices,
+            "extra_hwid_devices_valid_until": hwid_entitlement_summary.get("active_until"),
+            "extra_hwid_devices_next_valid_from": hwid_entitlement_summary.get(
+                "next_valid_from"
+            ),
             "user_bot_username": db_user.username,
             "is_panel_data": True,
             "max_devices": hwid_limit,

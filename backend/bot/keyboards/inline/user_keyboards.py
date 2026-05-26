@@ -3,6 +3,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from aiogram.types import InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 
+from bot.middlewares.i18n import locale_language_options
+from bot.utils.install_links import bot_install_guide_url
+from bot.utils.mini_app_url import subscription_mini_app_trial_url
 from config.settings import Settings
 
 BOT_MENU_CONTEXT = "bot"
@@ -54,8 +57,9 @@ def payment_methods_back_callback(
         return f"tariff:package:{tariff_key}:{value}"
     if sale_base == "premium_topup" and tariff_key:
         return f"tariff:premium_package:{tariff_key}:{value}"
-    if sale_base in {"hwid_device", "hwid_devices"} and tariff_key:
-        return f"hwid_devices:package:{tariff_key}:{value}"
+    if sale_base in {"hwid_device", "hwid_devices", "hwid_devices_renewal"} and tariff_key:
+        action = "renewal_package" if sale_base == "hwid_devices_renewal" else "package"
+        return f"hwid_devices:{action}:{tariff_key}:{value}"
     if sale_base == "tariff_upgrade" and tariff_key:
         amount = str(price) if price is not None else value
         return f"tariff_change:pay:{tariff_key}:{amount}"
@@ -76,9 +80,23 @@ def payment_options_back_callback(sale_mode: str = "subscription") -> str:
         return f"tariff:select:{tariff_key}{context_suffix}"
     if sale_base in {"topup", "premium_topup"}:
         return "tariff_topup:list"
-    if sale_base in {"hwid_device", "hwid_devices"}:
+    if sale_base in {"hwid_device", "hwid_devices", "hwid_devices_renewal"}:
         return "hwid_devices:list"
     return subscription_options_callback(context)
+
+
+def _trial_activation_button(lang: str, i18n_instance, settings: Settings) -> InlineKeyboardButton:
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+    if settings.SUBSCRIPTION_MINI_APP_URL:
+        trial_url = subscription_mini_app_trial_url(settings) or settings.SUBSCRIPTION_MINI_APP_URL
+        return InlineKeyboardButton(
+            text=_(key="menu_activate_trial_button"),
+            web_app=WebAppInfo(url=trial_url),
+        )
+    return InlineKeyboardButton(
+        text=_(key="menu_activate_trial_button"),
+        callback_data="main_action:request_trial",
+    )
 
 
 def get_main_menu_inline_keyboard(
@@ -86,6 +104,9 @@ def get_main_menu_inline_keyboard(
 ) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
+
+    if show_trial_button and settings.TRIAL_ENABLED:
+        builder.row(_trial_activation_button(lang, i18n_instance, settings))
 
     if settings.SUBSCRIPTION_MINI_APP_URL:
         builder.row(
@@ -129,11 +150,7 @@ def get_bot_interface_inline_keyboard(
     builder = InlineKeyboardBuilder()
 
     if show_trial_button and settings.TRIAL_ENABLED:
-        builder.row(
-            InlineKeyboardButton(
-                text=_(key="menu_activate_trial_button"), callback_data="main_action:request_trial"
-            )
-        )
+        builder.row(_trial_activation_button(lang, i18n_instance, settings))
 
     if settings.SUBSCRIPTION_MINI_APP_URL:
         builder.row(
@@ -231,14 +248,18 @@ def get_language_selection_keyboard(
     _ = lambda key, **kwargs: i18n_instance.gettext(current_lang, key, **kwargs)
     callback_suffix = ":bot" if back_callback == "main_action:bot_interface" else ""
     builder = InlineKeyboardBuilder()
-    builder.button(
-        text=f"🇬🇧 English {'✅' if current_lang == 'en' else ''}",
-        callback_data=f"set_lang_en{callback_suffix}",
-    )
-    builder.button(
-        text=f"🇷🇺 Русский {'✅' if current_lang == 'ru' else ''}",
-        callback_data=f"set_lang_ru{callback_suffix}",
-    )
+    if hasattr(i18n_instance, "language_options"):
+        languages = i18n_instance.language_options()
+    else:
+        locales_data = getattr(i18n_instance, "locales_data", {}) or {"ru": {}, "en": {}}
+        languages = locale_language_options(locales_data.keys(), base_languages=locales_data.keys())
+    for language in languages:
+        lang_code = language["code"]
+        checked = " ✅" if current_lang == lang_code else ""
+        builder.button(
+            text=f"{language['flag']} {language['label']}{checked}",
+            callback_data=f"set_lang_{lang_code}{callback_suffix}",
+        )
     builder.button(text=_(key="back_to_main_menu_button"), callback_data=back_callback)
     builder.adjust(1)
     return builder.as_markup()
@@ -405,6 +426,7 @@ def get_hwid_device_packages_keyboard(
     i18n_instance,
     settings: Settings,
     back_callback: str = "main_action:my_subscription",
+    renewal: bool = False,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
@@ -417,7 +439,10 @@ def get_hwid_device_packages_keyboard(
                     price=package.price,
                     currency_symbol=settings.DEFAULT_CURRENCY_SYMBOL,
                 ),
-                callback_data=f"hwid_devices:package:{tariff.key}:{package.count}",
+                callback_data=(
+                    f"hwid_devices:{'renewal_package' if renewal else 'package'}:"
+                    f"{tariff.key}:{package.count}"
+                ),
             )
         )
     builder.row(
@@ -436,6 +461,8 @@ def get_payment_method_keyboard(
     settings: Settings,
     sale_mode: str = "subscription",
     back_callback: Optional[str] = None,
+    user_id: Optional[int] = None,
+    is_admin: Optional[bool] = None,
 ) -> InlineKeyboardMarkup:
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
@@ -454,7 +481,16 @@ def get_payment_method_keyboard(
 
     for method in settings.payment_methods_order:
         spec = get_provider_spec(method)
-        if not spec or not spec.callback_prefix or not spec.is_enabled(settings):
+        if (
+            not spec
+            or not spec.callback_prefix
+            or not spec.is_available_to_user(
+                settings,
+                user_id=user_id,
+                is_admin=is_admin,
+                require_configured=False,
+            )
+        ):
             continue
         callback_data = spec.callback_data(
             value=value_str,
@@ -689,13 +725,29 @@ def get_connect_and_main_keyboard(
     config_link: Optional[str],
     connect_button_url: Optional[str] = None,
     preserve_message: bool = False,
+    install_share_url: Optional[str] = None,
 ) -> InlineKeyboardMarkup:
     """Keyboard with a connect button and a back to main menu button."""
     _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
     builder = InlineKeyboardBuilder()
+    install_url = bot_install_guide_url(settings)
     button_target = connect_button_url or config_link
 
-    if button_target:
+    if install_url:
+        builder.row(
+            InlineKeyboardButton(
+                text=_("connect_button"),
+                web_app=WebAppInfo(url=install_url),
+            )
+        )
+        if install_share_url:
+            builder.row(
+                InlineKeyboardButton(
+                    text=_("install_guide_share_button"),
+                    url=install_share_url,
+                )
+            )
+    elif button_target:
         builder.row(InlineKeyboardButton(text=_("connect_button"), url=button_target))
     elif settings.SUBSCRIPTION_MINI_APP_URL:
         builder.row(

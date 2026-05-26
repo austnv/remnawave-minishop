@@ -29,6 +29,7 @@ from .base import (
     ServiceFactoryContext,
     WebAppPaymentContext,
     provider_env_file,
+    provider_runtime_enabled,
 )
 from .shared import (
     HttpClientMixin,
@@ -49,6 +50,7 @@ from .shared import (
     payment_failed,
     payment_unavailable,
     post_json_request,
+    quote_hwid_callback_parts,
     render_link_or_fail,
 )
 
@@ -152,14 +154,14 @@ class FreeKassaService(HttpClientMixin):
             logging.warning(
                 "FreeKassaService initialized but not fully configured. Payments disabled."
             )
-        if config.ENABLED and not self.server_ip:
+        if provider_runtime_enabled(config) and not self.server_ip:
             logging.warning(
                 "FreeKassaService: FREEKASSA_PAYMENT_IP is not set. Requests may be rejected by the provider."  # noqa: E501
             )
 
     @property
     def configured(self) -> bool:
-        return bool(self.config.ENABLED and self.shop_id and self.api_key)
+        return bool(provider_runtime_enabled(self.config) and self.shop_id and self.api_key)
 
     @property
     def shop_id(self):
@@ -451,6 +453,14 @@ async def pay_fk_callback_handler(
         await notify_callback_parse_error(callback, translator)
         return
 
+    if not SPEC.is_available_to_user(
+        settings,
+        user_id=callback.from_user.id,
+        require_configured=False,
+    ):
+        await notify_service_unavailable(callback, translator)
+        return
+
     if not freekassa_service or not freekassa_service.configured:
         logging.error("FreeKassa service is not configured or unavailable.")
         await notify_service_unavailable(callback, translator)
@@ -459,6 +469,16 @@ async def pay_fk_callback_handler(
     parts = parse_payment_callback(callback.data or "")
     if not parts:
         logging.error("Invalid pay_fk data in callback: %s", callback.data)
+        await notify_callback_parse_error(callback, translator)
+        return
+    parts, hwid_quote = await quote_hwid_callback_parts(
+        session=session,
+        user_id=callback.from_user.id,
+        parts=parts,
+        subscription_service=freekassa_service.subscription_service,
+        currency="rub",
+    )
+    if not parts:
         await notify_callback_parse_error(callback, translator)
         return
 
@@ -477,6 +497,7 @@ async def pay_fk_callback_handler(
         months=parts.months,
         provider="freekassa",
         sale_mode=parts.sale_mode,
+        hwid_quote=hwid_quote,
     )
 
     try:

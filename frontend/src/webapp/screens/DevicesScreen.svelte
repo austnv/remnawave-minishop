@@ -46,6 +46,14 @@
       value={devicesPercent(devicesData)}
       label={t("wa_devices_title")}
     />
+    {#if Number(subscription?.extra_hwid_devices || 0) > 0 && subscription?.extra_hwid_devices_valid_until_text}
+      <p class="devices-topup-validity">
+        {t("wa_hwid_devices_valid_until", {
+          count: Number(subscription.extra_hwid_devices || 0),
+          date: subscription.extra_hwid_devices_valid_until_text,
+        })}
+      </p>
+    {/if}
     {#if subscription?.active && subscription?.max_devices !== 0 && subscription?.can_topup_devices}
       <Button variant="secondary" class="wide" onclick={openDeviceTopupModal}>
         <Plus size={17} />

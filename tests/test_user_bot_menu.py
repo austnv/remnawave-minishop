@@ -8,6 +8,7 @@ from bot.handlers.user import referral
 from bot.handlers.user.subscription.core import _with_subscription_purchase_description
 from bot.keyboards.inline.user_keyboards import (
     get_bot_interface_inline_keyboard,
+    get_connect_and_main_keyboard,
     get_information_links_keyboard,
     get_language_selection_keyboard,
     get_main_menu_inline_keyboard,
@@ -41,6 +42,13 @@ class UserBotMenuTests(unittest.TestCase):
             TERMS_OF_SERVICE_URL="",
             TRIAL_ENABLED=True,
             SERVER_STATUS_URL="",
+            SUBSCRIPTION_GUIDES_ENABLED=True,
+            SUBSCRIPTION_GUIDES_BOT_MENU_ENABLED=False,
+            SUBSCRIPTION_PAGE_CONFIG_PANEL_ENABLED=True,
+            SUBSCRIPTION_PAGE_CONFIG_JSON_OVERRIDE_ENABLED=False,
+            SUBSCRIPTION_PAGE_CONFIG_JSON="",
+            PANEL_API_URL="https://panel.example.com",
+            PANEL_API_KEY="token",
         )
 
     def _callback_data(self, markup):
@@ -59,6 +67,46 @@ class UserBotMenuTests(unittest.TestCase):
         self.assertIn("main_action:bot_interface", callbacks)
         self.assertIn("main_action:info", callbacks)
 
+    def test_main_menu_shows_trial_button_as_mini_app_deeplink_when_available(self):
+        markup = get_main_menu_inline_keyboard(
+            "en",
+            self.i18n,
+            self.settings,
+            show_trial_button=True,
+        )
+
+        trial_button = markup.inline_keyboard[0][0]
+
+        self.assertEqual(trial_button.text, self.i18n.gettext("en", "menu_activate_trial_button"))
+        self.assertIsNone(trial_button.callback_data)
+        self.assertEqual(trial_button.web_app.url, "https://app.example.com/trial")
+
+    def test_main_menu_trial_button_falls_back_to_bot_callback_without_mini_app(self):
+        self.settings.SUBSCRIPTION_MINI_APP_URL = ""
+        markup = get_main_menu_inline_keyboard(
+            "en",
+            self.i18n,
+            self.settings,
+            show_trial_button=True,
+        )
+
+        trial_button = markup.inline_keyboard[0][0]
+
+        self.assertEqual(trial_button.callback_data, "main_action:request_trial")
+        self.assertIsNone(trial_button.web_app)
+
+    def test_bot_interface_trial_button_uses_mini_app_deeplink_when_available(self):
+        markup = get_bot_interface_inline_keyboard(
+            "en",
+            self.i18n,
+            self.settings,
+            show_trial_button=True,
+        )
+
+        trial_button = markup.inline_keyboard[0][0]
+
+        self.assertEqual(trial_button.web_app.url, "https://app.example.com/trial")
+
     def test_bot_interface_buttons_return_to_bot_interface(self):
         markup = get_bot_interface_inline_keyboard("en", self.i18n, self.settings)
 
@@ -69,6 +117,38 @@ class UserBotMenuTests(unittest.TestCase):
         self.assertIn("main_action:bot_referral", callbacks)
         self.assertIn("main_action:bot_info", callbacks)
         self.assertIn("main_action:back_to_main", callbacks)
+
+    def test_connect_keyboard_uses_subscription_url_when_bot_guides_disabled(self):
+        markup = get_connect_and_main_keyboard(
+            "en",
+            self.i18n,
+            self.settings,
+            "https://sb.example.com/user",
+            connect_button_url=None,
+        )
+
+        self.assertEqual(markup.inline_keyboard[0][0].url, "https://sb.example.com/user")
+        self.assertIsNone(markup.inline_keyboard[0][0].web_app)
+
+    def test_connect_keyboard_opens_install_guide_when_bot_guides_enabled(self):
+        self.settings.SUBSCRIPTION_GUIDES_BOT_MENU_ENABLED = True
+        markup = get_connect_and_main_keyboard(
+            "en",
+            self.i18n,
+            self.settings,
+            "https://sb.example.com/user",
+            install_share_url="https://app.example.com/s/8f559061460e8fede78ef18dce887236",
+        )
+
+        self.assertIsNone(markup.inline_keyboard[0][0].url)
+        self.assertEqual(
+            markup.inline_keyboard[0][0].web_app.url,
+            "https://app.example.com/install",
+        )
+        self.assertEqual(
+            markup.inline_keyboard[1][0].url,
+            "https://app.example.com/s/8f559061460e8fede78ef18dce887236",
+        )
 
     def test_nested_bot_menu_keyboards_can_target_bot_interface_back(self):
         subscription_markup = get_subscription_options_keyboard(

@@ -9,6 +9,7 @@ from config.webapp_themes_config import (
     public_theme_payload,
     public_themes_catalog_payload,
 )
+from bot.middlewares.i18n import locale_language_options
 
 _TEXT_FILE_CACHE: Dict[tuple[str, bool], tuple[int, int, str]] = {}
 _BINARY_FILE_CACHE: Dict[str, tuple[int, int, bytes]] = {}
@@ -95,9 +96,7 @@ async def theme_css_asset_route(request: web.Request) -> web.Response:
         raise web.HTTPNotFound(text="theme_css_not_found") from None
 
     query = getattr(request, "query", {}) or {}
-    cache_control = (
-        "public, max-age=31536000, immutable" if query.get("v") else "no-cache"
-    )
+    cache_control = "public, max-age=31536000, immutable" if query.get("v") else "no-cache"
     try:
         stat = path.stat()
         if stat.st_size > WEBAPP_THEME_CSS_MAX_BYTES:
@@ -204,7 +203,7 @@ def _resolve_webapp_logo_url(settings: Settings) -> str:
     if getattr(settings, "WEBAPP_LOGO_USE_EMOJI", False):
         return ""
 
-    raw_logo_url = (settings.WEBAPP_LOGO_URL or "").strip()
+    raw_logo_url = (getattr(settings, "WEBAPP_LOGO_URL", None) or "").strip()
     if not raw_logo_url:
         return ""
 
@@ -372,6 +371,78 @@ async def webapp_favicon_route(request: web.Request) -> web.Response:
 
     digest = str(request.match_info.get("digest") or "").strip().lower()
     filename = str(request.match_info.get("filename") or "").strip()
+    return _webapp_favicon_file_response(digest, filename)
+
+
+async def webapp_current_favicon_route(request: web.Request) -> web.Response:
+    settings: Settings = request.app["settings"]
+    if not settings.WEBAPP_ENABLED:
+        raise web.HTTPNotFound(text="webapp_disabled")
+
+    requested_filename = str(request.path.rsplit("/", 1)[-1] or "").strip()
+    target_filename = _webapp_root_favicon_target_filename(requested_filename)
+    if not target_filename:
+        raise web.HTTPNotFound(text="webapp_favicon_not_found")
+
+    favicon_url = _resolve_webapp_favicon_url(settings, _resolve_webapp_logo_url(settings))
+    digest = _webapp_generated_favicon_digest(favicon_url)
+    if digest:
+        return _webapp_favicon_file_response(digest, target_filename)
+
+    redirect_url = _webapp_redirectable_favicon_url(favicon_url, target_filename)
+    if redirect_url:
+        raise web.HTTPFound(location=redirect_url)
+
+    raise web.HTTPNotFound(text="webapp_favicon_not_found")
+
+
+def _webapp_root_favicon_target_filename(filename: str) -> str:
+    if filename == "apple-touch-icon-precomposed.png":
+        return "apple-touch-icon.png"
+    if filename in {
+        "apple-touch-icon.png",
+        "favicon.ico",
+        "icon-192.png",
+        "icon-512.png",
+    }:
+        return filename
+    return ""
+
+
+def _webapp_generated_favicon_digest(favicon_url: str) -> str:
+    parsed = urlsplit(str(favicon_url or ""))
+    path = parsed.path if parsed.scheme or parsed.netloc else str(favicon_url or "")
+    match = re.fullmatch(
+        rf"{re.escape(WEBAPP_FAVICON_PATH)}/([0-9a-f]{{16}})/"
+        r"(?:icon-(?:16|32|48|180|192|512)\.png|apple-touch-icon\.png|favicon\.(?:ico|svg))",
+        path,
+    )
+    return match.group(1) if match else ""
+
+
+def _webapp_redirectable_favicon_url(favicon_url: str, target_filename: str) -> str:
+    href = str(favicon_url or "").strip()
+    if not href:
+        return ""
+
+    parsed = urlsplit(href)
+    path = parsed.path if parsed.scheme or parsed.netloc else href
+    suffix = Path(path).suffix.lower()
+    if target_filename in {"apple-touch-icon.png", "icon-192.png", "icon-512.png"}:
+        if suffix != ".png":
+            return ""
+    elif target_filename == "favicon.ico":
+        if suffix != ".ico":
+            return ""
+    else:
+        return ""
+
+    if parsed.scheme in {"http", "https"} or href.startswith("/"):
+        return href
+    return ""
+
+
+def _webapp_favicon_file_response(digest: str, filename: str) -> web.Response:
     if not re.fullmatch(r"[0-9a-f]{16}", digest):
         raise web.HTTPNotFound(text="webapp_favicon_not_found")
     if not re.fullmatch(
@@ -1000,6 +1071,30 @@ async def _js_asset_route(request: web.Request, *, base_name: str) -> web.Respon
 WEBAPP_BOOTSTRAP_I18N_PREFIXES = ("wa_",)
 WEBAPP_BOOTSTRAP_I18N_KEYS = {"menu_support_button"}
 WEBAPP_I18N_SCOPES = {"webapp", "admin"}
+APP_DEEPLINK_I18N_KEYS = {
+    "title": "wa_app_launch_title",
+    "hint": "wa_app_launch_opening_hint",
+    "manualHint": "wa_app_launch_hint",
+    "button": "wa_app_launch_button",
+    "retryButton": "wa_app_launch_retry_button",
+    "doneTitle": "wa_app_launch_done_title",
+    "doneHint": "wa_app_launch_done_hint",
+    "closeButton": "wa_app_launch_close_button",
+    "unavailableTitle": "wa_app_launch_unavailable_title",
+    "unavailableHint": "wa_app_launch_unavailable_hint",
+}
+APP_DEEPLINK_I18N_FALLBACKS = {
+    "wa_app_launch_title": "Opening app",
+    "wa_app_launch_opening_hint": "Opening the app on this device...",
+    "wa_app_launch_hint": "If the app did not open automatically, tap the button below.",
+    "wa_app_launch_button": "Open app",
+    "wa_app_launch_retry_button": "Open again",
+    "wa_app_launch_done_title": "Settings added",
+    "wa_app_launch_done_hint": "If the app opened, you can close this window.",
+    "wa_app_launch_close_button": "Close window",
+    "wa_app_launch_unavailable_title": "App link unavailable",
+    "wa_app_launch_unavailable_hint": "Return to Telegram and try again.",
+}
 
 
 def _is_webapp_bootstrap_i18n_key(key: str) -> bool:
@@ -1063,7 +1158,10 @@ def _build_webapp_bootstrap_payload(request: web.Request) -> Dict[str, Any]:
         preview_key = ""
     i18n_instance: Optional[object] = request.app.get("i18n")
     i18n_scope = _normalize_i18n_scope(request.query.get("i18n_scope") or "webapp")
+    if i18n_instance and hasattr(i18n_instance, "reload_overrides_from_file"):
+        i18n_instance.reload_overrides_from_file()
     locales_data = getattr(i18n_instance, "locales_data", {}) if i18n_instance else {}
+    base_locales_data = getattr(i18n_instance, "base_locales_data", {}) if i18n_instance else {}
     return {
         "config": {
             "title": settings.WEBAPP_TITLE,
@@ -1094,6 +1192,10 @@ def _build_webapp_bootstrap_payload(request: web.Request) -> Dict[str, Any]:
             "userAgreementUrl": cached["user_agreement_url"],
             "currency": cached["currency"],
             "language": cached["language"],
+            "languages": locale_language_options(
+                locales_data.keys(),
+                base_languages=base_locales_data.keys(),
+            ),
             "emailAuthEnabled": cached["email_auth_enabled"],
             "appVersion": _resolve_app_version(),
             "appRepositoryUrl": APP_REPOSITORY_URL,
@@ -1110,6 +1212,8 @@ async def bootstrap_route(request: web.Request) -> web.Response:
 
 async def i18n_route(request: web.Request) -> web.Response:
     i18n_instance: Optional[object] = request.app.get("i18n")
+    if i18n_instance and hasattr(i18n_instance, "reload_overrides_from_file"):
+        i18n_instance.reload_overrides_from_file()
     scope = _normalize_i18n_scope(request.query.get("scope") or "webapp")
     locales_data = getattr(i18n_instance, "locales_data", {}) if i18n_instance else {}
     response = web.json_response(
@@ -1121,6 +1225,72 @@ async def i18n_route(request: web.Request) -> web.Response:
     )
     response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+def _webapp_page_title(settings: Settings, suffix: str = "") -> str:
+    base = str(getattr(settings, "WEBAPP_TITLE", "") or "").strip() or "Subscription"
+    suffix = str(suffix or "").strip()
+    return f"{base} - {suffix}" if suffix else base
+
+
+def _webapp_preview_meta_markup(page_title: str) -> str:
+    escaped_title = html.escape(str(page_title or ""), quote=True)
+    return "\n".join(
+        [
+            f'<meta name="application-name" content="{escaped_title}">',
+            f'<meta name="apple-mobile-web-app-title" content="{escaped_title}">',
+            f'<meta property="og:title" content="{escaped_title}">',
+            '<meta property="og:type" content="website">',
+            f'<meta property="og:site_name" content="{escaped_title}">',
+            '<meta name="twitter:card" content="summary">',
+            f'<meta name="twitter:title" content="{escaped_title}">',
+        ]
+    )
+
+
+def _replace_webapp_title(html_text: str, page_title: str) -> str:
+    escaped_title = html.escape(str(page_title or ""), quote=False)
+    next_title = f"<title>{escaped_title}</title>"
+    replaced = re.sub(
+        r"<title\b[^>]*>.*?</title>",
+        next_title,
+        html_text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if replaced != html_text:
+        return replaced
+    return html_text.replace("</head>", f"{next_title}\n</head>", 1)
+
+
+def _replace_webapp_favicon(html_text: str, favicon_markup: str) -> str:
+    markup = str(favicon_markup or "").strip()
+    if not markup:
+        return html_text
+    replaced = re.sub(
+        r"<link\b(?=[^>]*\bid=[\"']app-favicon[\"'])[^>]*>",
+        markup,
+        html_text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    if replaced != html_text:
+        return replaced
+    return html_text.replace("</head>", f"{markup}\n</head>", 1)
+
+
+def _apply_webapp_head_metadata(html_text: str, page_title: str, favicon_url: str = "") -> str:
+    html_text = _replace_webapp_title(html_text, page_title)
+    if 'property="og:title"' not in html_text and "property='og:title'" not in html_text:
+        meta_markup = _webapp_preview_meta_markup(page_title)
+        html_text = re.sub(
+            r"(<title\b[^>]*>.*?</title>)",
+            lambda match: f"{match.group(1)}\n{meta_markup}",
+            html_text,
+            count=1,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    return _replace_webapp_favicon(html_text, _favicon_head_markup(favicon_url))
 
 
 async def index_route(request: web.Request) -> web.Response:
@@ -1144,6 +1314,7 @@ async def index_route(request: web.Request) -> web.Response:
     initial_theme_markup = _initial_theme_head_markup(request, initial_theme, primary_color)
     if initial_theme_markup:
         html = html.replace("</head>", f"{initial_theme_markup}\n</head>", 1)
+    html = _apply_webapp_head_metadata(html, _webapp_page_title(settings), cached["favicon_url"])
     i18n_payload = bootstrap["i18n"]
     nonce = request.get("csp_nonce", "")
     html = html.replace(
@@ -1166,12 +1337,6 @@ async def index_route(request: web.Request) -> web.Response:
         WEBAPP_JS_PLACEHOLDER,
         f'<script src="/{_resolve_webapp_js_asset_name()}" defer></script>',
     )
-    favicon_markup = _favicon_head_markup(cached["favicon_url"])
-    if favicon_markup:
-        html = html.replace(
-            '<link id="app-favicon" rel="icon" href="data:," sizes="any">',
-            favicon_markup,
-        )
     brand_asset_url = cached["logo_url"]
     if (
         not brand_asset_url
@@ -1191,6 +1356,50 @@ async def index_route(request: web.Request) -> web.Response:
     response = web.Response(text=html, content_type="text/html", charset="utf-8")
     response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+async def app_deeplink_route(request: web.Request) -> web.Response:
+    settings: Settings = request.app["settings"]
+    if not getattr(settings, "WEBAPP_ENABLED", True):
+        raise web.HTTPNotFound(text="webapp_disabled")
+
+    nonce = html.escape(str(request.get("csp_nonce", "")), quote=True)
+    query = getattr(request, "query", {}) or {}
+    lang = _normalize_language(query.get("lang") or getattr(settings, "DEFAULT_LANGUAGE", "ru"))
+    messages = _app_deeplink_i18n_payload(request, lang)
+    page_title = _webapp_page_title(settings, messages["title"])
+    messages_json = json.dumps(
+        messages,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).replace("</", "<\\/")
+    favicon_url = _resolve_webapp_favicon_url(settings, _resolve_webapp_logo_url(settings))
+    html_text = (
+        _read_template_text_cached(APP_DEEPLINK_TEMPLATE_PATH)
+        .replace("__LANG__", html.escape(lang, quote=True))
+        .replace("__PAGE_TITLE__", html.escape(page_title, quote=False))
+        .replace("__NONCE__", nonce)
+        .replace("__MESSAGES_JSON__", messages_json)
+    )
+    html_text = _apply_webapp_head_metadata(html_text, page_title, favicon_url)
+    response = web.Response(text=html_text, content_type="text/html", charset="utf-8")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _app_deeplink_i18n_payload(request: web.Request, lang: str) -> Dict[str, str]:
+    i18n_instance: Optional[object] = request.app.get("i18n")
+    payload: Dict[str, str] = {}
+    for payload_key, i18n_key in APP_DEEPLINK_I18N_KEYS.items():
+        fallback = APP_DEEPLINK_I18N_FALLBACKS[i18n_key]
+        value = ""
+        if i18n_instance is not None:
+            try:
+                value = str(i18n_instance.gettext(lang, i18n_key) or "")
+            except Exception as exc:
+                logger.debug("Failed to resolve open-app i18n key %s: %s", i18n_key, exc)
+        payload[payload_key] = value if value and value != i18n_key else fallback
+    return payload
 
 
 async def _serve_template_asset(

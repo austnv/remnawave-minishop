@@ -113,6 +113,12 @@
 | --- | --- | --- |
 | `WEBAPP_ENABLED` | `.env` / админка | Включает Web App. Если `False`, пользовательский Web App и админка недоступны до включения через `.env` и рестарта. |
 | `SUBSCRIPTION_MINI_APP_URL` | `.env` / админка | Публичный HTTPS URL Mini App/frontend, например `https://app.domain.com/`. Используется в Telegram-кнопках, referral-ссылках, email-входе и BotFather Mini App settings. Не указывайте здесь `/api` или webhook-пути. |
+| `SUBSCRIPTION_GUIDES_ENABLED` | `.env` / админка | Включает встроенные инструкции установки в Web App. По умолчанию `True`; если конфиг недоступен или невалиден, кнопка подключения открывает обычную финальную ссылку подписки. |
+| `SUBSCRIPTION_GUIDES_BOT_MENU_ENABLED` | `.env` / админка | Включает открытие Mini App `/install` из кнопок бота и показ публичной ссылки инструкции `/s/<token>`. По умолчанию `True`; если выключить, бот ведет на финальную Remnawave Subscription Page. |
+| `SUBSCRIPTION_PAGE_CONFIG_PANEL_ENABLED` | `.env` / админка | Читать Remnawave Subscription Page config из панели для встроенных инструкций. По умолчанию `True`, чтобы не дублировать настройку страницы подписки в приложении. |
+| `SUBSCRIPTION_PAGE_CONFIG_JSON_OVERRIDE_ENABLED` | `.env` / админка | Включает использование JSON из поля `SUBSCRIPTION_PAGE_CONFIG_JSON` вместо конфига панели. По умолчанию `False`. |
+| `SUBSCRIPTION_PAGE_CONFIG_PATH` | `.env` / админка | Fallback-путь к локальному Remnawave Subscription Page v1 JSON config, если конфиг панели выключен или недоступен. По умолчанию `data/subpage-config/multiapp.json`; файл не создается автоматически. |
+| `SUBSCRIPTION_PAGE_CONFIG_JSON` | Админка | Опциональный JSON-override Remnawave Subscription Page v1. Применяется только при включенном `SUBSCRIPTION_PAGE_CONFIG_JSON_OVERRIDE_ENABLED`; backend валидирует JSON при сохранении. |
 | `WEBAPP_TITLE` | Админка | Заголовок Web App. |
 | `WEBAPP_THEMES_DIR` | `.env` | Каталог кастомных тем. |
 | `WEBAPP_DEFAULT_THEME` | `.env` / админка | Ключ темы по умолчанию. |
@@ -130,6 +136,8 @@
 | `WEBAPP_FAVICON_USE_CUSTOM` | Админка | Устаревшее env-поле, игнорируется. |
 | `WEBAPP_FAVICON_URL` | Админка | Устаревшее env-поле, игнорируется. |
 | `WEBAPP_LOGO_FAVICON_URL` | Админка | Устаревшее env-поле, игнорируется. |
+
+Инструкции установки совместимы с Remnawave Subscription Page v1 config: `version`, `locales`, `brandingSettings`, `uiConfig`, `baseSettings`, `baseTranslations`, `svgLibrary` и `platforms`. Текстовые поля рендерятся как текст, а SVG из `svgLibrary` проходит санитарную проверку перед отдачей в Web App.
 
 ## SMTP и email-вход
 
@@ -290,7 +298,7 @@ PAYMENT_HELEKET_TELEGRAM_EMOJI
 | `WATA_API_TOKEN` | Bearer token. |
 | `WATA_RETURN_URL` | URL успешного возврата. |
 | `WATA_FAILED_URL` | URL неуспешного возврата. |
-| `WATA_PAYMENT_LINK_TTL_DAYS` | TTL платежной ссылки в днях. |
+| `WATA_LINK_TTL_MINUTES` | TTL платежной ссылки в минутах (по умолчанию 15, минимум 15, максимум 43200). |
 | `WATA_WEBHOOK_VERIFY_SIGNATURE` | Проверять `X-Signature`. |
 | `WATA_PUBLIC_KEY` | Cached public key; если пусто, загружается из API. |
 | `WATA_TRUSTED_IPS` | IP-allowlist webhook-источников. |
@@ -347,6 +355,7 @@ PAYMENT_HELEKET_TELEGRAM_EMOJI
 | `TRIAL_DURATION_DAYS` | Длительность пробного периода. |
 | `TRIAL_TRAFFIC_LIMIT_GB` | Лимит трафика пробного периода. |
 | `TRIAL_TRAFFIC_STRATEGY` | Стратегия лимита пробного периода. |
+| `TRIAL_SQUAD_UUIDS` | Internal Squads для trial через запятую. Если пусто, используется `USER_SQUAD_UUIDS`. |
 | `REFERRAL_ONE_BONUS_PER_REFEREE` | Ограничить бонусы одним успешным платежом приглашенного. |
 | `REFERRAL_WELCOME_BONUS_DAYS` | Приветственный бонус пришедшему по реферальной ссылке. |
 | `LEGACY_REFS` | Разрешить ссылки `ref_<telegram_id>`. |

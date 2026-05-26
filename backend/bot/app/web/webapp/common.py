@@ -2,7 +2,11 @@
 from ._runtime import *  # noqa: F403,F405
 
 from bot.app.web.webapp.cache_helpers import (
-    invalidate_local_webapp_user_payload,
+    invalidate_webapp_user_caches as _invalidate_user_payload_caches,
+)
+from bot.middlewares.i18n import (
+    is_valid_locale_language_code,
+    normalize_locale_language_code,
 )
 
 
@@ -26,25 +30,7 @@ async def _invalidate_webapp_user_caches(
     *user_ids: Optional[int],
     include_devices: bool = False,
 ) -> None:
-    keys: List[str] = []
-    seen: set[int] = set()
-    for raw_user_id in user_ids:
-        if raw_user_id is None:
-            continue
-        try:
-            user_id = int(raw_user_id)
-        except (TypeError, ValueError):
-            continue
-        if user_id in seen:
-            continue
-        seen.add(user_id)
-        keys.append(redis_key(settings, "cache", "webapp", "me", user_id))
-        invalidate_local_webapp_user_payload(settings, "me", user_id)
-        if include_devices:
-            keys.append(redis_key(settings, "cache", "webapp", "devices", user_id))
-            invalidate_local_webapp_user_payload(settings, "devices", user_id)
-    if keys:
-        await cache_delete(settings, *keys)
+    await _invalidate_user_payload_caches(settings, *user_ids, include_devices=include_devices)
 
 
 def _validation_error_response(exc: ValidationError) -> web.Response:
@@ -91,8 +77,8 @@ def _validate_model_payload(
 
 
 def _normalize_language(lang: Optional[str]) -> str:
-    value = (lang or "ru").split("-")[0].lower()
-    return value if value in {"ru", "en"} else "ru"
+    value = normalize_locale_language_code(lang, prefer_known_base=False)
+    return value if is_valid_locale_language_code(value) else "ru"
 
 
 def _format_remaining(seconds: int, lang: str) -> str:

@@ -56,6 +56,22 @@ def _tariffs_payload(*, hwid_rub=None, hwid_stars=None, has_premium=False) -> di
     return {"default_tariff": "standard", "tariffs": [tariff]}
 
 
+def _traffic_tariffs_payload(*, hwid_rub=None) -> dict:
+    tariff: Dict[str, Any] = {
+        "key": "traffic",
+        "names": {"en": "Traffic"},
+        "descriptions": {"en": "Traffic"},
+        "squad_uuids": ["main"],
+        "billing_model": "traffic",
+        "traffic_packages": {"rub": [{"gb": 100, "price": 100}], "stars": []},
+        "hwid_device_limit": 3,
+        "enabled": True,
+    }
+    if hwid_rub:
+        tariff["hwid_device_packages"] = {"rub": hwid_rub, "stars": []}
+    return {"default_tariff": "traffic", "tariffs": [tariff]}
+
+
 def _make_settings(tmpdir: str, payload: Optional[dict] = None, **overrides: Any) -> Settings:
     values: Dict[str, Any] = {
         "_env_file": None,
@@ -175,6 +191,20 @@ class CanTopupDevicesFlagTests(unittest.TestCase):
             )
             payload = _serialize_subscription(
                 settings, _active(tariff_key="missing-tariff"), None, "en"
+            )
+        self.assertFalse(payload["can_topup_devices"])
+
+    def test_flag_is_false_for_traffic_tariff_even_with_packages(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = _make_settings(
+                tmpdir,
+                _traffic_tariffs_payload(hwid_rub=[{"count": 1, "price": 50}]),
+            )
+            payload = _serialize_subscription(
+                settings,
+                _active(tariff_key="traffic", billing_model="traffic"),
+                None,
+                "en",
             )
         self.assertFalse(payload["can_topup_devices"])
 

@@ -1,17 +1,87 @@
 <script>
-  import { RefreshCw, Trash2, Plus } from "$components/ui/icons.js";
+  import {
+    ChevronRight,
+    RefreshCw,
+    Trash2,
+    Plus,
+    Save,
+    TriangleAlert,
+    X,
+  } from "$components/ui/icons.js";
   import { getContext, onMount } from "svelte";
-  import { AdminBadge, AdminButton, AdminEmptyState } from "$components/patterns/admin/index.js";
+  import {
+    AdminBadge,
+    AdminButton,
+    AdminEmptyState,
+    AdminSelect,
+  } from "$components/patterns/admin/index.js";
+  import { Accordion, Switch } from "$components/ui/primitives.js";
 
   export let at;
   export let fmtMoney;
+  export let onSettingsSaved = () => {};
 
   const tariffsStore = getContext("tariffsStore");
+  const settingsStore = getContext("settingsStore");
 
-  $: ({ tariffsCatalog, tariffsLoading, tariffsPath, tariffsSaving } = $tariffsStore);
+  const TRIAL_SETTING_KEYS = [
+    "TRIAL_ENABLED",
+    "TRIAL_DURATION_DAYS",
+    "TRIAL_TRAFFIC_LIMIT_GB",
+    "TRIAL_TRAFFIC_STRATEGY",
+    "TRIAL_SQUAD_UUIDS",
+  ];
+  const TRIAL_SWITCH_KEYS = ["TRIAL_ENABLED"];
+  const TRIAL_GENERAL_KEYS = ["TRIAL_DURATION_DAYS", "TRIAL_TRAFFIC_LIMIT_GB"];
+  const TRIAL_RESET_KEYS = ["TRIAL_TRAFFIC_STRATEGY"];
+  const TRIAL_SQUAD_KEYS = ["TRIAL_SQUAD_UUIDS"];
+  const LEGACY_PERIODS = [
+    ["1", "MONTH_1_ENABLED", "RUB_PRICE_1_MONTH", "STARS_PRICE_1_MONTH"],
+    ["3", "MONTH_3_ENABLED", "RUB_PRICE_3_MONTHS", "STARS_PRICE_3_MONTHS"],
+    ["6", "MONTH_6_ENABLED", "RUB_PRICE_6_MONTHS", "STARS_PRICE_6_MONTHS"],
+    ["12", "MONTH_12_ENABLED", "RUB_PRICE_12_MONTHS", "STARS_PRICE_12_MONTHS"],
+  ];
+  const LEGACY_TARIFF_SETTING_KEYS = [
+    ...LEGACY_PERIODS.flatMap((row) => row.slice(1)),
+    "TRAFFIC_PACKAGES",
+    "STARS_TRAFFIC_PACKAGES",
+  ];
+  const TRAFFIC_STRATEGY_OPTIONS = [
+    { value: "NO_RESET", label: "NO_RESET" },
+    { value: "DAY", label: "DAY" },
+    { value: "WEEK", label: "WEEK" },
+    { value: "MONTH", label: "MONTH" },
+  ];
+
+  $: ({
+    tariffsCatalog,
+    tariffsLoading,
+    tariffsPath,
+    tariffsSaving,
+    panelSquads,
+    panelSquadsLoading,
+  } = $tariffsStore);
+  $: ({ settingsSections, settingsDirty, settingsSaving } = $settingsStore);
 
   $: enabledTariffs = (tariffsCatalog.tariffs || []).filter((tariff) => tariff.enabled !== false);
   $: disabledTariffs = Math.max(0, (tariffsCatalog.tariffs || []).length - enabledTariffs.length);
+  $: settingsFieldMap = new Map(
+    (settingsSections || [])
+      .flatMap((section) => section.fields || [])
+      .map((field) => [field.key, field])
+  );
+  $: trialDirtyCount = TRIAL_SETTING_KEYS.filter((key) => Boolean(settingsDirty[key])).length;
+  $: legacyDirtyCount = LEGACY_TARIFF_SETTING_KEYS.filter((key) =>
+    Boolean(settingsDirty[key])
+  ).length;
+  $: panelSquadOptions = (panelSquads || []).map((squad) => ({
+    value: squad.uuid,
+    label: `${squad.name || squad.uuid} · ${String(squad.uuid || "").slice(0, 8)}...`,
+  }));
+
+  let selectedTrialSquad = "";
+  let trialSquadSelectKey = 0;
+  let tariffSettingsOpen = [];
 
   function tariffName(tariff) {
     return tariff?.names?.ru || tariff?.names?.en || tariff?.key || "—";
@@ -37,8 +107,86 @@
       .join(" · ");
   }
 
+  function fieldFor(key) {
+    return settingsFieldMap.get(key) || { key, value: "" };
+  }
+
+  function valueForKey(key) {
+    if (settingsDirty[key]?.deleted) return "";
+    if (Object.prototype.hasOwnProperty.call(settingsDirty, key)) {
+      return settingsDirty[key].value;
+    }
+    return fieldFor(key).value ?? "";
+  }
+
+  function boolValue(key) {
+    return Boolean(valueForKey(key));
+  }
+
+  function setSetting(key, value) {
+    settingsStore.markDirty(key, value);
+  }
+
+  function isSettingDirty(key) {
+    return Boolean(settingsDirty[key]);
+  }
+
+  function dirtyCount(keys) {
+    return (keys || []).filter((key) => isSettingDirty(key)).length;
+  }
+
+  function resetSetting(key) {
+    settingsStore.clearDirty(key);
+  }
+
+  function csvList(key) {
+    return String(valueForKey(key) || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function setCsvList(key, values) {
+    const normalized = Array.from(
+      new Set((values || []).map((item) => String(item).trim()).filter(Boolean))
+    );
+    settingsStore.markDirty(key, normalized.join(","));
+  }
+
+  function addTrialSquad(uuid) {
+    const next = String(uuid || "").trim();
+    if (!next) return;
+    const current = csvList("TRIAL_SQUAD_UUIDS");
+    if (!current.includes(next)) {
+      setCsvList("TRIAL_SQUAD_UUIDS", [...current, next]);
+    }
+    selectedTrialSquad = "";
+  }
+
+  function handleTrialSquadSelect(uuid) {
+    addTrialSquad(uuid);
+    selectedTrialSquad = "";
+    trialSquadSelectKey += 1;
+  }
+
+  function removeTrialSquad(uuid) {
+    setCsvList(
+      "TRIAL_SQUAD_UUIDS",
+      csvList("TRIAL_SQUAD_UUIDS").filter((item) => item !== uuid)
+    );
+  }
+
+  function trialSquadLabel(uuid) {
+    return tariffsStore.squadLabel(uuid);
+  }
+
+  async function saveTariffSettings() {
+    await settingsStore.saveSettings(onSettingsSaved);
+  }
+
   onMount(() => {
     tariffsStore.loadTariffs();
+    settingsStore.loadSettings();
   });
 </script>
 
@@ -68,6 +216,361 @@
       >
     </div>
   </div>
+
+  <article class="admin-card admin-tariff-settings-card">
+    <header class="admin-card-head">
+      <div>
+        <h3>{at("tariffs_trial_title", {}, "Trial access")}</h3>
+        <small>
+          {at(
+            "tariffs_trial_subtitle",
+            {},
+            "Configure trial duration, traffic limit, and Remnawave squads from the tariff page."
+          )}
+        </small>
+      </div>
+      <div class="admin-editor-section-actions">
+        <AdminBadge variant={boolValue("TRIAL_ENABLED") ? "success" : "muted"}>
+          {boolValue("TRIAL_ENABLED")
+            ? at("enabled", {}, "Enabled")
+            : at("disabled", {}, "Disabled")}
+        </AdminBadge>
+        {#if trialDirtyCount}
+          <AdminBadge variant="warning">
+            {at("settings_dirty_count", { count: trialDirtyCount }, `Changes: ${trialDirtyCount}`)}
+          </AdminBadge>
+          <AdminButton
+            size="sm"
+            variant="primary"
+            onclick={saveTariffSettings}
+            disabled={settingsSaving}
+          >
+            <Save size={13} />
+            {settingsSaving ? at("btn_saving", {}, "Saving...") : at("btn_save", {}, "Save")}
+          </AdminButton>
+        {/if}
+      </div>
+    </header>
+    <div class="admin-card-body admin-trial-settings-body">
+      <div class="admin-settings-field-groups admin-trial-settings-groups">
+        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_SWITCH_KEYS)}>
+          <header class="admin-settings-field-group-head">
+            <div class="admin-settings-field-group-head-copy">
+              <strong>{at("tariffs_trial_group_switch", {}, "Доступ")}</strong>
+              <small>
+                {at(
+                  "tariffs_trial_group_switch_hint",
+                  {},
+                  "Включает или выключает выдачу пробного периода пользователям."
+                )}
+              </small>
+            </div>
+            {#if dirtyCount(TRIAL_SWITCH_KEYS)}
+              <AdminBadge variant="warning">
+                {at(
+                  "settings_dirty_count",
+                  { count: dirtyCount(TRIAL_SWITCH_KEYS) },
+                  `Изменений: ${dirtyCount(TRIAL_SWITCH_KEYS)}`
+                )}
+              </AdminBadge>
+            {/if}
+          </header>
+          <div class="admin-settings-field-group-body">
+            <div
+              class="admin-setting admin-trial-setting-row"
+              class:is-dirty={isSettingDirty("TRIAL_ENABLED")}
+            >
+              <div class="admin-setting-meta">
+                <strong>
+                  {at("tariffs_trial_enabled", {}, "Триал включён")}
+                  {#if isSettingDirty("TRIAL_ENABLED")}
+                    <AdminBadge variant="warning"
+                      >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
+                    >
+                  {/if}
+                </strong>
+                <code>TRIAL_ENABLED</code>
+              </div>
+              <div class="admin-setting-control">
+                <div class="admin-setting-switch">
+                  <Switch.Root
+                    checked={boolValue("TRIAL_ENABLED")}
+                    onCheckedChange={(checked) => setSetting("TRIAL_ENABLED", checked)}
+                    class="admin-switch-root"
+                  >
+                    <Switch.Thumb class="admin-switch-thumb" />
+                  </Switch.Root>
+                  <span
+                    >{boolValue("TRIAL_ENABLED")
+                      ? at("enabled", {}, "Включено")
+                      : at("disabled", {}, "Выключено")}</span
+                  >
+                </div>
+                {#if isSettingDirty("TRIAL_ENABLED")}
+                  <AdminButton
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => resetSetting("TRIAL_ENABLED")}
+                  >
+                    <X size={12} />
+                    {at("reset", {}, "Сбросить")}
+                  </AdminButton>
+                {/if}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_GENERAL_KEYS)}>
+          <header class="admin-settings-field-group-head">
+            <div class="admin-settings-field-group-head-copy">
+              <strong>{at("tariffs_trial_group_general", {}, "Общие настройки")}</strong>
+              <small>
+                {at(
+                  "tariffs_trial_group_general_hint",
+                  {},
+                  "Длительность пробного доступа и объём трафика, который получает пользователь."
+                )}
+              </small>
+            </div>
+            {#if dirtyCount(TRIAL_GENERAL_KEYS)}
+              <AdminBadge variant="warning">
+                {at(
+                  "settings_dirty_count",
+                  { count: dirtyCount(TRIAL_GENERAL_KEYS) },
+                  `Изменений: ${dirtyCount(TRIAL_GENERAL_KEYS)}`
+                )}
+              </AdminBadge>
+            {/if}
+          </header>
+          <div class="admin-settings-field-group-body">
+            <div
+              class="admin-setting admin-trial-setting-row"
+              class:is-dirty={isSettingDirty("TRIAL_DURATION_DAYS")}
+            >
+              <div class="admin-setting-meta">
+                <strong>
+                  {at("tariffs_trial_days", {}, "Длительность, дней")}
+                  {#if isSettingDirty("TRIAL_DURATION_DAYS")}
+                    <AdminBadge variant="warning"
+                      >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
+                    >
+                  {/if}
+                </strong>
+                <code>TRIAL_DURATION_DAYS</code>
+              </div>
+              <div class="admin-setting-control">
+                <input
+                  class="input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={valueForKey("TRIAL_DURATION_DAYS")}
+                  oninput={(event) => setSetting("TRIAL_DURATION_DAYS", event.currentTarget.value)}
+                />
+                {#if isSettingDirty("TRIAL_DURATION_DAYS")}
+                  <AdminButton
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => resetSetting("TRIAL_DURATION_DAYS")}
+                  >
+                    <X size={12} />
+                    {at("reset", {}, "Сбросить")}
+                  </AdminButton>
+                {/if}
+              </div>
+            </div>
+            <div
+              class="admin-setting admin-trial-setting-row"
+              class:is-dirty={isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB")}
+            >
+              <div class="admin-setting-meta">
+                <strong>
+                  {at("tariffs_trial_traffic", {}, "Лимит трафика, GB")}
+                  {#if isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB")}
+                    <AdminBadge variant="warning"
+                      >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
+                    >
+                  {/if}
+                </strong>
+                <code>TRIAL_TRAFFIC_LIMIT_GB</code>
+              </div>
+              <div class="admin-setting-control">
+                <input
+                  class="input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={valueForKey("TRIAL_TRAFFIC_LIMIT_GB")}
+                  oninput={(event) =>
+                    setSetting("TRIAL_TRAFFIC_LIMIT_GB", event.currentTarget.value)}
+                />
+                {#if isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB")}
+                  <AdminButton
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => resetSetting("TRIAL_TRAFFIC_LIMIT_GB")}
+                  >
+                    <X size={12} />
+                    {at("reset", {}, "Сбросить")}
+                  </AdminButton>
+                {/if}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_RESET_KEYS)}>
+          <header class="admin-settings-field-group-head">
+            <div class="admin-settings-field-group-head-copy">
+              <strong>{at("tariffs_trial_group_reset", {}, "Сброс трафика")}</strong>
+              <small>
+                {at(
+                  "tariffs_trial_group_reset_hint",
+                  {},
+                  "Стратегия, по которой Remnawave обновляет лимит трафика для пробного периода."
+                )}
+              </small>
+            </div>
+            {#if dirtyCount(TRIAL_RESET_KEYS)}
+              <AdminBadge variant="warning">
+                {at(
+                  "settings_dirty_count",
+                  { count: dirtyCount(TRIAL_RESET_KEYS) },
+                  `Изменений: ${dirtyCount(TRIAL_RESET_KEYS)}`
+                )}
+              </AdminBadge>
+            {/if}
+          </header>
+          <div class="admin-settings-field-group-body">
+            <div
+              class="admin-setting admin-trial-setting-row"
+              class:is-dirty={isSettingDirty("TRIAL_TRAFFIC_STRATEGY")}
+            >
+              <div class="admin-setting-meta">
+                <strong>
+                  {at("tariffs_trial_strategy", {}, "Стратегия сброса трафика")}
+                  {#if isSettingDirty("TRIAL_TRAFFIC_STRATEGY")}
+                    <AdminBadge variant="warning"
+                      >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
+                    >
+                  {/if}
+                </strong>
+                <code>TRIAL_TRAFFIC_STRATEGY</code>
+              </div>
+              <div class="admin-setting-control">
+                <AdminSelect
+                  class="admin-setting-select"
+                  value={String(valueForKey("TRIAL_TRAFFIC_STRATEGY") || "NO_RESET")}
+                  items={TRAFFIC_STRATEGY_OPTIONS}
+                  ariaLabel={at("tariffs_trial_strategy", {}, "Стратегия сброса трафика")}
+                  onValueChange={(value) => setSetting("TRIAL_TRAFFIC_STRATEGY", value)}
+                />
+                {#if isSettingDirty("TRIAL_TRAFFIC_STRATEGY")}
+                  <AdminButton
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => resetSetting("TRIAL_TRAFFIC_STRATEGY")}
+                  >
+                    <X size={12} />
+                    {at("reset", {}, "Сбросить")}
+                  </AdminButton>
+                {/if}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_SQUAD_KEYS)}>
+          <header class="admin-settings-field-group-head">
+            <div class="admin-settings-field-group-head-copy">
+              <strong>{at("tariffs_trial_group_squads", {}, "Сквады")}</strong>
+              <small>
+                {at(
+                  "tariffs_trial_group_squads_hint",
+                  {},
+                  "Сквады, которые будут назначены пользователю при активации триала."
+                )}
+              </small>
+            </div>
+            {#if dirtyCount(TRIAL_SQUAD_KEYS)}
+              <AdminBadge variant="warning">
+                {at(
+                  "settings_dirty_count",
+                  { count: dirtyCount(TRIAL_SQUAD_KEYS) },
+                  `Изменений: ${dirtyCount(TRIAL_SQUAD_KEYS)}`
+                )}
+              </AdminBadge>
+            {/if}
+          </header>
+          <div class="admin-settings-field-group-body">
+            <div
+              class="admin-setting admin-trial-setting-row"
+              class:is-dirty={isSettingDirty("TRIAL_SQUAD_UUIDS")}
+            >
+              <div class="admin-setting-meta">
+                <strong>
+                  {at("tariffs_trial_squads", {}, "Internal Squads для триала")}
+                  {#if isSettingDirty("TRIAL_SQUAD_UUIDS")}
+                    <AdminBadge variant="warning"
+                      >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
+                    >
+                  {/if}
+                </strong>
+                <code>TRIAL_SQUAD_UUIDS</code>
+                <small>
+                  {at(
+                    "tariffs_trial_squads_hint",
+                    {},
+                    "Эти сквады применяются при активации триала. Если поле пустое, используются USER_SQUAD_UUIDS."
+                  )}
+                </small>
+              </div>
+              <div class="admin-setting-control admin-trial-squad-control">
+                {#key trialSquadSelectKey}
+                  <AdminSelect
+                    value={selectedTrialSquad}
+                    items={panelSquadOptions}
+                    disabled={panelSquadsLoading || !panelSquadOptions.length}
+                    placeholder={panelSquadsLoading
+                      ? at("loading", {}, "Загрузка...")
+                      : at("tariffs_trial_add_squad", {}, "Добавить сквад из панели")}
+                    ariaLabel={at("tariffs_trial_add_squad", {}, "Добавить сквад из панели")}
+                    onValueChange={handleTrialSquadSelect}
+                  />
+                {/key}
+                <input
+                  class="input"
+                  type="text"
+                  placeholder={valueForKey("USER_SQUAD_UUIDS") || "uuid-a,uuid-b"}
+                  value={valueForKey("TRIAL_SQUAD_UUIDS")}
+                  oninput={(event) => setSetting("TRIAL_SQUAD_UUIDS", event.currentTarget.value)}
+                />
+                {#if isSettingDirty("TRIAL_SQUAD_UUIDS")}
+                  <AdminButton
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => resetSetting("TRIAL_SQUAD_UUIDS")}
+                  >
+                    <X size={12} />
+                    {at("reset", {}, "Сбросить")}
+                  </AdminButton>
+                {/if}
+                <div class="admin-chip-list">
+                  {#each csvList("TRIAL_SQUAD_UUIDS") as uuid}
+                    <button type="button" class="admin-chip" onclick={() => removeTrialSquad(uuid)}>
+                      {trialSquadLabel(uuid)}
+                      <X size={12} />
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </article>
 
   <article class="admin-card">
     <header class="admin-card-head">
@@ -192,4 +695,139 @@
       {/if}
     </div>
   </article>
+
+  <Accordion.Root
+    type="multiple"
+    bind:value={tariffSettingsOpen}
+    class="admin-accordion admin-tariff-settings-accordion"
+  >
+    <Accordion.Item
+      value="legacy-tariffs"
+      class="admin-accordion-item admin-card admin-tariff-settings-card"
+    >
+      <Accordion.Header class="admin-accordion-header">
+        <Accordion.Trigger class="admin-accordion-trigger">
+          <span class="admin-accordion-title">
+            {at("tariffs_legacy_title", {}, "Совместимость с legacy-тарифами")}
+          </span>
+          <span class="admin-accordion-meta">
+            {at(
+              "tariffs_legacy_subtitle",
+              {},
+              "Старые периоды и пакеты трафика remnawave-tg-shop, которые используются только без JSON-каталога."
+            )}{#if legacyDirtyCount}
+              · {at(
+                "settings_dirty_count",
+                { count: legacyDirtyCount },
+                `Изменений: ${legacyDirtyCount}`
+              )}{/if}
+          </span>
+          <ChevronRight size={16} class="admin-accordion-chev" />
+        </Accordion.Trigger>
+      </Accordion.Header>
+      <Accordion.Content class="admin-accordion-content">
+        <div class="admin-card-body">
+          {#if legacyDirtyCount}
+            <div class="admin-editor-section-actions admin-tariff-settings-save-row">
+              <AdminBadge variant="warning">
+                {at(
+                  "settings_dirty_count",
+                  { count: legacyDirtyCount },
+                  `Изменений: ${legacyDirtyCount}`
+                )}
+              </AdminBadge>
+              <AdminButton
+                size="sm"
+                variant="primary"
+                onclick={saveTariffSettings}
+                disabled={settingsSaving}
+              >
+                <Save size={13} />
+                {settingsSaving
+                  ? at("btn_saving", {}, "Сохранение...")
+                  : at("btn_save", {}, "Сохранить")}
+              </AdminButton>
+            </div>
+          {/if}
+          <div class="admin-settings-warning" role="status">
+            <TriangleAlert size={16} aria-hidden="true" />
+            <div class="admin-settings-warning-copy">
+              <strong>{at("settings_legacy_tariffs_warning_title", {}, "Legacy tariffs")}</strong>
+              <p>
+                {at(
+                  "settings_legacy_tariffs_warning_body",
+                  {},
+                  "These settings are ignored when tariffs are configured in the dedicated Tariffs section."
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div class="admin-legacy-tariff-table">
+            <div class="admin-legacy-tariff-row admin-legacy-tariff-head">
+              <span>{at("tariffs_legacy_period", {}, "Period")}</span>
+              <span>{at("tariffs_legacy_enabled", {}, "Enabled")}</span>
+              <span>{at("payment_rub", {}, "RUB")}</span>
+              <span>{at("payment_stars", {}, "Stars")}</span>
+            </div>
+            {#each LEGACY_PERIODS as [months, enabledKey, rubKey, starsKey]}
+              <div class="admin-legacy-tariff-row">
+                <strong>{months} {at("months_short", {}, "mo")}</strong>
+                <div class="admin-setting-switch">
+                  <Switch.Root
+                    checked={boolValue(enabledKey)}
+                    onCheckedChange={(checked) => setSetting(enabledKey, checked)}
+                    class="admin-switch-root"
+                  >
+                    <Switch.Thumb class="admin-switch-thumb" />
+                  </Switch.Root>
+                </div>
+                <input
+                  class="input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={valueForKey(rubKey)}
+                  oninput={(event) => setSetting(rubKey, event.currentTarget.value)}
+                />
+                <input
+                  class="input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={valueForKey(starsKey)}
+                  oninput={(event) => setSetting(starsKey, event.currentTarget.value)}
+                />
+              </div>
+            {/each}
+          </div>
+
+          <div class="admin-form-row admin-form-row-2 admin-legacy-traffic-row">
+            <label class="admin-field-label admin-field-label-compact">
+              <span>{at("tariffs_legacy_traffic_packages", {}, "Traffic packages")}</span>
+              <small>{at("tariffs_legacy_traffic_hint", {}, "Format: 10:199,50:799")}</small>
+              <input
+                class="input"
+                type="text"
+                value={valueForKey("TRAFFIC_PACKAGES")}
+                oninput={(event) => setSetting("TRAFFIC_PACKAGES", event.currentTarget.value)}
+              />
+            </label>
+            <label class="admin-field-label admin-field-label-compact">
+              <span
+                >{at("tariffs_legacy_stars_traffic_packages", {}, "Traffic packages, Stars")}</span
+              >
+              <small>{at("tariffs_legacy_traffic_hint", {}, "Format: 10:199,50:799")}</small>
+              <input
+                class="input"
+                type="text"
+                value={valueForKey("STARS_TRAFFIC_PACKAGES")}
+                oninput={(event) => setSetting("STARS_TRAFFIC_PACKAGES", event.currentTarget.value)}
+              />
+            </label>
+          </div>
+        </div>
+      </Accordion.Content>
+    </Accordion.Item>
+  </Accordion.Root>
 {/if}

@@ -53,7 +53,11 @@ class TrafficMixin:
             current_used = active_sub.traffic_used_bytes
 
         purchase_bytes = self.gb_to_bytes(traffic_gb)
-        extra_hwid_devices = int(getattr(active_sub, "extra_hwid_devices", 0) or 0)
+        extra_hwid_devices = (
+            await self._active_hwid_extra_devices_for_sub(session, active_sub)
+            if active_sub
+            else 0
+        )
         base_hwid_limit = self._base_hwid_limit_for_tariff(tariff)
         effective_hwid_limit = self._effective_hwid_limit(base_hwid_limit, extra_hwid_devices)
         remaining_bytes = max(0, int(current_limit or 0) - int(current_used or 0))
@@ -222,10 +226,8 @@ class TrafficMixin:
             if sub.hwid_device_limit is not None
             else self._base_hwid_limit_for_tariff(tariff)
         )
-        effective_hwid_limit = self._effective_hwid_limit(
-            base_hwid_limit,
-            int(sub.extra_hwid_devices or 0),
-        )
+        extra_hwid_devices = await self._active_hwid_extra_devices_for_sub(session, sub)
+        effective_hwid_limit = self._effective_hwid_limit(base_hwid_limit, extra_hwid_devices)
         updated_sub = await subscription_dal.update_subscription(
             session,
             sub.subscription_id,
@@ -235,6 +237,7 @@ class TrafficMixin:
                 "is_throttled": False,
                 "tariff_key": tariff.key,
                 "hwid_device_limit": base_hwid_limit,
+                "extra_hwid_devices": extra_hwid_devices,
             },
         )
         panel_payload = self._build_panel_update_payload(
@@ -349,24 +352,23 @@ class TrafficMixin:
             },
         )
 
-        panel_payload = {
-            "uuid": db_user.panel_user_uuid,
-            "activeInternalSquads": self._panel_squads_for_tariff(
-                tariff,
-                include_premium=not premium_is_limited,
-            ),
-        }
-        updated_panel = await self.panel_service.update_user_details_on_panel(
-            db_user.panel_user_uuid, panel_payload
+        desired_squads = self._panel_squads_for_tariff(
+            tariff,
+            include_premium=not premium_is_limited,
         )
-        if not updated_panel or updated_panel.get("error"):
+        panel_updated = await self._sync_panel_squads_if_needed(
+            db_user.panel_user_uuid,
+            desired_squads,
+            user_id=user_id,
+            source="premium_topup",
+        )
+        if not panel_updated:
             # Otherwise the user pays for premium top-up but the panel never
             # re-grants premium squad access (the most common case here is
             # transitioning from premium_is_limited=True back to False).
             logging.warning(
-                "Panel user details update FAILED for premium top-up user %s. Response: %s",
+                "Panel user details update FAILED for premium top-up user %s.",
                 user_id,
-                updated_panel,
             )
             return None
         await tariff_dal.create_traffic_topup(
@@ -432,11 +434,17 @@ class TrafficMixin:
 
         squads = self._panel_squads_for_tariff(tariff, include_premium=not premium_is_limited)
         try:
-            await self.panel_service.update_user_details_on_panel(
+            panel_updated = await self._sync_panel_squads_if_needed(
                 db_user.panel_user_uuid,
-                {"uuid": db_user.panel_user_uuid, "activeInternalSquads": squads},
-                log_response=False,
+                squads,
+                user_id=user_id,
+                source="admin_premium_override",
             )
+            if not panel_updated:
+                logging.warning(
+                    "sync_premium_squad_access_to_panel: panel update failed for user %s",
+                    user_id,
+                )
         except Exception:
             logging.exception(
                 "sync_premium_squad_access_to_panel: failed to push squads for user %s", user_id
@@ -494,10 +502,8 @@ class TrafficMixin:
             if sub.hwid_device_limit is not None
             else self._base_hwid_limit_for_tariff(tariff)
         )
-        effective_hwid_limit = self._effective_hwid_limit(
-            base_hwid_limit,
-            int(sub.extra_hwid_devices or 0),
-        )
+        extra_hwid_devices = await self._active_hwid_extra_devices_for_sub(session, sub)
+        effective_hwid_limit = self._effective_hwid_limit(base_hwid_limit, extra_hwid_devices)
         updated_sub = await subscription_dal.update_subscription(
             session,
             sub.subscription_id,
@@ -506,6 +512,7 @@ class TrafficMixin:
                 "traffic_limit_bytes": new_limit,
                 "is_throttled": False,
                 "hwid_device_limit": base_hwid_limit,
+                "extra_hwid_devices": extra_hwid_devices,
             },
         )
         panel_payload = self._build_panel_update_payload(
@@ -575,10 +582,9 @@ class TrafficMixin:
             if sub.hwid_device_limit is not None
             else self._base_hwid_limit_for_tariff(tariff)
         )
-        effective_hwid_limit = self._effective_hwid_limit(
-            base_hwid_limit,
-            int(sub.extra_hwid_devices or 0),
-        )
+        extra_hwid_devices = await self._active_hwid_extra_devices_for_sub(session, sub)
+        sub.extra_hwid_devices = extra_hwid_devices
+        effective_hwid_limit = self._effective_hwid_limit(base_hwid_limit, extra_hwid_devices)
         panel_payload = self._build_panel_update_payload(
             panel_user_uuid=db_user.panel_user_uuid,
             expire_at=sub.end_date,
@@ -679,17 +685,22 @@ class TrafficMixin:
                 "premium_period_start_at": premium_period_start,
             },
         )
-        panel_payload = {
-            "uuid": db_user.panel_user_uuid,
-            "activeInternalSquads": self._panel_squads_for_tariff(
-                tariff,
-                include_premium=not premium_is_limited,
-            ),
-        }
+        desired_squads = self._panel_squads_for_tariff(
+            tariff,
+            include_premium=not premium_is_limited,
+        )
         try:
-            await self.panel_service.update_user_details_on_panel(
-                db_user.panel_user_uuid, panel_payload
+            panel_updated = await self._sync_panel_squads_if_needed(
+                db_user.panel_user_uuid,
+                desired_squads,
+                user_id=user_id,
+                source="admin_premium_topup",
             )
+            if not panel_updated:
+                logging.warning(
+                    "admin_grant_premium_topup: panel update failed for user %s",
+                    user_id,
+                )
         except Exception:
             logging.exception(
                 "admin_grant_premium_topup: failed to push panel update for user %s",
@@ -710,3 +721,128 @@ class TrafficMixin:
             "premium_is_limited": premium_is_limited,
             "granted_bytes": purchase_bytes,
         }
+
+    async def _sync_panel_squads_if_needed(
+        self,
+        panel_user_uuid: str,
+        desired_squads: List[str],
+        *,
+        user_id: int,
+        source: str,
+    ) -> bool:
+        match, current_set = await self._panel_squads_match(panel_user_uuid, desired_squads)
+        if match is True:
+            return True
+
+        desired_set = self._panel_squad_uuid_set(desired_squads)
+        self._log_panel_squad_patch(
+            source=source,
+            user_id=user_id,
+            panel_uuid=panel_user_uuid,
+            current_set=current_set,
+            desired_set=desired_set,
+        )
+        updated_panel = await self.panel_service.update_user_details_on_panel(
+            panel_user_uuid,
+            {"uuid": panel_user_uuid, "activeInternalSquads": desired_squads},
+            log_response=False,
+        )
+        if not updated_panel:
+            return False
+        return not (isinstance(updated_panel, dict) and updated_panel.get("error"))
+
+    async def _panel_squads_match(
+        self,
+        panel_user_uuid: str,
+        desired_squads: List[str],
+    ) -> tuple[Optional[bool], Optional[set[str]]]:
+        try:
+            panel_user = await self.panel_service.get_user_by_uuid(
+                panel_user_uuid,
+                log_response=False,
+            )
+        except Exception:
+            logging.exception(
+                "Failed to fetch panel user %s before premium squad update",
+                panel_user_uuid,
+            )
+            return None, None
+        current_known, current_set = self._panel_active_squad_uuid_set(panel_user)
+        if not current_known:
+            return None, current_set
+        return current_set == self._panel_squad_uuid_set(desired_squads), current_set
+
+    @classmethod
+    def _panel_active_squad_uuid_set(
+        cls,
+        panel_user: Optional[dict],
+    ) -> tuple[bool, set[str]]:
+        if not isinstance(panel_user, dict):
+            return False, set()
+        for key in (
+            "activeInternalSquads",
+            "active_internal_squads",
+            "activeInternalSquadUuids",
+            "active_internal_squad_uuids",
+        ):
+            if key in panel_user:
+                return True, cls._panel_squad_uuid_set(panel_user.get(key))
+        return False, set()
+
+    @staticmethod
+    def _panel_squad_uuid_set(raw) -> set[str]:
+        if not isinstance(raw, (list, tuple, set)):
+            return set()
+        out: set[str] = set()
+        for item in raw:
+            if isinstance(item, dict):
+                nested_squad = item.get("internalSquad") or item.get("squad")
+                if not isinstance(nested_squad, dict):
+                    nested_squad = {}
+                squad_uuid = (
+                    item.get("uuid")
+                    or item.get("internalSquadUuid")
+                    or item.get("squadUuid")
+                    or nested_squad.get("uuid")
+                )
+                if squad_uuid:
+                    out.add(str(squad_uuid))
+            elif item:
+                out.add(str(item))
+        return out
+
+    def _log_panel_squad_patch(
+        self,
+        *,
+        source: str,
+        user_id: int,
+        panel_uuid: str,
+        current_set: Optional[set[str]],
+        desired_set: set[str],
+    ) -> None:
+        logging.info(
+            "Sync panel PATCH: source=%s user_id=%s telegram_id=%s panel_uuid=%s "
+            "panel_view=full_fetch reasons=activeInternalSquads_mismatch "
+            "fields=activeInternalSquads payload_fields=activeInternalSquads changes=%s",
+            source,
+            user_id,
+            user_id,
+            panel_uuid,
+            "activeInternalSquads:%s->%s"
+            % (
+                self._format_panel_squad_set(current_set),
+                self._format_panel_squad_set(desired_set),
+            ),
+        )
+
+    @staticmethod
+    def _format_panel_squad_set(value: Optional[set[str]]) -> str:
+        if value is None:
+            return "missing"
+        values = sorted(str(item) for item in value)
+        preview = ",".join(values[:4])
+        suffix = ",..." if len(values) > 4 else ""
+        text = f"[{len(values)}:{preview}{suffix}]"
+        if len(text) > 96:
+            return f"{text[:93]}..."
+        return text

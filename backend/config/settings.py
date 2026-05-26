@@ -164,6 +164,7 @@ class Settings(BaseSettings):
     )
 
     STARS_ENABLED: bool = Field(default=True)
+    STARS_ADMIN_ONLY_ENABLED: bool = Field(default=False)
     PAYMENT_METHODS_ORDER: Optional[str] = Field(
         default=None,
         description="Comma-separated list of payment methods to show (e.g., severpay,wata,freekassa,yookassa,platega,stars,cryptopay)",  # noqa: E501
@@ -273,6 +274,13 @@ class Settings(BaseSettings):
     TRIAL_DURATION_DAYS: int = Field(default=3)
     TRIAL_TRAFFIC_LIMIT_GB: Optional[float] = Field(default=5.0)
     TRIAL_TRAFFIC_STRATEGY: str = Field(default="NO_RESET")
+    TRIAL_SQUAD_UUIDS: Optional[str] = Field(
+        default=None,
+        description=(
+            "Comma-separated UUIDs of internal squads to assign during trial activation. "
+            "Falls back to USER_SQUAD_UUIDS when empty."
+        ),
+    )
 
     CRYPT4_ENABLED: bool = Field(
         default=False, description="Enable happ crypt4 encryption for subscription URLs"
@@ -323,6 +331,35 @@ class Settings(BaseSettings):
     WEBAPP_FAVICON_USE_CUSTOM: bool = Field(default=False)
     WEBAPP_FAVICON_URL: Optional[str] = Field(default=None)
     WEBAPP_LOGO_FAVICON_URL: Optional[str] = Field(default=None)
+    SUBSCRIPTION_GUIDES_ENABLED: bool = Field(
+        default=True,
+        description="Show embedded install instructions inside the subscription Mini App.",
+    )
+    SUBSCRIPTION_GUIDES_BOT_MENU_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "Open Mini App install guides from Telegram bot connect buttons and show public "
+            "install guide share links."
+        ),
+    )
+    SUBSCRIPTION_PAGE_CONFIG_PANEL_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "Use Remnawave Panel Subscription Page config for embedded guides when available."
+        ),
+    )
+    SUBSCRIPTION_PAGE_CONFIG_JSON_OVERRIDE_ENABLED: bool = Field(
+        default=False,
+        description="Enable admin JSON override for embedded guides config.",
+    )
+    SUBSCRIPTION_PAGE_CONFIG_PATH: str = Field(
+        default="data/subpage-config/multiapp.json",
+        description="Path to Remnawave Subscription Page v1 JSON config for embedded guides.",
+    )
+    SUBSCRIPTION_PAGE_CONFIG_JSON: str = Field(
+        default="",
+        description="Admin-provided Remnawave Subscription Page v1 JSON config override.",
+    )
     WEBAPP_SESSION_SECRET: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     WEBHOOK_SECRET_TOKEN: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     WEBAPP_SESSION_TTL_SECONDS: int = Field(default=24 * 60 * 60)
@@ -516,6 +553,17 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
+    def parsed_trial_squad_uuids(self) -> Optional[List[str]]:
+        if self.TRIAL_SQUAD_UUIDS:
+            trial_squads = [
+                uuid.strip() for uuid in self.TRIAL_SQUAD_UUIDS.split(",") if uuid.strip()
+            ]
+            if trial_squads:
+                return trial_squads
+        return self.parsed_user_squad_uuids
+
+    @computed_field
+    @property
     def parsed_user_external_squad_uuid(self) -> Optional[str]:
         if self.USER_EXTERNAL_SQUAD_UUID:
             cleaned = self.USER_EXTERNAL_SQUAD_UUID.strip()
@@ -565,13 +613,14 @@ class Settings(BaseSettings):
     @property
     def stars_subscription_options(self) -> Dict[int, int]:
         options: Dict[int, int] = {}
-        if self.STARS_ENABLED and self.MONTH_1_ENABLED and self.STARS_PRICE_1_MONTH is not None:
+        stars_enabled = self.STARS_ENABLED or self.STARS_ADMIN_ONLY_ENABLED
+        if stars_enabled and self.MONTH_1_ENABLED and self.STARS_PRICE_1_MONTH is not None:
             options[1] = self.STARS_PRICE_1_MONTH
-        if self.STARS_ENABLED and self.MONTH_3_ENABLED and self.STARS_PRICE_3_MONTHS is not None:
+        if stars_enabled and self.MONTH_3_ENABLED and self.STARS_PRICE_3_MONTHS is not None:
             options[3] = self.STARS_PRICE_3_MONTHS
-        if self.STARS_ENABLED and self.MONTH_6_ENABLED and self.STARS_PRICE_6_MONTHS is not None:
+        if stars_enabled and self.MONTH_6_ENABLED and self.STARS_PRICE_6_MONTHS is not None:
             options[6] = self.STARS_PRICE_6_MONTHS
-        if self.STARS_ENABLED and self.MONTH_12_ENABLED and self.STARS_PRICE_12_MONTHS is not None:
+        if stars_enabled and self.MONTH_12_ENABLED and self.STARS_PRICE_12_MONTHS is not None:
             options[12] = self.STARS_PRICE_12_MONTHS
         return options
 

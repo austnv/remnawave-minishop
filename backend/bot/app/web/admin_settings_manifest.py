@@ -16,7 +16,7 @@ from typing import Any, List, Optional, Tuple
 @dataclass(frozen=True)
 class SettingField:
     key: str
-    type: str  # "string" | "int" | "float" | "bool" | "text" | "url" | "color" | "icon"
+    type: str  # "string" | "int" | "float" | "bool" | "text" | "url" | "color" | "icon" | "json"
     section: str
     label: str
     description: str = ""
@@ -34,6 +34,13 @@ class SettingField:
 
 SETTINGS_MANIFEST: List[SettingField] = [
     # ─── General ────────────────────────────────────────────────────
+    SettingField(
+        "WEBAPP_TITLE",
+        "string",
+        "general",
+        "Web App title",
+        placeholder="My subscription",
+    ),
     SettingField(
         "DEFAULT_LANGUAGE",
         "string",
@@ -118,9 +125,6 @@ SETTINGS_MANIFEST: List[SettingField] = [
     ),
     # ─── Web app appearance ────────────────────────────────────────
     SettingField(
-        "WEBAPP_TITLE", "string", "appearance", "Название Web App", placeholder="Моя подписка"
-    ),
-    SettingField(
         "SUBSCRIPTION_MINI_APP_URL",
         "url",
         "appearance",
@@ -160,6 +164,59 @@ SETTINGS_MANIFEST: List[SettingField] = [
     SettingField("WEBAPP_FAVICON_URL", "url", "appearance", "URL отдельной favicon"),
     SettingField("WEBAPP_LOGO_FAVICON_URL", "url", "appearance", "Favicon из логотипа"),
     SettingField("WEBAPP_ENABLED", "bool", "appearance", "Web App включён"),
+    SettingField(
+        "SUBSCRIPTION_GUIDES_ENABLED",
+        "bool",
+        "subscription_guides",
+        "Embedded install guides",
+        "Open install instructions inside the Web App instead of an external connect page.",
+    ),
+    SettingField(
+        "SUBSCRIPTION_GUIDES_BOT_MENU_ENABLED",
+        "bool",
+        "subscription_guides",
+        "Open install guides from bot",
+        (
+            "Use the Telegram Mini App install screen for bot connect buttons and show "
+            "public install guide links."
+        ),
+    ),
+    SettingField(
+        "SUBSCRIPTION_PAGE_CONFIG_PANEL_ENABLED",
+        "bool",
+        "subscription_guides",
+        "Use Remnawave Panel config",
+        (
+            "Fetch Subscription Page config from Remnawave Panel by the user's "
+            "subscription short UUID."
+        ),
+    ),
+    SettingField(
+        "SUBSCRIPTION_PAGE_CONFIG_JSON_OVERRIDE_ENABLED",
+        "bool",
+        "subscription_guides",
+        "Enable admin JSON override",
+        "Use the JSON field below instead of Remnawave Panel config. Disabled by default.",
+    ),
+    SettingField(
+        "SUBSCRIPTION_PAGE_CONFIG_PATH",
+        "string",
+        "subscription_guides",
+        "Subscription Page config path",
+        "Fallback path to a Remnawave Subscription Page v1 JSON config file.",
+        placeholder="data/subpage-config/multiapp.json",
+    ),
+    SettingField(
+        "SUBSCRIPTION_PAGE_CONFIG_JSON",
+        "json",
+        "subscription_guides",
+        "Subscription Page config JSON",
+        (
+            "Optional admin JSON override. It is applied only when the JSON override "
+            "switch is enabled."
+        ),
+        placeholder='{\n  "version": "1"\n}',
+    ),
     # ─── Subscription periods & pricing ────────────────────────────
     SettingField("MONTH_1_ENABLED", "bool", "pricing", "Тариф 1 месяц"),
     SettingField("MONTH_3_ENABLED", "bool", "pricing", "Тариф 3 месяца"),
@@ -178,36 +235,45 @@ SETTINGS_MANIFEST: List[SettingField] = [
     ),
     SettingField("STARS_TRAFFIC_PACKAGES", "string", "pricing", "Пакеты трафика (Stars)"),
     SettingField(
-        "PAYMENT_METHODS_ORDER",
-        "string",
-        "pricing",
-        "Порядок методов оплаты",
-        "Через запятую, например: severpay,freekassa,yookassa,heleket",
-    ),
-    SettingField(
         "SUBSCRIPTION_PURCHASE_DESCRIPTION_ENABLED",
         "bool",
-        "pricing",
+        "payments",
         "Показывать описание подписки",
         "Текст появится перед выбором срока покупки или продления.",
+        subsection="checkout",
     ),
     SettingField(
         "SUBSCRIPTION_PURCHASE_DESCRIPTION_RU",
         "text",
-        "pricing",
+        "payments",
         "Описание подписки (RU)",
         "Русская версия текста на этапе оплаты.",
+        subsection="checkout",
     ),
     SettingField(
         "SUBSCRIPTION_PURCHASE_DESCRIPTION_EN",
         "text",
-        "pricing",
+        "payments",
         "Описание подписки (EN)",
         "Английская версия текста на этапе оплаты.",
+        subsection="checkout",
     ),
     # ─── Payment providers (toggles) ───────────────────────────────
     # Common
     SettingField("STARS_ENABLED", "bool", "payments", "Telegram Stars", subsection="common"),
+    SettingField(
+        "STARS_ADMIN_ONLY_ENABLED",
+        "bool",
+        "payments",
+        "Telegram Stars admin-only",
+        (
+            "Shows Telegram Stars only to users from ADMIN_IDS. "
+            "Payment callbacks remain active for admin test payments."
+        ),
+        subsection="common",
+        i18n_label_key="admin_settings_provider_admin_only_label",
+        i18n_description_key="admin_settings_provider_admin_only_description",
+    ),
     SettingField(
         "PAYMENT_METHODS_ORDER",
         "string",
@@ -217,10 +283,38 @@ SETTINGS_MANIFEST: List[SettingField] = [
         subsection="common",
     ),
     # ─── Trial ─────────────────────────────────────────────────────
-    SettingField("TRIAL_ENABLED", "bool", "trial", "Триал включён"),
-    SettingField("TRIAL_DURATION_DAYS", "int", "trial", "Длительность триала (дней)", min=0),
-    SettingField("TRIAL_TRAFFIC_LIMIT_GB", "float", "trial", "Лимит трафика триала (ГБ)", min=0),
-    SettingField("TRIAL_TRAFFIC_STRATEGY", "string", "trial", "Стратегия сброса трафика триала"),
+    SettingField("TRIAL_ENABLED", "bool", "pricing", "Триал включён", subsection="trial"),
+    SettingField(
+        "TRIAL_DURATION_DAYS",
+        "int",
+        "pricing",
+        "Длительность триала (дней)",
+        min=0,
+        subsection="trial",
+    ),
+    SettingField(
+        "TRIAL_TRAFFIC_LIMIT_GB",
+        "float",
+        "pricing",
+        "Лимит трафика триала (ГБ)",
+        min=0,
+        subsection="trial",
+    ),
+    SettingField(
+        "TRIAL_TRAFFIC_STRATEGY",
+        "string",
+        "pricing",
+        "Стратегия сброса трафика триала",
+        subsection="trial",
+    ),
+    SettingField(
+        "TRIAL_SQUAD_UUIDS",
+        "string",
+        "pricing",
+        "Internal Squads для триала",
+        "UUID через запятую. Если пусто, используется USER_SQUAD_UUIDS.",
+        subsection="trial",
+    ),
     # ─── Referral program ──────────────────────────────────────────
     SettingField(
         "REFERRAL_ONE_BONUS_PER_REFEREE", "bool", "referral", "Один бонус на приглашённого"
@@ -454,6 +548,18 @@ def manifest_keys() -> List[str]:
 def coerce_value(field: SettingField, raw: Any) -> Any:
     """Coerce a value coming from JSON to the type declared by the field."""
 
+    if field.type == "json":
+        if raw is None:
+            return ""
+        text = raw if isinstance(raw, str) else str(raw)
+        text = text.strip()
+        if not text:
+            return ""
+        from config.subscription_guides_config import validate_subscription_guides_config_text
+
+        validate_subscription_guides_config_text(text)
+        return text
+
     if raw is None or (isinstance(raw, str) and raw.strip() == ""):
         return None
 
@@ -510,19 +616,26 @@ def manifest_payload() -> List[dict]:
     from bot.payment_providers import (
         find_manifest_owner,
         manifest_field_default,
+        provider_admin_only_pairs,
         provider_webhook_metadata,
     )
 
     sections_order = {
         "general": 1,
         "appearance": 2,
-        "pricing": 3,
+        "pricing": 11,
         "payments": 4,
         "trial": 5,
         "referral": 6,
         "notifications": 7,
         "support": 8,
         "devices": 9,
+        "subscription_guides": 10,
+    }
+    exclusive_map = {
+        key: opposite
+        for public_key, admin_key in provider_admin_only_pairs()
+        for key, opposite in ((public_key, admin_key), (admin_key, public_key))
     }
     items: List[dict] = []
     for field in aggregated_manifest():
@@ -565,6 +678,8 @@ def manifest_payload() -> List[dict]:
             "optional": field.optional,
             "secret": field.secret,
         }
+        if field.key in exclusive_map:
+            item["mutually_exclusive_key"] = exclusive_map[field.key]
         if default_value is not None:
             item["default"] = default_value
         if webhook_metadata:
