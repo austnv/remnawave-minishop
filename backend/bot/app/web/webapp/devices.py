@@ -193,6 +193,15 @@ def _format_device_datetime(value: Any) -> str:
         return text
 
 
+def _serialize_device_datetime(value: Any) -> Optional[str]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return normalized.isoformat()
+    return str(value)
+
+
 def _serialize_device(device: Dict[str, Any], index: int) -> Dict[str, Any]:
     hwid = str(device.get("hwid") or "").strip()
     model = str(device.get("deviceModel") or "").strip()
@@ -208,7 +217,7 @@ def _serialize_device(device: Dict[str, Any], index: int) -> Dict[str, Any]:
         "os_version": os_version,
         "platform_label": platform_label,
         "user_agent": user_agent,
-        "created_at": device.get("createdAt"),
+        "created_at": _serialize_device_datetime(device.get("createdAt")),
         "created_at_text": _format_device_datetime(device.get("createdAt")),
         "hwid_short": _shorten_hwid_for_display(hwid),
         "token": _device_hwid_token(hwid) if hwid else "",

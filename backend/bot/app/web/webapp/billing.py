@@ -688,15 +688,11 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
                 "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
                 "title": f"+{count}",
                 "subtitle": tariff.name(lang),
-                "valid_from": (
-                    (rub_quote or stars_quote)["valid_from"].isoformat()
-                    if (rub_quote or stars_quote).get("valid_from")
-                    else None
+                "valid_from": _billing_iso_datetime(
+                    (rub_quote or stars_quote).get("valid_from")
                 ),
-                "valid_until": (
-                    (rub_quote or stars_quote)["valid_until"].isoformat()
-                    if (rub_quote or stars_quote).get("valid_until")
-                    else None
+                "valid_until": _billing_iso_datetime(
+                    (rub_quote or stars_quote).get("valid_until")
                 ),
                 "proration_ratio": float((rub_quote or stars_quote).get("proration_ratio") or 0),
             }
