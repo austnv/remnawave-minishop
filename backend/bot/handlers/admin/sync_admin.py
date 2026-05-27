@@ -1203,15 +1203,13 @@ async def _perform_sync_impl(
                         merge_panel_patches = int(merge_result.get("panel_patches", 0))
                         if merge_panel_patches:
                             panel_patch_count += merge_panel_patches
-                            panel_patch_reason_counts[
-                                "duplicate_panel_merge_extend"
-                            ] += merge_panel_patches
+                            panel_patch_reason_counts["duplicate_panel_merge_extend"] += (
+                                merge_panel_patches
+                            )
                         if merge_result["resolved"]:
                             users_updated += 1
                             users_uuid_updated += 1
-                            local_update_reason_counts.update(
-                                ["duplicate_panel_identity_resolved"]
-                            )
+                            local_update_reason_counts.update(["duplicate_panel_identity_resolved"])
                             panel_uuids_by_telegram_id.get(telegram_id_from_panel, set()).discard(
                                 str(panel_uuid)
                             )
@@ -1322,9 +1320,7 @@ async def _perform_sync_impl(
                                 current_panel_user=panel_user_for_identity,
                                 reasons=panel_reasons,
                                 panel_view=(
-                                    "list"
-                                    if missing_identity_fields_match
-                                    else "full_fetch"
+                                    "list" if missing_identity_fields_match else "full_fetch"
                                 ),
                             )
                             panel_patch_count += 1

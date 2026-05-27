@@ -416,9 +416,7 @@ class SubscriptionLifecycleMixin:
                     "Failed to recalculate active HWID devices for renewal of user %s",
                     user_id,
                 )
-                extra_hwid_devices = int(
-                    getattr(current_active_sub, "extra_hwid_devices", 0) or 0
-                )
+                extra_hwid_devices = int(getattr(current_active_sub, "extra_hwid_devices", 0) or 0)
         premium_topup_balance_bytes = int(
             getattr(current_active_sub, "premium_topup_balance_bytes", 0) or 0
         )
@@ -813,9 +811,7 @@ class SubscriptionLifecycleMixin:
                     subscription_id=local_active_sub.subscription_id,
                     at=datetime.now(timezone.utc),
                 )
-                active_extra_hwid_devices = int(
-                    hwid_entitlement_summary.get("active_devices") or 0
-                )
+                active_extra_hwid_devices = int(hwid_entitlement_summary.get("active_devices") or 0)
                 if active_extra_hwid_devices != int(local_active_sub.extra_hwid_devices or 0):
                     await subscription_dal.update_subscription(
                         session,
@@ -901,9 +897,7 @@ class SubscriptionLifecycleMixin:
             else None,
             "extra_hwid_devices": active_extra_hwid_devices,
             "extra_hwid_devices_valid_until": hwid_entitlement_summary.get("active_until"),
-            "extra_hwid_devices_next_valid_from": hwid_entitlement_summary.get(
-                "next_valid_from"
-            ),
+            "extra_hwid_devices_next_valid_from": hwid_entitlement_summary.get("next_valid_from"),
             "user_bot_username": db_user.username,
             "is_panel_data": True,
             "max_devices": hwid_limit,

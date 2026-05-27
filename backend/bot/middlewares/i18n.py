@@ -160,10 +160,7 @@ def locale_language_flag(code: object) -> str:
 
 
 def sort_locale_language_codes(codes: Iterable[object]) -> List[str]:
-    normalized = {
-        normalize_locale_language_code(code, prefer_known_base=False)
-        for code in codes
-    }
+    normalized = {normalize_locale_language_code(code, prefer_known_base=False) for code in codes}
     normalized = {code for code in normalized if code and is_valid_locale_language_code(code)}
     preferred = [code for code in DEFAULT_LANGUAGE_ORDER if code in normalized]
     rest = sorted(code for code in normalized if code not in DEFAULT_LANGUAGE_ORDER)

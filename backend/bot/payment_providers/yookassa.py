@@ -169,9 +169,7 @@ class YooKassaService:
     @property
     def configured(self) -> bool:
         if not (
-            provider_runtime_enabled(self.config)
-            and self.config.SHOP_ID
-            and self.config.SECRET_KEY
+            provider_runtime_enabled(self.config) and self.config.SHOP_ID and self.config.SECRET_KEY
         ):
             return False
         self._ensure_sdk_configured()
@@ -1327,9 +1325,7 @@ async def _initiate_yk_payment(
         "purchased_gb": float(months)
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
         else None,
-        "purchased_hwid_devices": int(months)
-        if sale_base in HWID_DEVICE_SALE_BASES
-        else None,
+        "purchased_hwid_devices": int(months) if sale_base in HWID_DEVICE_SALE_BASES else None,
         "hwid_valid_from": hwid_quote.get("valid_from") if hwid_quote else None,
         "hwid_valid_until": hwid_quote.get("valid_until") if hwid_quote else None,
         "hwid_pricing_period_months": hwid_quote.get("pricing_period_months")

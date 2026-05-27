@@ -11,6 +11,7 @@ from bot.services.locale_override_service import (
     update_locale_overrides,
 )
 
+
 def _locale_languages(
     i18n: JsonI18n,
     overrides: Optional[List[Dict[str, Any]]] = None,

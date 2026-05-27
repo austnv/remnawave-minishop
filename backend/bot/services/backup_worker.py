@@ -213,9 +213,7 @@ class BackupWorker:
         if not archive_path.exists():
             return archive_path
         for index in range(2, 1000):
-            candidate = archive_path.with_name(
-                f"{archive_path.stem}-{index}{archive_path.suffix}"
-            )
+            candidate = archive_path.with_name(f"{archive_path.stem}-{index}{archive_path.suffix}")
             if not candidate.exists():
                 return candidate
         raise RuntimeError("Could not allocate a unique backup archive filename")

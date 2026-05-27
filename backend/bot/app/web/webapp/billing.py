@@ -636,15 +636,11 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
             )
         tariff = config.require(sub.tariff_key)
         if tariff.billing_model != "period":
-            return _json_error(
-                400, "device_topup_unavailable", "Device top-up is not available"
-            )
+            return _json_error(400, "device_topup_unavailable", "Device top-up is not available")
         lang = db_user.language_code or settings.DEFAULT_LANGUAGE
         active = await subscription_service.get_active_subscription_details(session, user_id)
         renewal_available = bool(active and active.get("device_topup_renewal_available"))
-        extra_hwid_valid_until = (
-            active.get("extra_hwid_devices_valid_until") if active else None
-        )
+        extra_hwid_valid_until = active.get("extra_hwid_devices_valid_until") if active else None
         extra_hwid_valid_until_text = (
             active.get("extra_hwid_devices_valid_until_text") if active else None
         ) or _billing_datetime_text(extra_hwid_valid_until)
@@ -716,9 +712,7 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
                 "extra_hwid_devices": int(active.get("extra_hwid_devices") or 0)
                 if active
                 else int(sub.extra_hwid_devices or 0),
-                "extra_hwid_devices_valid_until": _billing_iso_datetime(
-                    extra_hwid_valid_until
-                ),
+                "extra_hwid_devices_valid_until": _billing_iso_datetime(extra_hwid_valid_until),
                 "extra_hwid_devices_valid_until_text": extra_hwid_valid_until_text,
                 "renewal_available": renewal_available,
                 "renewal_recommended_count": int(active.get("extra_hwid_devices") or 0)
@@ -978,9 +972,7 @@ async def _create_subscription_payment(
                 hwid_pricing_period_months=hwid_quote.get("pricing_period_months")
                 if hwid_quote
                 else None,
-                hwid_proration_ratio=hwid_quote.get("proration_ratio")
-                if hwid_quote
-                else None,
+                hwid_proration_ratio=hwid_quote.get("proration_ratio") if hwid_quote else None,
                 hwid_full_price=hwid_quote.get("full_price") if hwid_quote else None,
             )
         )

@@ -925,9 +925,7 @@ def _migration_0029_add_hwid_device_purchase_validity(connection: Connection) ->
     if "hwid_device_purchases" not in table_names or "subscriptions" not in table_names:
         return
 
-    columns: Set[str] = {
-        col["name"] for col in inspector.get_columns("hwid_device_purchases")
-    }
+    columns: Set[str] = {col["name"] for col in inspector.get_columns("hwid_device_purchases")}
     if "valid_from" not in columns:
         connection.execute(
             text("ALTER TABLE hwid_device_purchases ADD COLUMN valid_from TIMESTAMPTZ")
@@ -1002,9 +1000,7 @@ def _migration_0030_add_hwid_pricing_metadata(connection: Connection) -> None:
                 connection.execute(text(f"ALTER TABLE payments ADD COLUMN {column} {ddl_type}"))
 
     if "tariff_changes" in table_names:
-        change_columns: Set[str] = {
-            col["name"] for col in inspector.get_columns("tariff_changes")
-        }
+        change_columns: Set[str] = {col["name"] for col in inspector.get_columns("tariff_changes")}
         change_additions = {
             "converted_hwid_value_rub": "NUMERIC",
             "converted_hwid_days": "INTEGER",

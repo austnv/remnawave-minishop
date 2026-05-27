@@ -68,9 +68,7 @@ class PanelWebhookService:
             text = _(message_key, **kwargs)
             if extra_text:
                 text = f"{text}\n\n{extra_text}"
-            await self.bot.send_message(
-                user_id, text, reply_markup=reply_markup
-            )
+            await self.bot.send_message(user_id, text, reply_markup=reply_markup)
         except Exception:
             logging.exception("Failed to send notification to %s", user_id)
 

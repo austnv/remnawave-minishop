@@ -54,9 +54,7 @@ class TrafficMixin:
 
         purchase_bytes = self.gb_to_bytes(traffic_gb)
         extra_hwid_devices = (
-            await self._active_hwid_extra_devices_for_sub(session, active_sub)
-            if active_sub
-            else 0
+            await self._active_hwid_extra_devices_for_sub(session, active_sub) if active_sub else 0
         )
         base_hwid_limit = self._base_hwid_limit_for_tariff(tariff)
         effective_hwid_limit = self._effective_hwid_limit(base_hwid_limit, extra_hwid_devices)

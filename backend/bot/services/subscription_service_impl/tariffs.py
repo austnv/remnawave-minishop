@@ -441,9 +441,7 @@ class TariffMixin:
 
         if options.get("mode") == "period_to_period":
             target_monthly = float(options.get("target_monthly_rub") or 0)
-            hwid_days = (
-                math.floor((value_rub / target_monthly) * 30) if target_monthly > 0 else 0
-            )
+            hwid_days = math.floor((value_rub / target_monthly) * 30) if target_monthly > 0 else 0
             options["converted_hwid_days"] = max(0, hwid_days)
             options["recalc_days"] = int(options.get("recalc_days") or 0) + max(0, hwid_days)
             options["paid_diff_rub"] = max(

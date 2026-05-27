@@ -795,8 +795,7 @@ class TariffTrafficWorker:
         if not cached_at:
             return False
         return (
-            time.monotonic() - float(cached_at)
-            < TARIFF_WORKER_SQUAD_CONFIRMATION_CACHE_TTL_SECONDS
+            time.monotonic() - float(cached_at) < TARIFF_WORKER_SQUAD_CONFIRMATION_CACHE_TTL_SECONDS
         )
 
     def _remember_premium_squad_match(self, cache_key: tuple[str, tuple[str, ...]]) -> None:

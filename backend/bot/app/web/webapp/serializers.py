@@ -611,14 +611,12 @@ def _serialize_tariff_change_target(
                 "mode": "recalc_days",
                 "kind": "free",
                 "title": "recalc_days",
-                    "days_after": int(options.get("recalc_days") or 0),
-                    "remaining_days": int(options.get("remaining_days") or 0),
-                    "converted_hwid_value_rub": float(
-                        options.get("converted_hwid_value_rub") or 0
-                    ),
-                    "converted_hwid_days": int(options.get("converted_hwid_days") or 0),
-                }
-            )
+                "days_after": int(options.get("recalc_days") or 0),
+                "remaining_days": int(options.get("remaining_days") or 0),
+                "converted_hwid_value_rub": float(options.get("converted_hwid_value_rub") or 0),
+                "converted_hwid_days": int(options.get("converted_hwid_days") or 0),
+            }
+        )
         paid_diff = float(options.get("paid_diff_rub") or 0)
         if paid_diff > 0:
             actions.append(
@@ -638,9 +636,7 @@ def _serialize_tariff_change_target(
                 "title": "convert_days_to_gb",
                 "converted_gb": float(options.get("converted_gb") or 0),
                 "remaining_days": int(options.get("remaining_days") or 0),
-                "converted_hwid_value_rub": float(
-                    options.get("converted_hwid_value_rub") or 0
-                ),
+                "converted_hwid_value_rub": float(options.get("converted_hwid_value_rub") or 0),
                 "converted_hwid_gb": float(options.get("converted_hwid_gb") or 0),
             }
         )
