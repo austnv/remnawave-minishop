@@ -597,7 +597,7 @@
     if (!subscriptionKey) return false;
     const state = activationHandoff.read();
     const pending = state.pending;
-    if (activationHandoff.isAcknowledged(subscriptionKey, state)) {
+    if (!context.force && activationHandoff.isAcknowledged(subscriptionKey, state)) {
       if (pending && activationHandoff.pendingMatchesUser(pending, payload)) {
         activationHandoff.write({ ...state, pending: null });
       }
