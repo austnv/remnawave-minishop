@@ -62,6 +62,7 @@ function prepareMockConfig() {
   );
   DEV_MOCK.config.adminJsAsset = runtimePath("subscription_webapp_admin.js");
   DEV_MOCK.config.adminCssAsset = runtimePath("subscription_webapp_admin.css");
+  DEV_MOCK.config.appVersion = "demo";
   DEV_MOCK.config.apiBase = "/api";
   applyDemoThemeTokens(DEV_MOCK.config.themesCatalog);
   applyDemoThemeTokens(DEV_MOCK.data.themes_catalog);
