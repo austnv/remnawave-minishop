@@ -59,7 +59,9 @@
   $: useCustomFavicon = faviconUseCustomDraft;
   $: faviconUrl = valueForKey("WEBAPP_FAVICON_URL", appFaviconUrl);
   $: logoFaviconUrl = valueForKey("WEBAPP_LOGO_FAVICON_URL");
-  $: generatedFaviconUrl = !useEmojiLogo ? logoFaviconUrl || previewLogoUrl || "" : "";
+  $: generatedFaviconUrl = !useEmojiLogo
+    ? logoFaviconUrl || appFaviconUrl || previewLogoUrl || ""
+    : "";
   $: currentFaviconUrl = useCustomFavicon
     ? pendingFaviconPreviewUrl || faviconUrl || ""
     : generatedFaviconUrl;
