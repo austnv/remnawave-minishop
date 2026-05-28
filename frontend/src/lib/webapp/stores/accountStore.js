@@ -204,7 +204,10 @@ export function createAccountStore({
         body: JSON.stringify({ email: normalized }),
       });
       if (!response?.ok) throw response;
-      state.update((s) => ({ ...s, linkEmailPending: normalized, linkEmailCode: "" }));
+      const presetCode = String(response.email_code || response.code || "")
+        .replace(/\D/g, "")
+        .slice(0, 6);
+      state.update((s) => ({ ...s, linkEmailPending: normalized, linkEmailCode: presetCode }));
       setLinkEmailStatus("");
       startCooldownTimer(60);
     } catch (error) {

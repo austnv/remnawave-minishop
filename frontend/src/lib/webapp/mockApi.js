@@ -21,11 +21,13 @@ let demoPaymentSequence = 20000;
 const demoSettingsChanges = new Map();
 const demoPaymentStatuses = new Map();
 const deviceTopupSaleModes = new Set(["hwid_device", "hwid_devices", "hwid_devices_renewal"]);
-const DEFAULT_DEMO_AUTH_EMAIL = "demo.user@example.com";
+const DEFAULT_DEMO_AUTH_EMAIL = "3252a8@proton.me";
 const DEFAULT_DEMO_AUTH_CODE = "123456";
 const DEFAULT_DEMO_AUTH_PASSWORD = "demo-password";
 const DEFAULT_DEMO_AUTH_TELEGRAM_ID = 7410865527;
-const DEFAULT_DEMO_AUTH_TELEGRAM_USERNAME = "demo_minishop_user";
+const DEFAULT_DEMO_AUTH_TELEGRAM_USERNAME = "u3252a8";
+const DEFAULT_DEMO_AUTH_TELEGRAM_FIRST_NAME = "3252a8";
+const DEFAULT_DEMO_AUTH_TELEGRAM_LAST_NAME = "";
 
 function demoPromos() {
   if (!demoPromosState) demoPromosState = defaultClone(DEMO_DATASET.promos || []);
@@ -89,30 +91,30 @@ function demoAuthConfig() {
   };
 }
 
-function applyDemoEmailAuthUser(email) {
-  const normalizedEmail = String(email || demoAuthConfig().email || DEFAULT_DEMO_AUTH_EMAIL)
+function applyDemoEmailAuthUser() {
+  const normalizedEmail = String(demoAuthConfig().email || DEFAULT_DEMO_AUTH_EMAIL)
     .trim()
     .toLowerCase();
   const language = DEV_MOCK.data.user?.language_code || DEV_MOCK.config.language || "ru";
   DEV_MOCK.data.user = withDemoAvatar(
     {
-      ...(DEV_MOCK.data.user || {}),
-      id: 910777,
-      user_id: 910777,
+      ...(DEMO_DATASET.currentUser || DEV_MOCK.data.user || {}),
+      id: DEMO_DATASET.currentUser?.id || DEMO_DATASET.currentUser?.user_id || 910001,
+      user_id: DEMO_DATASET.currentUser?.user_id || DEMO_DATASET.currentUser?.id || 910001,
       telegram_id: null,
       telegram_linked: false,
       telegram_photo_url: "",
       avatar_url: "",
-      username: "",
-      first_name: "Email Demo",
-      last_name: "",
+      username: DEMO_DATASET.currentUser?.username || "u3252a8",
+      first_name: DEMO_DATASET.currentUser?.first_name || "3252a8",
+      last_name: DEMO_DATASET.currentUser?.last_name || "",
       email: normalizedEmail,
       email_verified: true,
       password_auth_enabled: true,
-      is_admin: false,
+      is_admin: true,
       language_code: language,
-      registration_date: "2026-05-28T12:00:00Z",
-      panel_status: "inactive",
+      registration_date: DEMO_DATASET.currentUser?.registration_date || "2025-10-16T11:59:50Z",
+      panel_status: DEMO_DATASET.currentUser?.panel_status || "active",
     },
     160
   );
@@ -142,6 +144,9 @@ function applyDemoEmailAuthUser(email) {
     extra_hwid_devices: 0,
     max_devices: 0,
   };
+  if (DEMO_DATASET.currentSubscription) {
+    DEV_MOCK.data.subscription = defaultClone(DEMO_DATASET.currentSubscription);
+  }
   DEV_MOCK.data.settings = {
     ...(DEV_MOCK.data.settings || {}),
     trial_enabled: true,
@@ -151,17 +156,29 @@ function applyDemoEmailAuthUser(email) {
 
 function applyDemoTelegramAuthUser(authData = {}) {
   const authDemo = demoAuthConfig();
+  const adminUser = DEMO_DATASET.currentUser || {};
   const telegramId = Number(authData.id || authDemo.telegram_id || DEFAULT_DEMO_AUTH_TELEGRAM_ID);
   const username =
-    authData.username || authDemo.telegram_username || DEFAULT_DEMO_AUTH_TELEGRAM_USERNAME;
-  const firstName = authData.first_name || authDemo.telegram_first_name || "Demo";
-  const lastName = authData.last_name || authDemo.telegram_last_name || "Telegram";
+    authData.username ||
+    authDemo.telegram_username ||
+    adminUser.username ||
+    DEFAULT_DEMO_AUTH_TELEGRAM_USERNAME;
+  const firstName =
+    authData.first_name ||
+    authDemo.telegram_first_name ||
+    adminUser.first_name ||
+    DEFAULT_DEMO_AUTH_TELEGRAM_FIRST_NAME;
+  const lastName =
+    authData.last_name ||
+    authDemo.telegram_last_name ||
+    adminUser.last_name ||
+    DEFAULT_DEMO_AUTH_TELEGRAM_LAST_NAME;
   const language = DEV_MOCK.data.user?.language_code || DEV_MOCK.config.language || "ru";
   DEV_MOCK.data.user = withDemoAvatar(
     {
-      ...(DEV_MOCK.data.user || {}),
-      id: 910778,
-      user_id: 910778,
+      ...(DEMO_DATASET.currentUser || DEV_MOCK.data.user || {}),
+      id: adminUser.id || adminUser.user_id || 910001,
+      user_id: adminUser.user_id || adminUser.id || 910001,
       telegram_id: telegramId,
       telegram_linked: true,
       username,
@@ -170,10 +187,10 @@ function applyDemoTelegramAuthUser(authData = {}) {
       email: "",
       email_verified: false,
       password_auth_enabled: false,
-      is_admin: false,
+      is_admin: true,
       language_code: language,
-      registration_date: "2026-05-28T12:05:00Z",
-      panel_status: "inactive",
+      registration_date: adminUser.registration_date || "2025-10-16T11:59:50Z",
+      panel_status: adminUser.panel_status || "active",
     },
     160
   );
@@ -203,11 +220,63 @@ function applyDemoTelegramAuthUser(authData = {}) {
     extra_hwid_devices: 0,
     max_devices: 0,
   };
+  if (DEMO_DATASET.currentSubscription) {
+    DEV_MOCK.data.subscription = defaultClone(DEMO_DATASET.currentSubscription);
+  }
   DEV_MOCK.data.settings = {
     ...(DEV_MOCK.data.settings || {}),
     trial_enabled: true,
     trial_available: true,
   };
+}
+
+function applyDemoEmailLink(email) {
+  const normalizedEmail = String(email || demoAuthConfig().email || DEFAULT_DEMO_AUTH_EMAIL)
+    .trim()
+    .toLowerCase();
+  DEV_MOCK.data.user = withDemoAvatar(
+    {
+      ...(DEV_MOCK.data.user || DEMO_DATASET.currentUser || {}),
+      id: DEV_MOCK.data.user?.id || DEV_MOCK.data.user?.user_id || 910001,
+      user_id: DEV_MOCK.data.user?.user_id || DEV_MOCK.data.user?.id || 910001,
+      email: normalizedEmail,
+      email_verified: true,
+      is_admin: true,
+    },
+    160
+  );
+}
+
+function applyDemoTelegramLink(authData = {}) {
+  const authDemo = demoAuthConfig();
+  const adminUser = DEMO_DATASET.currentUser || {};
+  const telegramId = Number(authData.id || authDemo.telegram_id || DEFAULT_DEMO_AUTH_TELEGRAM_ID);
+  DEV_MOCK.data.user = withDemoAvatar(
+    {
+      ...(DEV_MOCK.data.user || adminUser || {}),
+      id: DEV_MOCK.data.user?.id || DEV_MOCK.data.user?.user_id || 910001,
+      user_id: DEV_MOCK.data.user?.user_id || DEV_MOCK.data.user?.id || 910001,
+      telegram_id: telegramId,
+      telegram_linked: true,
+      username:
+        authData.username ||
+        authDemo.telegram_username ||
+        adminUser.username ||
+        DEFAULT_DEMO_AUTH_TELEGRAM_USERNAME,
+      first_name:
+        authData.first_name ||
+        authDemo.telegram_first_name ||
+        adminUser.first_name ||
+        DEFAULT_DEMO_AUTH_TELEGRAM_FIRST_NAME,
+      last_name:
+        authData.last_name ||
+        authDemo.telegram_last_name ||
+        adminUser.last_name ||
+        DEFAULT_DEMO_AUTH_TELEGRAM_LAST_NAME,
+      is_admin: true,
+    },
+    160
+  );
 }
 
 function demoDeviceTopupPlan(body) {
@@ -1790,10 +1859,7 @@ export async function mockApi(path, options = {}, context = {}) {
     return { ok: true, email_code: authDemo.code };
   }
   if (path === "/auth/email/verify" || path === "/auth/email/magic") {
-    if (path === "/auth/email/verify") {
-      const body = jsonBody(options);
-      applyDemoEmailAuthUser(body.email);
-    }
+    applyDemoEmailAuthUser();
     return { ok: true, csrf_token: "local-preview-csrf" };
   }
   if (path === "/auth/email/password") {
@@ -1807,7 +1873,7 @@ export async function mockApi(path, options = {}, context = {}) {
       normalizedEmail === String(authDemo.email || DEFAULT_DEMO_AUTH_EMAIL).toLowerCase() &&
       password === String(authDemo.password || DEFAULT_DEMO_AUTH_PASSWORD)
     ) {
-      applyDemoEmailAuthUser(normalizedEmail);
+      applyDemoEmailAuthUser();
       return { ok: true, csrf_token: "local-preview-csrf" };
     }
     return { ok: false, error: "password_login_failed", fallback: "email_code" };
@@ -1892,9 +1958,11 @@ export async function mockApi(path, options = {}, context = {}) {
     return { ok: true, language };
   }
   if (path === "/account/email/request" && String(options.method || "").toUpperCase() === "POST") {
-    return { ok: true };
+    const authDemo = demoAuthConfig();
+    return { ok: true, email_code: authDemo.code };
   }
   if (path === "/account/email/verify" && String(options.method || "").toUpperCase() === "POST") {
+    applyDemoEmailLink(demoAuthConfig().email);
     return { ok: true, csrf_token: "local-preview-csrf" };
   }
   if (
@@ -1911,6 +1979,8 @@ export async function mockApi(path, options = {}, context = {}) {
     return { ok: true, password_auth_enabled: true };
   }
   if (path === "/account/telegram/link" && String(options.method || "").toUpperCase() === "POST") {
+    const body = jsonBody(options);
+    applyDemoTelegramLink(body.auth_data || {});
     return { ok: true, csrf_token: "local-preview-csrf" };
   }
   if (path === "/payments" && String(options.method || "").toUpperCase() === "POST") {

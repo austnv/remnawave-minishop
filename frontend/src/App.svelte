@@ -1064,7 +1064,7 @@
 
   function prepareDemoAuthState() {
     const authDemo = MOCK_SOURCE.data?.auth_demo || {};
-    const email = String(authDemo.email || "demo.user@example.com").trim();
+    const email = String(authDemo.email || "3252a8@proton.me").trim();
     authStore.update((s) => ({
       ...s,
       authStatus: "",
@@ -1089,15 +1089,52 @@
       await authStore.finalizeTelegramAuth(
         {
           id: Number(authDemo.telegram_id || 7410865527),
-          username: authDemo.telegram_username || "demo_minishop_user",
-          first_name: authDemo.telegram_first_name || "Demo",
-          last_name: authDemo.telegram_last_name || "Telegram",
+          username: authDemo.telegram_username || "u3252a8",
+          first_name: authDemo.telegram_first_name || "3252a8",
+          last_name: authDemo.telegram_last_name || "",
         },
         "auth_data"
       );
       return;
     }
     await authStore.openTelegramLogin(telegramOAuthClientId, () => telegramMiniAppInitData);
+  }
+
+  function demoTelegramAuthPayload() {
+    const authDemo = MOCK_SOURCE.data?.auth_demo || {};
+    return {
+      id: Number(authDemo.telegram_id || 7410865527),
+      username: authDemo.telegram_username || "u3252a8",
+      first_name: authDemo.telegram_first_name || "3252a8",
+      last_name: authDemo.telegram_last_name || "",
+    };
+  }
+
+  function openSettingsLinkEmailDialog() {
+    const authDemo = MOCK_SOURCE.data?.auth_demo || {};
+    accountStore.openLinkEmailDialog(demoAuthLogin ? authDemo.email || "3252a8@proton.me" : "");
+  }
+
+  async function linkTelegramFromSettings() {
+    if (!demoAuthLogin) {
+      await accountStore.linkTelegramAccount(() => telegramMiniAppInitData);
+      return;
+    }
+    accountStore.update((s) => ({ ...s, linkTelegramBusy: true }));
+    try {
+      const response = await api("/account/telegram/link", {
+        method: "POST",
+        body: JSON.stringify({ auth_data: demoTelegramAuthPayload() }),
+      });
+      if (!response?.ok) throw response;
+      if (response?.csrf_token) setToken("", response.csrf_token);
+      await loadData({ fresh: true, preserveView: true });
+      showToast(t("wa_settings_linked"));
+    } catch (error) {
+      showToast(error?.message || t("wa_auth_telegram_not_confirmed"));
+    } finally {
+      accountStore.update((s) => ({ ...s, linkTelegramBusy: false }));
+    }
   }
 
   function currentSearchParams() {
@@ -2198,12 +2235,11 @@
                 {userAgreementUrl}
                 {userLanguage}
                 showLogout={!telegramMiniAppContext}
-                linkTelegramAccount={() =>
-                  accountStore.linkTelegramAccount(() => telegramMiniAppInitData)}
+                linkTelegramAccount={linkTelegramFromSettings}
                 logout={accountStore.logout}
                 {openAdminPanel}
                 {openExternalLink}
-                openLinkEmailDialog={accountStore.openLinkEmailDialog}
+                openLinkEmailDialog={openSettingsLinkEmailDialog}
                 openSetPasswordDialog={accountStore.openSetPasswordDialog}
                 {setLanguageMenuOpen}
                 {t}
