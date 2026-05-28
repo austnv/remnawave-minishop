@@ -222,6 +222,57 @@ class HwidDeviceTopupBehaviourTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(quote["price"], 50)
         self.assertAlmostEqual(quote["proration_ratio"], 0.5)
 
+    async def test_quote_uses_last_paid_duration_when_start_date_is_stale(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = _make_settings(
+                tmpdir,
+                _tariffs_config_payload(
+                    hwid_device_packages={
+                        "rub": [
+                            {
+                                "count": 1,
+                                "price": 50,
+                                "prices": {"3": 150},
+                            }
+                        ],
+                        "stars": [],
+                    }
+                ),
+            )
+            service = _make_service(settings)
+            sub = _make_sub()
+            sub.duration_months = 3
+            sub.start_date = datetime(2098, 7, 1, tzinfo=timezone.utc)
+            sub.end_date = datetime(2099, 1, 1, tzinfo=timezone.utc)
+            user = _make_user()
+
+            with (
+                patch(
+                    "bot.services.subscription_service_impl.devices.user_dal.get_user_by_id",
+                    AsyncMock(return_value=user),
+                ),
+                patch(
+                    "bot.services.subscription_service_impl.devices.subscription_dal.get_active_subscription_by_user_id",
+                    AsyncMock(return_value=sub),
+                ),
+                patch(
+                    "bot.services.subscription_service_impl.devices.tariff_dal.get_hwid_device_entitlement_summary",
+                    AsyncMock(return_value={"active_devices": 0, "active_until": None}),
+                ),
+            ):
+                quote = await service.quote_hwid_device_topup(
+                    session=AsyncMock(),
+                    user_id=42,
+                    device_count=1,
+                    tariff_key="standard",
+                    currency="rub",
+                    now=datetime(2098, 10, 1, tzinfo=timezone.utc),
+                )
+
+        self.assertIsNotNone(quote)
+        self.assertEqual(quote["price"], 150)
+        self.assertAlmostEqual(quote["proration_ratio"], 1.0)
+
     async def test_unlimited_subscriber_returns_noop_payload(self):
         # hwid_device_limit == 0 means unlimited — top-up makes no sense and must skip.
         with tempfile.TemporaryDirectory() as tmpdir:

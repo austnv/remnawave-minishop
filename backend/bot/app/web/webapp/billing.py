@@ -4,6 +4,42 @@ from ._runtime import *  # noqa: F403,F405
 from bot.app.web.webapp.cache_helpers import invalidate_webapp_user_caches
 
 
+def _billing_iso_datetime(value: Optional[Any]) -> Optional[str]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return normalized.isoformat()
+    return str(value)
+
+
+def _billing_datetime_text(value: Optional[Any]) -> Optional[str]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return normalized.strftime("%d.%m.%Y %H:%M")
+    text = str(value)
+    try:
+        normalized = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return normalized.strftime("%d.%m.%Y %H:%M")
+    except Exception:
+        return text
+
+
+def _parse_positive_int_units(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not number.is_integer():
+        return None
+    integer = int(number)
+    return integer if integer > 0 else None
+
+
 async def apply_promo_route(request: web.Request) -> web.Response:
     user_id = _require_user_id(request)
     payload = await _read_json(request)
@@ -64,6 +100,7 @@ async def create_payment_route(request: web.Request) -> web.Response:
         return validation_error
     method = str(payment_payload.method or "").strip().lower()
     settings: Settings = request.app["settings"]
+    subscription_service: SubscriptionService = request.app["subscription_service"]
     cached = _get_cached_webapp_settings(request)
     tariffs_config = settings.tariffs_config
     traffic_mode = bool(settings.traffic_sale_mode)
@@ -86,15 +123,12 @@ async def create_payment_route(request: web.Request) -> web.Response:
             return _json_error(400, "invalid_plan", "Tariff is not available")
         if tariff.billing_model != "period":
             return _json_error(400, "invalid_plan", "Device top-up is not available")
-        try:
-            device_count = int(
-                float(
-                    payment_payload.device_count
-                    if payment_payload.device_count is not None
-                    else payment_payload.months
-                )
-            )
-        except (TypeError, ValueError):
+        device_count = _parse_positive_int_units(
+            payment_payload.device_count
+            if payment_payload.device_count is not None
+            else payment_payload.months
+        )
+        if device_count is None:
             return _json_error(400, "invalid_plan", "Invalid device package")
         if not tariff.hwid_device_packages:
             return _json_error(400, "invalid_plan", "Device package is not available")
@@ -613,12 +647,14 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
             )
         tariff = config.require(sub.tariff_key)
         if tariff.billing_model != "period":
-            return _json_error(
-                400, "device_topup_unavailable", "Device top-up is not available"
-            )
+            return _json_error(400, "device_topup_unavailable", "Device top-up is not available")
         lang = db_user.language_code or settings.DEFAULT_LANGUAGE
         active = await subscription_service.get_active_subscription_details(session, user_id)
         renewal_available = bool(active and active.get("device_topup_renewal_available"))
+        extra_hwid_valid_until = active.get("extra_hwid_devices_valid_until") if active else None
+        extra_hwid_valid_until_text = (
+            active.get("extra_hwid_devices_valid_until_text") if active else None
+        ) or _billing_datetime_text(extra_hwid_valid_until)
         packages = tariff.hwid_device_packages
         rub_counts = {int(package.count) for package in (packages.rub if packages else [])}
         stars_counts = {int(package.count) for package in (packages.stars if packages else [])}
@@ -663,16 +699,8 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
                 "currency": settings.DEFAULT_CURRENCY_SYMBOL or "RUB",
                 "title": f"+{count}",
                 "subtitle": tariff.name(lang),
-                "valid_from": (
-                    (rub_quote or stars_quote)["valid_from"].isoformat()
-                    if (rub_quote or stars_quote).get("valid_from")
-                    else None
-                ),
-                "valid_until": (
-                    (rub_quote or stars_quote)["valid_until"].isoformat()
-                    if (rub_quote or stars_quote).get("valid_until")
-                    else None
-                ),
+                "valid_from": _billing_iso_datetime((rub_quote or stars_quote).get("valid_from")),
+                "valid_until": _billing_iso_datetime((rub_quote or stars_quote).get("valid_until")),
                 "proration_ratio": float((rub_quote or stars_quote).get("proration_ratio") or 0),
             }
             if stars_quote and int(stars_quote.get("price") or 0) > 0:
@@ -687,14 +715,8 @@ async def device_topup_options_route(request: web.Request) -> web.Response:
                 "extra_hwid_devices": int(active.get("extra_hwid_devices") or 0)
                 if active
                 else int(sub.extra_hwid_devices or 0),
-                "extra_hwid_devices_valid_until": active.get("extra_hwid_devices_valid_until")
-                if active
-                else None,
-                "extra_hwid_devices_valid_until_text": active.get(
-                    "extra_hwid_devices_valid_until_text"
-                )
-                if active
-                else None,
+                "extra_hwid_devices_valid_until": _billing_iso_datetime(extra_hwid_valid_until),
+                "extra_hwid_devices_valid_until_text": extra_hwid_valid_until_text,
                 "renewal_available": renewal_available,
                 "renewal_recommended_count": int(active.get("extra_hwid_devices") or 0)
                 if active and renewal_available
@@ -953,9 +975,7 @@ async def _create_subscription_payment(
                 hwid_pricing_period_months=hwid_quote.get("pricing_period_months")
                 if hwid_quote
                 else None,
-                hwid_proration_ratio=hwid_quote.get("proration_ratio")
-                if hwid_quote
-                else None,
+                hwid_proration_ratio=hwid_quote.get("proration_ratio") if hwid_quote else None,
                 hwid_full_price=hwid_quote.get("full_price") if hwid_quote else None,
             )
         )

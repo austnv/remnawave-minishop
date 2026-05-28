@@ -87,9 +87,9 @@ class HwidDeviceMixin:
         full_price = float(package.price_for_period(period_months))
         period_start = self._as_aware_utc(getattr(sub, "start_date", None))
         period_end = self._as_aware_utc(getattr(sub, "end_date", None)) or valid_until
-        if not period_start or period_start >= period_end:
-            period_start = valid_from
-            period_end = valid_until
+        inferred_period_start = add_months(period_end, -period_months)
+        if not period_start or period_start >= period_end or period_start < inferred_period_start:
+            period_start = inferred_period_start
 
         basis_seconds = max(1.0, (period_end - period_start).total_seconds())
         billable_start = max(now, valid_from)

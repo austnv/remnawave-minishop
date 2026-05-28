@@ -66,9 +66,7 @@ def _source_files(*roots: str) -> list[Path]:
             result.append(path)
         else:
             result.extend(
-                child
-                for child in path.rglob("*")
-                if child.suffix in {".py", ".js", ".svelte"}
+                child for child in path.rglob("*") if child.suffix in {".py", ".js", ".svelte"}
             )
     return result
 
@@ -321,9 +319,7 @@ def test_admin_locale_keys_are_split_into_smaller_internal_groups():
         "admin_themes_catalog_title": "admin_appearance",
         "appearance_logo_uploaded_pending": "admin_appearance",
         "admin_settings_field_yookassa_enabled_label": "admin_settings_payments",
-        "admin_settings_field_subscription_guides_enabled_label": (
-            "admin_settings_subscriptions"
-        ),
+        "admin_settings_field_subscription_guides_enabled_label": ("admin_settings_subscriptions"),
         "admin_settings_field_log_level_label": "admin_settings_notifications",
         "back_to_admin_panel_button": "admin_navigation",
         "admin_translations_languages_title": "admin_translations",
@@ -534,9 +530,7 @@ def test_load_locale_overrides_uses_db_when_file_missing(tmp_path):
 
     assert count == 1
     assert i18n.gettext("ru", "welcome") == "Из БД"
-    assert json.loads(overrides_path.read_text(encoding="utf-8")) == {
-        "ru": {"welcome": "Из БД"}
-    }
+    assert json.loads(overrides_path.read_text(encoding="utf-8")) == {"ru": {"welcome": "Из БД"}}
 
 
 def test_load_locale_overrides_creates_empty_file_when_file_missing_and_db_empty(tmp_path):
@@ -706,9 +700,7 @@ def test_update_locale_overrides_accepts_extra_language(tmp_path):
     assert db_state == {"uk": {"welcome": "Вітаю"}}
     assert i18n.gettext("uk", "welcome") == "Вітаю"
     assert i18n.gettext("uk", "plain") == "База"
-    assert json.loads(overrides_path.read_text(encoding="utf-8")) == {
-        "uk": {"welcome": "Вітаю"}
-    }
+    assert json.loads(overrides_path.read_text(encoding="utf-8")) == {"uk": {"welcome": "Вітаю"}}
 
 
 def test_update_locale_overrides_fails_when_active_file_cannot_be_written(tmp_path):

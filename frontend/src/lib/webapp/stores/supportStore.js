@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
+import { withRoutePrefix } from "../routes.js";
 
-export function createSupportStore({ api, t, showToast }) {
+export function createSupportStore({ api, t, showToast, routePrefix = "" }) {
   const OPEN_TICKET_POLL_MS = 3_000;
   const ACTIVE_POLL_MS = 8_000;
   const BACKGROUND_POLL_MS = 45_000;
@@ -198,7 +199,7 @@ export function createSupportStore({ api, t, showToast }) {
       detailLoading: true,
     }));
     if (!opts.skipPush && typeof window !== "undefined" && window.location.protocol !== "file:") {
-      const target = `/support/${id}`;
+      const target = withRoutePrefix(`/support/${id}`, routePrefix);
       if (window.location.pathname !== target) {
         window.history.pushState(
           null,
@@ -232,11 +233,12 @@ export function createSupportStore({ api, t, showToast }) {
   function closeTicketView(opts = {}) {
     state.update((s) => ({ ...s, openedTicketId: null, openedTicket: null, messages: [] }));
     if (!opts.skipPush && typeof window !== "undefined" && window.location.protocol !== "file:") {
-      if (window.location.pathname.startsWith("/support/")) {
+      const supportPath = withRoutePrefix("/support", routePrefix);
+      if (window.location.pathname.startsWith(`${supportPath}/`)) {
         window.history.pushState(
           null,
           "",
-          `/support${window.location.search}${window.location.hash}`
+          `${supportPath}${window.location.search}${window.location.hash}`
         );
       }
     }
@@ -250,7 +252,7 @@ export function createSupportStore({ api, t, showToast }) {
     });
     if (!ticketId) {
       state.update((s) => ({ ...s, sending: false }));
-      return;
+      return false;
     }
     try {
       const res = await api(`/support/tickets/${ticketId}/messages`, {
@@ -258,15 +260,23 @@ export function createSupportStore({ api, t, showToast }) {
         body: JSON.stringify({ body }),
       });
       if (!res?.ok) throw res;
-      state.update((s) => ({
-        ...s,
-        openedTicket: res.ticket || s.openedTicket,
-        messages: [...s.messages, res.message],
-      }));
-      await refreshUnread();
-      await loadList({ silent: true, force: true });
+      state.update((s) =>
+        s.openedTicketId === ticketId
+          ? {
+              ...s,
+              openedTicket: res.ticket || s.openedTicket,
+              messages: res.message ? [...s.messages, res.message] : s.messages,
+            }
+          : s
+      );
+      void Promise.allSettled([
+        refreshUnread({ silent: true }),
+        loadList({ silent: true, force: true }),
+      ]);
+      return true;
     } catch (error) {
       showToast(error?.message || t("wa_support_send_failed"));
+      return false;
     } finally {
       state.update((s) => ({ ...s, sending: false }));
     }

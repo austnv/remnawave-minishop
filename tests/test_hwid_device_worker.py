@@ -42,9 +42,7 @@ class _Service:
 
 class HwidDeviceWorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_worker_resets_expired_hwid_entitlement_on_panel(self):
-        panel = SimpleNamespace(
-            update_user_details_on_panel=AsyncMock(return_value={"ok": True})
-        )
+        panel = SimpleNamespace(update_user_details_on_panel=AsyncMock(return_value={"ok": True}))
         worker = TariffTrafficWorker(
             settings=SimpleNamespace(),
             session_factory=None,

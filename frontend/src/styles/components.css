@@ -1151,11 +1151,14 @@
 
 .ticket-message-list,
 .support-admin-messages {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   gap: 16px;
 }
 
 .ticket-message-list--loading {
-  align-content: end;
+  justify-content: flex-end;
   min-height: 100%;
 }
 
@@ -1190,6 +1193,7 @@
 }
 
 .ticket-message-row {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
@@ -1541,6 +1545,7 @@
 
   .support-ticket-screen .ticket-message-list {
     min-height: 100%;
+    justify-content: flex-end;
   }
 
   .support-ticket-screen .support-messages-empty {
@@ -1718,7 +1723,7 @@
 
   .support-ticket-screen .ticket-message-list {
     min-height: 100%;
-    align-content: end;
+    justify-content: flex-end;
   }
 
   .support-ticket-screen .support-messages-empty {

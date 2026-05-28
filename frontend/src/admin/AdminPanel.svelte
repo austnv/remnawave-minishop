@@ -5,6 +5,7 @@
     ChevronsUpDown,
     Coins,
     CreditCard,
+    Database,
     Download,
     FileText,
     Globe2,
@@ -29,6 +30,7 @@
 
   import BrandMark from "$lib/webapp/BrandMark.svelte";
   import AdsSection from "./sections/AdsSection.svelte";
+  import BackupsSection from "./sections/BackupsSection.svelte";
   import BroadcastSection from "./sections/BroadcastSection.svelte";
   import LogsSection from "./sections/LogsSection.svelte";
   import PaymentDetailModal from "./sections/PaymentDetailModal.svelte";
@@ -44,6 +46,7 @@
   import UserDetailModal from "./sections/UserDetailModal.svelte";
   import UsersSection from "./sections/UsersSection.svelte";
   import { createAdsStore } from "../lib/admin/stores/adsStore.js";
+  import { createBackupsStore } from "../lib/admin/stores/backupsStore.js";
   import { createBroadcastStore } from "../lib/admin/stores/broadcastStore.js";
   import { createLogsStore } from "../lib/admin/stores/logsStore.js";
   import { createPaymentsStore } from "../lib/admin/stores/paymentsStore.js";
@@ -74,6 +77,7 @@
     userTelegramProfileLink,
     userTelegramProfileLinkKind,
   } from "../lib/admin/users.js";
+  import { stripRoutePrefix } from "../lib/webapp/routes.js";
 
   export let api;
   export let onClose = () => {};
@@ -87,6 +91,7 @@
   export let onTariffsSaved = () => {};
   export let onThemesSaved = () => {};
   export let onTranslationsSaved = () => {};
+  export let routePrefix = "";
   export let brand = {};
   export let brandTitle = "/minishop";
   export let appFaviconUrl = "";
@@ -133,6 +138,7 @@
         { id: "tariffs", label: at("nav_tariffs", {}, "Тарифы"), icon: Coins },
         { id: "appearance", label: at("nav_appearance", {}, "Внешний вид"), icon: Paintbrush },
         { id: "translations", label: at("nav_translations", {}, "Переводы"), icon: Languages },
+        { id: "backups", label: at("nav_backups", {}, "Бэкапы"), icon: Database },
         { id: "settings", label: at("nav_settings", {}, "Настройки"), icon: Sliders },
       ],
     },
@@ -191,6 +197,10 @@
         "Оверрайды строк локализации из базы данных и data/locales-overrides.json"
       ),
     },
+    backups: {
+      title: at("section_backups_title", {}, "Бэкапы"),
+      subtitle: at("section_backups_subtitle", {}, "Архивы, загрузка и восстановление БД/compose"),
+    },
     settings: {
       title: at("section_settings_title", {}, "Настройки приложения"),
       subtitle: at("section_settings_subtitle", {}, "Оверрайды над .env, применяются мгновенно"),
@@ -203,8 +213,13 @@
   const normalizeSection = (value) => ((VALID_SECTIONS || []).includes(value) ? value : "stats");
 
   let active = normalizeSection(initialSection);
-  $: if (initialSection) {
-    active = normalizeSection(initialSection);
+  let lastInitialSection = active;
+  $: {
+    const nextInitialSection = normalizeSection(initialSection);
+    if (nextInitialSection !== lastInitialSection) {
+      active = nextInitialSection;
+      lastInitialSection = nextInitialSection;
+    }
   }
   let sidebarOpen = false;
   let isCompact = false;
@@ -227,20 +242,22 @@
   }
 
   const adsStore = createAdsStore({ api, onToast: flash, at });
+  const backupsStore = createBackupsStore({ api, onToast: flash, at });
   const broadcastStore = createBroadcastStore({ api, onToast: flash, at });
   const logsStore = createLogsStore({ api, at });
-  const paymentsStore = createPaymentsStore({ api, onToast: flash, at });
+  const paymentsStore = createPaymentsStore({ api, onToast: flash, at, routePrefix });
   const promosStore = createPromosStore({ api, onToast: flash, at });
   const settingsStore = createSettingsStore({ api, onToast: flash, at });
   const statsStore = createStatsStore({ api, onToast: flash, at });
-  const supportStore = createAdminSupportStore({ api, onToast: flash, at });
+  const supportStore = createAdminSupportStore({ api, onToast: flash, at, routePrefix });
   const tariffsStore = createTariffsStore({ api, onToast: flash, onTariffsSaved, flash, at });
   const themesStore = createThemesStore({ api, onThemesSaved, flash, at });
   const translationsStore = createTranslationsStore({ api, onToast: flash, at });
-  const usersStore = createUsersStore({ api, onToast: flash, at });
+  const usersStore = createUsersStore({ api, onToast: flash, at, routePrefix });
 
   setContext("promosStore", promosStore);
   setContext("adsStore", adsStore);
+  setContext("backupsStore", backupsStore);
   setContext("broadcastStore", broadcastStore);
   setContext("logsStore", logsStore);
   setContext("paymentsStore", paymentsStore);
@@ -277,33 +294,42 @@
     onSectionChange(next);
   }
 
+  function changeLanguage(value) {
+    onLanguageChange(value, { section: "admin", adminSection: active });
+  }
+
+  function currentRoutePathname() {
+    if (typeof window === "undefined") return "/";
+    return stripRoutePrefix(window.location.pathname, routePrefix);
+  }
+
   function readSectionFromPath() {
     if (typeof window === "undefined") return "stats";
-    const match = window.location.pathname.match(/^\/admin\/([a-z0-9_-]+)(?:\/.*)?$/i);
+    const match = currentRoutePathname().match(/^\/admin\/([a-z0-9_-]+)(?:\/.*)?$/i);
     return normalizeSection(match ? match[1].toLowerCase() : "stats");
   }
 
   function readUserIdFromPath() {
     if (typeof window === "undefined") return null;
-    const match = window.location.pathname.match(/^\/admin\/users\/(-?\d+)$/);
+    const match = currentRoutePathname().match(/^\/admin\/users\/(-?\d+)$/);
     return match ? Number(match[1]) : null;
   }
 
   function readSupportTicketIdFromPath() {
     if (typeof window === "undefined") return null;
-    const match = window.location.pathname.match(/^\/admin\/support\/(\d+)$/);
+    const match = currentRoutePathname().match(/^\/admin\/support\/(\d+)$/);
     return match ? Number(match[1]) : null;
   }
 
   function readPaymentIdFromPath() {
     if (typeof window === "undefined") return null;
-    const match = window.location.pathname.match(/^\/admin\/payments\/(\d+)$/);
+    const match = currentRoutePathname().match(/^\/admin\/payments\/(\d+)$/);
     return match ? Number(match[1]) : null;
   }
 
   function readPaymentUserIdFromPath() {
     if (typeof window === "undefined") return null;
-    const match = window.location.pathname.match(/^\/admin\/payments\/users\/(-?\d+)$/);
+    const match = currentRoutePathname().match(/^\/admin\/payments\/users\/(-?\d+)$/);
     return match ? Number(match[1]) : null;
   }
 
@@ -358,8 +384,24 @@
       paymentsStore.closePayment({ skipPush: true });
       onSectionChange(next);
     }
+    usersStore.setActive(next);
     paymentsStore.closePayment({ skipPush: true });
     usersStore.openUser(uid, { pathContext: "payments" });
+  }
+
+  function openUserCard(userId) {
+    const uid = Number(userId);
+    if (!Number.isFinite(uid) || uid === 0) return;
+    const next = normalizeSection("users");
+    sidebarOpen = false;
+    if (active !== next) {
+      active = next;
+      paymentsStore.closePayment({ skipPush: true });
+      supportStore.closeTicketView({ skipPush: true });
+      onSectionChange(next, uid);
+    }
+    usersStore.setActive(next);
+    usersStore.openUser(uid);
   }
 
   function resolvedAvatarUrl(user) {
@@ -574,7 +616,7 @@
             items={languageOptions}
             disabled={languageBusy}
             onOpenChange={setAdminLanguageMenuOpen}
-            onValueChange={onLanguageChange}
+            onValueChange={changeLanguage}
           >
             <Select.Trigger
               class="admin-language-trigger"
@@ -767,6 +809,7 @@
               {at}
               {brand}
               {resolvedAvatarUrl}
+              onOpenUserCard={openUserCard}
               initialTicketId={readSupportTicketIdFromPath()}
             />
           {/if}
@@ -788,6 +831,10 @@
 
           {#if active === "settings"}
             <SettingsSection {at} {onSettingsSaved} {currentLang} />
+          {/if}
+
+          {#if active === "backups"}
+            <BackupsSection {at} {fmtDate} />
           {/if}
 
           {#if active === "translations"}

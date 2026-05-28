@@ -63,6 +63,7 @@ from .shared import (
     make_translator,
     mark_payment_failed_creation,
     notify_admins_payment_received,
+    parse_positive_int_units,
     payment_failed,
     payment_link_response,
     payment_record_amounts,
@@ -144,10 +145,12 @@ class YooKassaService:
         bot_username_for_default_return: Optional[str] = None,
         settings_obj: Optional[Settings] = None,
         config: Optional[YooKassaConfig] = None,
+        subscription_service: Optional[SubscriptionService] = None,
     ):
 
         self.settings = settings_obj
         self.config = config or YooKassaConfig()
+        self.subscription_service = subscription_service
         self._bot_username_for_default_return = bot_username_for_default_return
         self._configured_return_url_override = configured_return_url
         self._sdk_configured_for = (
@@ -169,9 +172,7 @@ class YooKassaService:
     @property
     def configured(self) -> bool:
         if not (
-            provider_runtime_enabled(self.config)
-            and self.config.SHOP_ID
-            and self.config.SECRET_KEY
+            provider_runtime_enabled(self.config) and self.config.SHOP_ID and self.config.SECRET_KEY
         ):
             return False
         self._ensure_sdk_configured()
@@ -444,11 +445,17 @@ def _resolve_yookassa_activation_amounts(
     traffic_amount_gb = (
         float(traffic_gb_raw) if _metadata_value_present(traffic_gb_raw) else subscription_months
     )
-    hwid_devices_count = (
-        int(float(hwid_devices_raw))
-        if _metadata_value_present(hwid_devices_raw)
-        else (int(subscription_months) if _is_hwid_device_sale_base(sale_mode_base) else 0)
-    )
+    hwid_devices_count = 0
+    if _metadata_value_present(hwid_devices_raw):
+        parsed_hwid_devices = parse_positive_int_units(hwid_devices_raw)
+        if parsed_hwid_devices is None:
+            raise ValueError("Invalid HWID device count")
+        hwid_devices_count = parsed_hwid_devices
+    elif _is_hwid_device_sale_base(sale_mode_base):
+        parsed_hwid_devices = parse_positive_int_units(subscription_months_raw)
+        if parsed_hwid_devices is None:
+            raise ValueError("Invalid HWID device count")
+        hwid_devices_count = parsed_hwid_devices
 
     if sale_mode_base == "subscription":
         months_for_activation = int(subscription_months)
@@ -1327,9 +1334,7 @@ async def _initiate_yk_payment(
         "purchased_gb": float(months)
         if sale_base in {"traffic", "traffic_package", "topup", "premium_topup"}
         else None,
-        "purchased_hwid_devices": int(months)
-        if sale_base in HWID_DEVICE_SALE_BASES
-        else None,
+        "purchased_hwid_devices": int(months) if sale_base in HWID_DEVICE_SALE_BASES else None,
         "hwid_valid_from": hwid_quote.get("valid_from") if hwid_quote else None,
         "hwid_valid_until": hwid_quote.get("valid_until") if hwid_quote else None,
         "hwid_pricing_period_months": hwid_quote.get("pricing_period_months")
@@ -2684,6 +2689,7 @@ def create_service(ctx: ServiceFactoryContext) -> YooKassaService:
         bot_username_for_default_return=ctx.bot_username_for_default_return,
         settings_obj=ctx.settings,
         config=config,
+        subscription_service=ctx.subscription_service,
     )
 
 

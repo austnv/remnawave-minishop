@@ -13,6 +13,7 @@ export default defineConfig({
       plugins: [
         starlightThemeNova({
           nav: [
+            { label: 'Демо', href: '/demo/home' },
             { label: 'Установка', href: '/getting-started/setup/' },
             { label: 'GitHub', href: 'https://github.com/3252a8/remnawave-minishop' },
             { label: 'Telegram', href: 'https://t.me/remnawave_minishop' }
@@ -59,6 +60,7 @@ export default defineConfig({
           label: 'Начало',
           items: [
             { label: 'Обзор', slug: 'getting-started/overview' },
+            { label: 'Демо-режим', slug: 'getting-started/demo' },
             { label: 'Установка', slug: 'getting-started/setup' },
             { label: 'Развертывание', slug: 'getting-started/deployment' },
             { label: 'Настройка окружения', slug: 'getting-started/configuration' },
@@ -79,8 +81,11 @@ export default defineConfig({
             { label: 'Подписки', slug: 'features/subscriptions' },
             { label: 'Тарифы', slug: 'features/tariffs' },
             { label: 'Веб-приложение / Mini App', slug: 'features/web-app' },
+            { label: 'Telegram-авторизация', slug: 'features/telegram-auth' },
+            { label: 'Вход по email', slug: 'features/email-login' },
             { label: 'Темы Web App', slug: 'features/webapp-themes' },
             { label: 'Админ-панель', slug: 'features/admin-panel' },
+            { label: 'Бэкапы и восстановление', slug: 'features/backups' },
             { label: 'Поддержка пользователей / тикеты', slug: 'features/support' },
           ],
         },

@@ -32,6 +32,16 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.WEBHOOK_SECRET_TOKEN)
         self.assertEqual(settings.WEBAPP_SESSION_TTL_SECONDS, 86400)
 
+    def test_webapp_title_defaults_to_minishop(self):
+        settings = Settings(
+            _env_file=None,
+            BOT_TOKEN="token",
+            POSTGRES_USER="app_user",
+            POSTGRES_PASSWORD="app_password",
+        )
+
+        self.assertEqual(settings.WEBAPP_TITLE, "/minishop")
+
     def test_subscription_guides_defaults_are_enabled(self):
         settings = Settings(
             _env_file=None,
@@ -180,6 +190,26 @@ class SettingsTests(unittest.TestCase):
 
         self.assertFalse(settings.SUPPORT_ADMIN_EMAIL_NOTIFICATIONS_ENABLED)
 
+    def test_backup_defaults_are_safe_and_blank_targets_use_log_fallback(self):
+        settings = Settings(
+            _env_file=None,
+            BOT_TOKEN="token",
+            POSTGRES_USER="app_user",
+            POSTGRES_PASSWORD="app_password",
+            BACKUP_CHAT_ID="",
+            BACKUP_THREAD_ID="",
+        )
+
+        self.assertFalse(settings.BACKUP_ENABLED)
+        self.assertEqual(settings.BACKUP_INTERVAL_SECONDS, 3600)
+        self.assertEqual(settings.BACKUP_DIR, "data/backups")
+        self.assertEqual(settings.BACKUP_LOCAL_RETENTION, 100)
+        self.assertIsNone(settings.BACKUP_CHAT_ID)
+        self.assertIsNone(settings.BACKUP_THREAD_ID)
+        self.assertEqual(settings.BACKUP_COMPOSE_SOURCE_DIR, "/app/compose-source")
+        self.assertIsNone(settings.BACKUP_COMPOSE_RESTORE_DIR)
+        self.assertEqual(settings.BACKUP_PG_RESTORE_PATH, "pg_restore")
+
     def test_subscription_purchase_description_is_localized_and_toggleable(self):
         settings = Settings(
             _env_file=None,
@@ -241,3 +271,14 @@ class SettingsTests(unittest.TestCase):
         )
 
         self.assertEqual(settings.tariff_traffic_warning_levels, [85, 90, 95])
+
+    def test_subscription_hour_notification_default_is_available(self):
+        settings = Settings(
+            _env_file=None,
+            BOT_TOKEN="token",
+            POSTGRES_USER="app_user",
+            POSTGRES_PASSWORD="app_password",
+        )
+
+        self.assertEqual(settings.SUBSCRIPTION_NOTIFY_HOURS_BEFORE, 3)
+        self.assertEqual(settings.SUBSCRIPTION_NOTIFICATION_WORKER_TICK_SECONDS, 300)

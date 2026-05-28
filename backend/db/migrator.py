@@ -925,9 +925,7 @@ def _migration_0029_add_hwid_device_purchase_validity(connection: Connection) ->
     if "hwid_device_purchases" not in table_names or "subscriptions" not in table_names:
         return
 
-    columns: Set[str] = {
-        col["name"] for col in inspector.get_columns("hwid_device_purchases")
-    }
+    columns: Set[str] = {col["name"] for col in inspector.get_columns("hwid_device_purchases")}
     if "valid_from" not in columns:
         connection.execute(
             text("ALTER TABLE hwid_device_purchases ADD COLUMN valid_from TIMESTAMPTZ")
@@ -1002,9 +1000,7 @@ def _migration_0030_add_hwid_pricing_metadata(connection: Connection) -> None:
                 connection.execute(text(f"ALTER TABLE payments ADD COLUMN {column} {ddl_type}"))
 
     if "tariff_changes" in table_names:
-        change_columns: Set[str] = {
-            col["name"] for col in inspector.get_columns("tariff_changes")
-        }
+        change_columns: Set[str] = {col["name"] for col in inspector.get_columns("tariff_changes")}
         change_additions = {
             "converted_hwid_value_rub": "NUMERIC",
             "converted_hwid_days": "INTEGER",
@@ -1014,6 +1010,41 @@ def _migration_0030_add_hwid_pricing_metadata(connection: Connection) -> None:
                 connection.execute(
                     text(f"ALTER TABLE tariff_changes ADD COLUMN {column} {ddl_type}")
                 )
+
+
+def _migration_0031_add_subscription_notifications(connection: Connection) -> None:
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS subscription_notifications (
+                notification_id SERIAL PRIMARY KEY,
+                subscription_id INTEGER NOT NULL REFERENCES subscriptions(subscription_id),
+                notification_key VARCHAR(64) NOT NULL,
+                sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_subscription_notification_key UNIQUE (
+                    subscription_id,
+                    notification_key
+                )
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_subscription_notifications_subscription_id
+            ON subscription_notifications (subscription_id)
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_subscription_notifications_notification_key
+            ON subscription_notifications (notification_key)
+            """
+        )
+    )
 
 
 MIGRATIONS: List[Migration] = [
@@ -1177,6 +1208,11 @@ MIGRATIONS: List[Migration] = [
         id="0030_add_hwid_pricing_metadata",
         description="Persist quoted HWID top-up pricing windows and conversion audit",
         upgrade=_migration_0030_add_hwid_pricing_metadata,
+    ),
+    Migration(
+        id="0031_add_subscription_notifications",
+        description="Track sent subscription notification stages",
+        upgrade=_migration_0031_add_subscription_notifications,
     ),
 ]
 

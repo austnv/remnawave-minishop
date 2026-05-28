@@ -41,9 +41,7 @@ async def sum_traffic_topups(
     if created_at_gte is not None:
         conditions.append(TrafficTopup.created_at >= created_at_gte)
     result = await session.execute(
-        select(func.coalesce(func.sum(TrafficTopup.purchased_bytes), 0)).where(
-            and_(*conditions)
-        )
+        select(func.coalesce(func.sum(TrafficTopup.purchased_bytes), 0)).where(and_(*conditions))
     )
     return int(result.scalar() or 0)
 

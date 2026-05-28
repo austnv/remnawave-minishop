@@ -283,12 +283,20 @@ SETTINGS_MANIFEST: List[SettingField] = [
         subsection="common",
     ),
     # ─── Trial ─────────────────────────────────────────────────────
-    SettingField("TRIAL_ENABLED", "bool", "pricing", "Триал включён", subsection="trial"),
+    SettingField(
+        "TRIAL_ENABLED",
+        "bool",
+        "pricing",
+        "Триал включён",
+        optional=False,
+        subsection="trial",
+    ),
     SettingField(
         "TRIAL_DURATION_DAYS",
         "int",
         "pricing",
         "Длительность триала (дней)",
+        optional=False,
         min=0,
         subsection="trial",
     ),
@@ -297,6 +305,7 @@ SETTINGS_MANIFEST: List[SettingField] = [
         "float",
         "pricing",
         "Лимит трафика триала (ГБ)",
+        optional=False,
         min=0,
         subsection="trial",
     ),
@@ -305,6 +314,7 @@ SETTINGS_MANIFEST: List[SettingField] = [
         "string",
         "pricing",
         "Стратегия сброса трафика триала",
+        optional=False,
         subsection="trial",
     ),
     SettingField(
@@ -399,6 +409,14 @@ SETTINGS_MANIFEST: List[SettingField] = [
         "За сколько дней предупреждать",
         min=0,
     ),
+    SettingField(
+        "SUBSCRIPTION_NOTIFY_HOURS_BEFORE",
+        "int",
+        "notifications",
+        "За сколько часов предупреждать",
+        min=0,
+        max=23,
+    ),
     SettingField("LOG_NEW_USERS", "bool", "notifications", "Логировать новых пользователей"),
     SettingField("LOG_PAYMENTS", "bool", "notifications", "Логировать платежи"),
     SettingField("LOG_SUPPORT", "bool", "notifications", "Логировать тикеты поддержки"),
@@ -433,6 +451,55 @@ SETTINGS_MANIFEST: List[SettingField] = [
         "notifications",
         "ID треда поддержки",
         "Тред лог-чата для уведомлений о тикетах поддержки.",
+    ),
+    SettingField(
+        "BACKUP_ENABLED",
+        "bool",
+        "backups",
+        "Бэкапы включены",
+        "Worker будет периодически собирать ZIP-архив и отправлять его в Telegram.",
+    ),
+    SettingField(
+        "BACKUP_CHAT_ID",
+        "int",
+        "backups",
+        "ID чата для бэкапов",
+        "Куда отправлять ZIP-архивы. Если пусто, используется LOG_CHAT_ID.",
+    ),
+    SettingField(
+        "BACKUP_THREAD_ID",
+        "int",
+        "backups",
+        "ID треда для бэкапов",
+        "Необязательный topic/thread ID. Если пусто, используется LOG_THREAD_ID.",
+    ),
+    SettingField(
+        "BACKUP_INTERVAL_SECONDS",
+        "int",
+        "backups",
+        "Период бэкапов (сек.)",
+        "По умолчанию 3600: запуск на границе часа (12:00, 13:00 и т.д.).",
+        optional=False,
+        min=60,
+    ),
+    SettingField(
+        "BACKUP_LOCAL_RETENTION",
+        "int",
+        "backups",
+        "Сколько архивов хранить",
+        "Сколько последних ZIP-архивов оставлять в data/backups на сервере.",
+        optional=False,
+        min=1,
+    ),
+    SettingField(
+        "BACKUP_COMPOSE_ENABLED",
+        "bool",
+        "backups",
+        "Добавлять compose-папку",
+        (
+            "Добавляет snapshot /app/compose-source. Если папка не смонтирована, "
+            "бэкап БД все равно будет создан."
+        ),
     ),
     SettingField(
         "SUPPORT_TICKETS_ENABLED",
@@ -561,6 +628,8 @@ def coerce_value(field: SettingField, raw: Any) -> Any:
         return text
 
     if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+        if not field.optional:
+            raise ValueError(f"{field.key}: value required")
         return None
 
     if field.type == "bool":
@@ -629,7 +698,8 @@ def manifest_payload() -> List[dict]:
         "referral": 6,
         "notifications": 7,
         "support": 8,
-        "devices": 9,
+        "backups": 9,
+        "devices": 10,
         "subscription_guides": 10,
     }
     exclusive_map = {
@@ -678,6 +748,10 @@ def manifest_payload() -> List[dict]:
             "optional": field.optional,
             "secret": field.secret,
         }
+        if field.min is not None:
+            item["min"] = field.min
+        if field.max is not None:
+            item["max"] = field.max
         if field.key in exclusive_map:
             item["mutually_exclusive_key"] = exclusive_map[field.key]
         if default_value is not None:

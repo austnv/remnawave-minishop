@@ -17,6 +17,7 @@
   export let initialTicketId = null;
   export let brand = {};
   export let resolvedAvatarUrl = () => "";
+  export let onOpenUserCard = () => {};
 
   const supportStore = getContext("adminSupportStore");
   let reply = "";
@@ -93,7 +94,8 @@
   });
 
   async function send(body) {
-    await supportStore.sendReply(body);
+    const sent = await supportStore.sendReply(body);
+    if (!sent) return;
     reply = "";
   }
 
@@ -305,7 +307,12 @@
         onPatch={(updates) => supportStore.patchTicket(updates)}
         onClose={() => supportStore.closeTicket()}
       />
-      <SupportUserContextPanel ticket={openedTicket} snapshot={userSnapshot} {at} />
+      <SupportUserContextPanel
+        ticket={openedTicket}
+        snapshot={userSnapshot}
+        {at}
+        onOpenUser={onOpenUserCard}
+      />
       <ScrollArea
         bind:element={messagesScrollEl}
         maxHeight="none"

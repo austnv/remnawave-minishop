@@ -107,40 +107,45 @@
       .join(" · ");
   }
 
-  function fieldFor(key) {
-    return settingsFieldMap.get(key) || { key, value: "" };
+  function fieldFor(key, fieldMap = settingsFieldMap) {
+    return fieldMap.get(key) || { key, value: "" };
   }
 
-  function valueForKey(key) {
-    if (settingsDirty[key]?.deleted) return "";
-    if (Object.prototype.hasOwnProperty.call(settingsDirty, key)) {
-      return settingsDirty[key].value;
+  function valueForKey(key, dirty = settingsDirty, fieldMap = settingsFieldMap) {
+    if (dirty[key]?.deleted) return "";
+    if (Object.prototype.hasOwnProperty.call(dirty, key)) {
+      return dirty[key].value;
     }
-    return fieldFor(key).value ?? "";
+    return fieldFor(key, fieldMap).value ?? "";
   }
 
-  function boolValue(key) {
-    return Boolean(valueForKey(key));
+  function boolValue(key, dirty = settingsDirty, fieldMap = settingsFieldMap) {
+    const value = valueForKey(key, dirty, fieldMap);
+    if (typeof value === "string") {
+      return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+    }
+    return Boolean(value);
   }
 
   function setSetting(key, value) {
+    if (!settingsFieldMap.has(key)) return;
     settingsStore.markDirty(key, value);
   }
 
-  function isSettingDirty(key) {
-    return Boolean(settingsDirty[key]);
+  function isSettingDirty(key, dirty = settingsDirty) {
+    return Boolean(dirty[key]);
   }
 
-  function dirtyCount(keys) {
-    return (keys || []).filter((key) => isSettingDirty(key)).length;
+  function dirtyCount(keys, dirty = settingsDirty) {
+    return (keys || []).filter((key) => isSettingDirty(key, dirty)).length;
   }
 
   function resetSetting(key) {
     settingsStore.clearDirty(key);
   }
 
-  function csvList(key) {
-    return String(valueForKey(key) || "")
+  function csvList(key, dirty = settingsDirty, fieldMap = settingsFieldMap) {
+    return String(valueForKey(key, dirty, fieldMap) || "")
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
@@ -230,8 +235,12 @@
         </small>
       </div>
       <div class="admin-editor-section-actions">
-        <AdminBadge variant={boolValue("TRIAL_ENABLED") ? "success" : "muted"}>
-          {boolValue("TRIAL_ENABLED")
+        <AdminBadge
+          variant={boolValue("TRIAL_ENABLED", settingsDirty, settingsFieldMap)
+            ? "success"
+            : "muted"}
+        >
+          {boolValue("TRIAL_ENABLED", settingsDirty, settingsFieldMap)
             ? at("enabled", {}, "Enabled")
             : at("disabled", {}, "Disabled")}
         </AdminBadge>
@@ -253,7 +262,10 @@
     </header>
     <div class="admin-card-body admin-trial-settings-body">
       <div class="admin-settings-field-groups admin-trial-settings-groups">
-        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_SWITCH_KEYS)}>
+        <section
+          class="admin-settings-field-group"
+          class:is-dirty={dirtyCount(TRIAL_SWITCH_KEYS, settingsDirty)}
+        >
           <header class="admin-settings-field-group-head">
             <div class="admin-settings-field-group-head-copy">
               <strong>{at("tariffs_trial_group_switch", {}, "Доступ")}</strong>
@@ -265,12 +277,12 @@
                 )}
               </small>
             </div>
-            {#if dirtyCount(TRIAL_SWITCH_KEYS)}
+            {#if dirtyCount(TRIAL_SWITCH_KEYS, settingsDirty)}
               <AdminBadge variant="warning">
                 {at(
                   "settings_dirty_count",
-                  { count: dirtyCount(TRIAL_SWITCH_KEYS) },
-                  `Изменений: ${dirtyCount(TRIAL_SWITCH_KEYS)}`
+                  { count: dirtyCount(TRIAL_SWITCH_KEYS, settingsDirty) },
+                  `Изменений: ${dirtyCount(TRIAL_SWITCH_KEYS, settingsDirty)}`
                 )}
               </AdminBadge>
             {/if}
@@ -278,12 +290,12 @@
           <div class="admin-settings-field-group-body">
             <div
               class="admin-setting admin-trial-setting-row"
-              class:is-dirty={isSettingDirty("TRIAL_ENABLED")}
+              class:is-dirty={isSettingDirty("TRIAL_ENABLED", settingsDirty)}
             >
               <div class="admin-setting-meta">
                 <strong>
                   {at("tariffs_trial_enabled", {}, "Триал включён")}
-                  {#if isSettingDirty("TRIAL_ENABLED")}
+                  {#if isSettingDirty("TRIAL_ENABLED", settingsDirty)}
                     <AdminBadge variant="warning"
                       >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
                     >
@@ -294,19 +306,19 @@
               <div class="admin-setting-control">
                 <div class="admin-setting-switch">
                   <Switch.Root
-                    checked={boolValue("TRIAL_ENABLED")}
+                    checked={boolValue("TRIAL_ENABLED", settingsDirty, settingsFieldMap)}
                     onCheckedChange={(checked) => setSetting("TRIAL_ENABLED", checked)}
                     class="admin-switch-root"
                   >
                     <Switch.Thumb class="admin-switch-thumb" />
                   </Switch.Root>
                   <span
-                    >{boolValue("TRIAL_ENABLED")
+                    >{boolValue("TRIAL_ENABLED", settingsDirty, settingsFieldMap)
                       ? at("enabled", {}, "Включено")
                       : at("disabled", {}, "Выключено")}</span
                   >
                 </div>
-                {#if isSettingDirty("TRIAL_ENABLED")}
+                {#if isSettingDirty("TRIAL_ENABLED", settingsDirty)}
                   <AdminButton
                     size="sm"
                     variant="ghost"
@@ -321,7 +333,10 @@
           </div>
         </section>
 
-        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_GENERAL_KEYS)}>
+        <section
+          class="admin-settings-field-group"
+          class:is-dirty={dirtyCount(TRIAL_GENERAL_KEYS, settingsDirty)}
+        >
           <header class="admin-settings-field-group-head">
             <div class="admin-settings-field-group-head-copy">
               <strong>{at("tariffs_trial_group_general", {}, "Общие настройки")}</strong>
@@ -333,12 +348,12 @@
                 )}
               </small>
             </div>
-            {#if dirtyCount(TRIAL_GENERAL_KEYS)}
+            {#if dirtyCount(TRIAL_GENERAL_KEYS, settingsDirty)}
               <AdminBadge variant="warning">
                 {at(
                   "settings_dirty_count",
-                  { count: dirtyCount(TRIAL_GENERAL_KEYS) },
-                  `Изменений: ${dirtyCount(TRIAL_GENERAL_KEYS)}`
+                  { count: dirtyCount(TRIAL_GENERAL_KEYS, settingsDirty) },
+                  `Изменений: ${dirtyCount(TRIAL_GENERAL_KEYS, settingsDirty)}`
                 )}
               </AdminBadge>
             {/if}
@@ -346,12 +361,12 @@
           <div class="admin-settings-field-group-body">
             <div
               class="admin-setting admin-trial-setting-row"
-              class:is-dirty={isSettingDirty("TRIAL_DURATION_DAYS")}
+              class:is-dirty={isSettingDirty("TRIAL_DURATION_DAYS", settingsDirty)}
             >
               <div class="admin-setting-meta">
                 <strong>
                   {at("tariffs_trial_days", {}, "Длительность, дней")}
-                  {#if isSettingDirty("TRIAL_DURATION_DAYS")}
+                  {#if isSettingDirty("TRIAL_DURATION_DAYS", settingsDirty)}
                     <AdminBadge variant="warning"
                       >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
                     >
@@ -365,10 +380,10 @@
                   type="number"
                   min="0"
                   step="1"
-                  value={valueForKey("TRIAL_DURATION_DAYS")}
+                  value={valueForKey("TRIAL_DURATION_DAYS", settingsDirty, settingsFieldMap)}
                   oninput={(event) => setSetting("TRIAL_DURATION_DAYS", event.currentTarget.value)}
                 />
-                {#if isSettingDirty("TRIAL_DURATION_DAYS")}
+                {#if isSettingDirty("TRIAL_DURATION_DAYS", settingsDirty)}
                   <AdminButton
                     size="sm"
                     variant="ghost"
@@ -382,12 +397,12 @@
             </div>
             <div
               class="admin-setting admin-trial-setting-row"
-              class:is-dirty={isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB")}
+              class:is-dirty={isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB", settingsDirty)}
             >
               <div class="admin-setting-meta">
                 <strong>
                   {at("tariffs_trial_traffic", {}, "Лимит трафика, GB")}
-                  {#if isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB")}
+                  {#if isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB", settingsDirty)}
                     <AdminBadge variant="warning"
                       >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
                     >
@@ -401,11 +416,11 @@
                   type="number"
                   min="0"
                   step="0.1"
-                  value={valueForKey("TRIAL_TRAFFIC_LIMIT_GB")}
+                  value={valueForKey("TRIAL_TRAFFIC_LIMIT_GB", settingsDirty, settingsFieldMap)}
                   oninput={(event) =>
                     setSetting("TRIAL_TRAFFIC_LIMIT_GB", event.currentTarget.value)}
                 />
-                {#if isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB")}
+                {#if isSettingDirty("TRIAL_TRAFFIC_LIMIT_GB", settingsDirty)}
                   <AdminButton
                     size="sm"
                     variant="ghost"
@@ -420,7 +435,10 @@
           </div>
         </section>
 
-        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_RESET_KEYS)}>
+        <section
+          class="admin-settings-field-group"
+          class:is-dirty={dirtyCount(TRIAL_RESET_KEYS, settingsDirty)}
+        >
           <header class="admin-settings-field-group-head">
             <div class="admin-settings-field-group-head-copy">
               <strong>{at("tariffs_trial_group_reset", {}, "Сброс трафика")}</strong>
@@ -432,12 +450,12 @@
                 )}
               </small>
             </div>
-            {#if dirtyCount(TRIAL_RESET_KEYS)}
+            {#if dirtyCount(TRIAL_RESET_KEYS, settingsDirty)}
               <AdminBadge variant="warning">
                 {at(
                   "settings_dirty_count",
-                  { count: dirtyCount(TRIAL_RESET_KEYS) },
-                  `Изменений: ${dirtyCount(TRIAL_RESET_KEYS)}`
+                  { count: dirtyCount(TRIAL_RESET_KEYS, settingsDirty) },
+                  `Изменений: ${dirtyCount(TRIAL_RESET_KEYS, settingsDirty)}`
                 )}
               </AdminBadge>
             {/if}
@@ -445,12 +463,12 @@
           <div class="admin-settings-field-group-body">
             <div
               class="admin-setting admin-trial-setting-row"
-              class:is-dirty={isSettingDirty("TRIAL_TRAFFIC_STRATEGY")}
+              class:is-dirty={isSettingDirty("TRIAL_TRAFFIC_STRATEGY", settingsDirty)}
             >
               <div class="admin-setting-meta">
                 <strong>
                   {at("tariffs_trial_strategy", {}, "Стратегия сброса трафика")}
-                  {#if isSettingDirty("TRIAL_TRAFFIC_STRATEGY")}
+                  {#if isSettingDirty("TRIAL_TRAFFIC_STRATEGY", settingsDirty)}
                     <AdminBadge variant="warning"
                       >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
                     >
@@ -461,12 +479,15 @@
               <div class="admin-setting-control">
                 <AdminSelect
                   class="admin-setting-select"
-                  value={String(valueForKey("TRIAL_TRAFFIC_STRATEGY") || "NO_RESET")}
+                  value={String(
+                    valueForKey("TRIAL_TRAFFIC_STRATEGY", settingsDirty, settingsFieldMap) ||
+                      "NO_RESET"
+                  )}
                   items={TRAFFIC_STRATEGY_OPTIONS}
                   ariaLabel={at("tariffs_trial_strategy", {}, "Стратегия сброса трафика")}
                   onValueChange={(value) => setSetting("TRIAL_TRAFFIC_STRATEGY", value)}
                 />
-                {#if isSettingDirty("TRIAL_TRAFFIC_STRATEGY")}
+                {#if isSettingDirty("TRIAL_TRAFFIC_STRATEGY", settingsDirty)}
                   <AdminButton
                     size="sm"
                     variant="ghost"
@@ -481,7 +502,10 @@
           </div>
         </section>
 
-        <section class="admin-settings-field-group" class:is-dirty={dirtyCount(TRIAL_SQUAD_KEYS)}>
+        <section
+          class="admin-settings-field-group"
+          class:is-dirty={dirtyCount(TRIAL_SQUAD_KEYS, settingsDirty)}
+        >
           <header class="admin-settings-field-group-head">
             <div class="admin-settings-field-group-head-copy">
               <strong>{at("tariffs_trial_group_squads", {}, "Сквады")}</strong>
@@ -493,12 +517,12 @@
                 )}
               </small>
             </div>
-            {#if dirtyCount(TRIAL_SQUAD_KEYS)}
+            {#if dirtyCount(TRIAL_SQUAD_KEYS, settingsDirty)}
               <AdminBadge variant="warning">
                 {at(
                   "settings_dirty_count",
-                  { count: dirtyCount(TRIAL_SQUAD_KEYS) },
-                  `Изменений: ${dirtyCount(TRIAL_SQUAD_KEYS)}`
+                  { count: dirtyCount(TRIAL_SQUAD_KEYS, settingsDirty) },
+                  `Изменений: ${dirtyCount(TRIAL_SQUAD_KEYS, settingsDirty)}`
                 )}
               </AdminBadge>
             {/if}
@@ -506,12 +530,12 @@
           <div class="admin-settings-field-group-body">
             <div
               class="admin-setting admin-trial-setting-row"
-              class:is-dirty={isSettingDirty("TRIAL_SQUAD_UUIDS")}
+              class:is-dirty={isSettingDirty("TRIAL_SQUAD_UUIDS", settingsDirty)}
             >
               <div class="admin-setting-meta">
                 <strong>
                   {at("tariffs_trial_squads", {}, "Internal Squads для триала")}
-                  {#if isSettingDirty("TRIAL_SQUAD_UUIDS")}
+                  {#if isSettingDirty("TRIAL_SQUAD_UUIDS", settingsDirty)}
                     <AdminBadge variant="warning"
                       >{at("settings_badge_dirty", {}, "Изменено")}</AdminBadge
                     >
@@ -542,11 +566,12 @@
                 <input
                   class="input"
                   type="text"
-                  placeholder={valueForKey("USER_SQUAD_UUIDS") || "uuid-a,uuid-b"}
-                  value={valueForKey("TRIAL_SQUAD_UUIDS")}
+                  placeholder={valueForKey("USER_SQUAD_UUIDS", settingsDirty, settingsFieldMap) ||
+                    "uuid-a,uuid-b"}
+                  value={valueForKey("TRIAL_SQUAD_UUIDS", settingsDirty, settingsFieldMap)}
                   oninput={(event) => setSetting("TRIAL_SQUAD_UUIDS", event.currentTarget.value)}
                 />
-                {#if isSettingDirty("TRIAL_SQUAD_UUIDS")}
+                {#if isSettingDirty("TRIAL_SQUAD_UUIDS", settingsDirty)}
                   <AdminButton
                     size="sm"
                     variant="ghost"
@@ -557,7 +582,7 @@
                   </AdminButton>
                 {/if}
                 <div class="admin-chip-list">
-                  {#each csvList("TRIAL_SQUAD_UUIDS") as uuid}
+                  {#each csvList("TRIAL_SQUAD_UUIDS", settingsDirty, settingsFieldMap) as uuid}
                     <button type="button" class="admin-chip" onclick={() => removeTrialSquad(uuid)}>
                       {trialSquadLabel(uuid)}
                       <X size={12} />
@@ -775,7 +800,7 @@
                 <strong>{months} {at("months_short", {}, "mo")}</strong>
                 <div class="admin-setting-switch">
                   <Switch.Root
-                    checked={boolValue(enabledKey)}
+                    checked={boolValue(enabledKey, settingsDirty, settingsFieldMap)}
                     onCheckedChange={(checked) => setSetting(enabledKey, checked)}
                     class="admin-switch-root"
                   >
@@ -787,7 +812,7 @@
                   type="number"
                   min="0"
                   step="1"
-                  value={valueForKey(rubKey)}
+                  value={valueForKey(rubKey, settingsDirty, settingsFieldMap)}
                   oninput={(event) => setSetting(rubKey, event.currentTarget.value)}
                 />
                 <input
@@ -795,7 +820,7 @@
                   type="number"
                   min="0"
                   step="1"
-                  value={valueForKey(starsKey)}
+                  value={valueForKey(starsKey, settingsDirty, settingsFieldMap)}
                   oninput={(event) => setSetting(starsKey, event.currentTarget.value)}
                 />
               </div>
@@ -809,7 +834,7 @@
               <input
                 class="input"
                 type="text"
-                value={valueForKey("TRAFFIC_PACKAGES")}
+                value={valueForKey("TRAFFIC_PACKAGES", settingsDirty, settingsFieldMap)}
                 oninput={(event) => setSetting("TRAFFIC_PACKAGES", event.currentTarget.value)}
               />
             </label>
@@ -821,7 +846,7 @@
               <input
                 class="input"
                 type="text"
-                value={valueForKey("STARS_TRAFFIC_PACKAGES")}
+                value={valueForKey("STARS_TRAFFIC_PACKAGES", settingsDirty, settingsFieldMap)}
                 oninput={(event) => setSetting("STARS_TRAFFIC_PACKAGES", event.currentTarget.value)}
               />
             </label>

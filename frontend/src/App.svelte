@@ -12,7 +12,6 @@
   import BrandMark from "$lib/webapp/BrandMark.svelte";
   import Button from "$components/ui/button.svelte";
   import Dialog from "$components/ui/dialog.svelte";
-  import PreviewBoard from "./PreviewBoard.svelte";
   import WebAppShell from "./webapp/WebAppShell.svelte";
   import AuthScreen from "./webapp/auth/AuthScreen.svelte";
   import PaymentDialogs from "./webapp/PaymentDialogs.svelte";
@@ -91,32 +90,57 @@
     readCookie,
   } from "./lib/webapp/session.js";
   import { createTelegramSdk } from "./lib/webapp/telegramSdk.js";
-  import { mockApi as runMockApi } from "./lib/webapp/mockApi.js";
-  import { DEV_MOCK, applyPreviewMock } from "./lib/webapp/previewMock.js";
   import {
     adminPaymentIdFromPath,
     adminPaymentsUserIdFromPath,
     adminSectionFromPath,
     adminUserIdFromPath,
+    normalizeAdminSection,
     normalizeSection,
     publicInstallTokenFromPath,
     sectionFromPath,
     supportTicketIdFromPath,
     syncSectionPath,
+    withRoutePrefix,
   } from "./lib/webapp/routes.js";
 
+  export let mockRuntime = null;
+
+  const EMPTY_MOCK = {
+    config: {
+      title: "/minishop",
+      primaryColor: "#00fe7a",
+      apiBase: "/api",
+      language: "ru",
+      languages: [],
+    },
+    data: {
+      plans: [],
+      payment_methods: [],
+      subscription: {},
+      settings: {},
+      referral: {},
+      themes_catalog: { default_theme: "dark", themes: [] },
+    },
+  };
+  const MOCK_SOURCE = mockRuntime?.source || EMPTY_MOCK;
+  const previewBoardComponent = mockRuntime?.PreviewBoard || null;
+  const isDocsDemo = mockRuntime?.docsDemo === true;
+  const routePrefix = isDocsDemo ? "/demo/runtime" : "";
+  let docsDemoParentRouteConsumed = false;
   const query = new URLSearchParams(window.location.search);
   const isAppLaunchRoute = isExternalAppLaunchPath(window.location.pathname);
-  applyPreviewMock(query.get("mock"));
-  const isPreviewBoard = query.get("preview") === "all";
+  mockRuntime?.applyPreviewMock?.(query.get("mock"));
+  const isPreviewBoard = Boolean(previewBoardComponent) && query.get("preview") === "all";
   const injectedConfig = readJsonScript("webapp-config");
   const injectedI18n = readJsonScript("i18n");
   const isLocalShell =
     window.location.protocol === "file:" ||
     ["", "localhost", "127.0.0.1"].includes(window.location.hostname);
-  const MOCK = !injectedConfig && isLocalShell ? DEV_MOCK : null;
+  const MOCK =
+    mockRuntime?.mockApi && !injectedConfig && (isLocalShell || isDocsDemo) ? MOCK_SOURCE : null;
   const CFG = {
-    ...DEV_MOCK.config,
+    ...MOCK_SOURCE.config,
     ...(MOCK ? MOCK.config : {}),
     ...(injectedConfig || {}),
   };
@@ -128,7 +152,7 @@
   let mode = isAppLaunchRoute ? "appLaunch" : isPreviewBoard ? "preview" : "loading";
   let activeTab = "home";
   let screen = "home";
-  let data = isPreviewBoard ? structuredCloneSafe(DEV_MOCK.data) : null;
+  let data = isPreviewBoard ? structuredCloneSafe(MOCK_SOURCE.data) : null;
   let appLaunchTarget = isAppLaunchRoute ? readExternalAppLaunchTarget() : "";
   let publicInstallSubscription = null;
   let publicInstallToken = "";
@@ -166,7 +190,9 @@
   let adminBundleError = "";
   let adminMountTarget = null;
   let adminMountHandle = null;
+  let adminMountedTarget = null;
   let adminPanelProps = {};
+  let adminActiveSection = "stats";
   let tg = null;
   const telegramSdk = createTelegramSdk({
     scriptUrl: TELEGRAM_WEBAPP_SCRIPT_URL,
@@ -196,7 +222,10 @@
       clearToken();
       showLogin();
     },
-    mockApi: MOCK ? (path, options, context) => runMockApi(path, options, context) : null,
+    mockApi:
+      MOCK && mockRuntime?.mockApi
+        ? (path, options, context) => mockRuntime.mockApi(path, options, context)
+        : null,
     getMockContext: () => ({ currentLang, normalizeLangCode, clone: structuredCloneSafe }),
   });
   const billing = createBillingActions({
@@ -231,7 +260,7 @@
     telegramSdk,
   });
   const devicesStore = createDevicesStore({ api, t, showToast });
-  const supportStore = createSupportStore({ api, t, showToast });
+  const supportStore = createSupportStore({ api, t, showToast, routePrefix });
   const installGuidesStore = createInstallGuidesStore({ api, t, showToast });
   const accountStore = createAccountStore({
     api,
@@ -333,9 +362,9 @@
     ...brand,
     logoUrl: String(CFG.faviconUrl || "").trim() || brand.logoUrl,
   });
-  $: plans = data?.plans?.length ? data.plans : DEV_MOCK.data.plans;
+  $: plans = data?.plans?.length ? data.plans : MOCK_SOURCE.data.plans;
   $: methods = data?.payment_methods?.length ? data.payment_methods : [];
-  $: appSettings = data?.settings || DEV_MOCK.data.settings;
+  $: appSettings = data?.settings || MOCK_SOURCE.data.settings;
   $: subscriptionPurchaseDescription = String(
     appSettings?.subscription_purchase_description || ""
   ).trim();
@@ -354,7 +383,7 @@
   $: supportEnabled = Boolean(appSettings?.support_tickets_enabled ?? true);
   $: installGuidesEnabled = Boolean(appSettings?.subscription_guides_enabled);
   $: supportStore.setActive(Boolean(mode === "app" && screen === "support" && supportEnabled));
-  $: subscription = data?.subscription || DEV_MOCK.data.subscription;
+  $: subscription = data?.subscription || MOCK_SOURCE.data.subscription;
   $: hasActiveTariffSubscription = Boolean(
     tariffMode && subscription?.active && subscription?.tariff_key
   );
@@ -424,7 +453,7 @@
     screen = "settings";
     activeTab = "settings";
   }
-  $: referral = data?.referral || DEV_MOCK.data.referral;
+  $: referral = data?.referral || MOCK_SOURCE.data.referral;
   $: currentLang = normalizeLangCode(user?.language_code || CFG.language || "ru");
   $: languageCodes = uniqueLanguageCodes(
     WEBAPP_LANGUAGE_ORDER,
@@ -460,8 +489,12 @@
   $: telegramMiniAppInitData = tg?.initData || readTelegramMiniAppInitDataFromLocation();
   $: telegramMiniAppAuthAvailable = Boolean(telegramMiniAppInitData);
   $: telegramMiniAppContext = hasTelegramLaunchParams();
+  $: demoAuthLogin = MOCK && isDemoAuthMock();
   $: telegramLoginUnavailable =
-    !telegramMiniAppAuthAvailable && !telegramOAuthClientId && telegramSdkStatus !== "loading";
+    !demoAuthLogin &&
+    !telegramMiniAppAuthAvailable &&
+    !telegramOAuthClientId &&
+    telegramSdkStatus !== "loading";
   $: telegramLoginChecking =
     telegramLoginBusy || (authBusy && authStatus === t("wa_auth_checking_telegram"));
   $: telegramLoginLabel = telegramLoginUnavailable
@@ -469,8 +502,9 @@
     : telegramLoginChecking
       ? t("wa_auth_checking_telegram")
       : t("wa_login_telegram_button");
-  $: telegramLoginUnavailableMessage =
-    telegramLoginUnavailable && telegramSdkStatus === "unavailable"
+  $: telegramLoginUnavailableMessage = demoAuthLogin
+    ? ""
+    : telegramLoginUnavailable && telegramSdkStatus === "unavailable"
       ? t("wa_auth_telegram_unavailable")
       : telegramLoginUnavailable
         ? t("wa_auth_telegram_not_configured")
@@ -568,7 +602,7 @@
     if (!subscriptionKey) return false;
     const state = activationHandoff.read();
     const pending = state.pending;
-    if (activationHandoff.isAcknowledged(subscriptionKey, state)) {
+    if (!context.force && activationHandoff.isAcknowledged(subscriptionKey, state)) {
       if (pending && activationHandoff.pendingMatchesUser(pending, payload)) {
         activationHandoff.write({ ...state, pending: null });
       }
@@ -584,7 +618,13 @@
     }
     activationHandoff.acknowledge(subscriptionKey, context, payload, state);
     stopPendingActivationWatch();
-    navigateToActivationTarget({ replace: true });
+    activationSuccessUseInstallGuides = canUseInstallGuides();
+    billingStore.closePaymentModal();
+    activeTab = "home";
+    if (!activationSuccessUseInstallGuides) {
+      screen = "home";
+      syncAppSectionPath("home", true);
+    }
     activationSuccessDialogOpen = true;
     return true;
   }
@@ -743,7 +783,11 @@
         void boot();
         return;
       }
-      const section = sectionFromPath(window.location.pathname);
+      const currentQuery = currentSearchParams();
+      const section =
+        isDocsDemo && currentQuery.get("screen")
+          ? normalizeSection(currentQuery.get("screen"))
+          : sectionFromPath(routePathnameFromLocation(), routePrefix);
       if (mode === "login") {
         setPasswordLoginMode(isPasswordLoginPath(), true);
         screen = "login";
@@ -751,10 +795,13 @@
       }
       if (mode === "app") {
         if (section === "admin" && isAdmin) {
+          adminActiveSection = isDocsDemo
+            ? initialAdminSectionFromLocation()
+            : adminSectionFromPath(routePathnameFromLocation(), routePrefix);
           const pathAtStart = window.location.pathname;
           void Promise.all([ensureI18nScope("admin"), ensureAdminBundle()])
             .then(() => {
-              if (sectionFromPath(window.location.pathname) !== "admin") return;
+              if (sectionFromPath(routePathnameFromLocation(), routePrefix) !== "admin") return;
               if (window.location.pathname !== pathAtStart) return;
               activeTab = "settings";
               screen = "admin";
@@ -998,21 +1045,208 @@
     if (!adminMountHandle) return;
     adminMountHandle.destroy?.();
     adminMountHandle = null;
+    adminMountedTarget = null;
+  }
+
+  function currentMockMode() {
+    if (!MOCK) return "";
+    const currentMock = currentSearchParams().get("mock");
+    if (currentMock) return String(currentMock).trim().toLowerCase();
+    const parentMock = docsDemoParentSearchParams()?.get("mock");
+    return String(parentMock || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function isDemoAuthMock() {
+    return ["auth", "login", "register"].includes(currentMockMode());
+  }
+
+  function prepareDemoAuthState() {
+    const authDemo = MOCK_SOURCE.data?.auth_demo || {};
+    const email = String(authDemo.email || "3252a8@proton.me").trim();
+    authStore.update((s) => ({
+      ...s,
+      authStatus: "",
+      authIsError: false,
+      authBusy: false,
+      authResendCooldown: 0,
+      email,
+      emailPassword: String(authDemo.password || ""),
+      pendingEmail: "",
+      emailCode: "",
+      passwordLoginMode: false,
+      passwordLoginFallback: false,
+      loginEmailFieldError: "",
+      loginEmailTooltipOpen: false,
+      telegramLoginBusy: false,
+    }));
+  }
+
+  async function openLoginTelegram() {
+    if (demoAuthLogin) {
+      const authDemo = MOCK_SOURCE.data?.auth_demo || {};
+      await authStore.finalizeTelegramAuth(
+        {
+          id: Number(authDemo.telegram_id || 7410865527),
+          username: authDemo.telegram_username || "u3252a8",
+          first_name: authDemo.telegram_first_name || "3252a8",
+          last_name: authDemo.telegram_last_name || "",
+        },
+        "auth_data"
+      );
+      return;
+    }
+    await authStore.openTelegramLogin(telegramOAuthClientId, () => telegramMiniAppInitData);
+  }
+
+  function demoTelegramAuthPayload() {
+    const authDemo = MOCK_SOURCE.data?.auth_demo || {};
+    return {
+      id: Number(authDemo.telegram_id || 7410865527),
+      username: authDemo.telegram_username || "u3252a8",
+      first_name: authDemo.telegram_first_name || "3252a8",
+      last_name: authDemo.telegram_last_name || "",
+    };
+  }
+
+  function openSettingsLinkEmailDialog() {
+    const authDemo = MOCK_SOURCE.data?.auth_demo || {};
+    accountStore.openLinkEmailDialog(demoAuthLogin ? authDemo.email || "3252a8@proton.me" : "");
+  }
+
+  async function linkTelegramFromSettings() {
+    if (!demoAuthLogin) {
+      await accountStore.linkTelegramAccount(() => telegramMiniAppInitData);
+      return;
+    }
+    accountStore.update((s) => ({ ...s, linkTelegramBusy: true }));
+    try {
+      const response = await api("/account/telegram/link", {
+        method: "POST",
+        body: JSON.stringify({ auth_data: demoTelegramAuthPayload() }),
+      });
+      if (!response?.ok) throw response;
+      if (response?.csrf_token) setToken("", response.csrf_token);
+      await loadData({ fresh: true, preserveView: true });
+      showToast(t("wa_settings_linked"));
+    } catch (error) {
+      showToast(error?.message || t("wa_auth_telegram_not_confirmed"));
+    } finally {
+      accountStore.update((s) => ({ ...s, linkTelegramBusy: false }));
+    }
+  }
+
+  function currentSearchParams() {
+    return new URLSearchParams(window.location.search);
+  }
+
+  function docsDemoParentSearchParams() {
+    if (!isDocsDemo) return null;
+    try {
+      if (window.parent === window) return null;
+      return new URLSearchParams(window.parent.location.search);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function normalizeDemoRoutePath(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
+    return withSlash.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+  }
+
+  function docsDemoRouteParams() {
+    if (!isDocsDemo) return null;
+    const currentQuery = currentSearchParams();
+    const currentParams = {
+      path: currentQuery.get("path") || "",
+      screen: currentQuery.get("screen") || "",
+      adminSection: currentQuery.get("admin_section") || "",
+    };
+    if (currentParams.path || currentParams.screen || currentParams.adminSection) {
+      return currentParams;
+    }
+    if (docsDemoParentRouteConsumed) return currentParams;
+    const parentQuery = docsDemoParentSearchParams();
+    return {
+      path: parentQuery?.get("path") || "",
+      screen: parentQuery?.get("screen") || "",
+      adminSection: parentQuery?.get("admin_section") || "",
+    };
+  }
+
+  function docsDemoRoutePathFromParams() {
+    const params = docsDemoRouteParams();
+    if (!params) return "";
+    const explicitPath = normalizeDemoRoutePath(params.path);
+    if (explicitPath) return explicitPath;
+    const section = normalizeSection(params.screen);
+    if (section === "admin") {
+      return `/admin/${normalizeAdminSection(params.adminSection || "stats")}`;
+    }
+    return params.screen ? `/${section}` : "";
+  }
+
+  function routePathnameFromLocation() {
+    return docsDemoRoutePathFromParams() || window.location.pathname;
+  }
+
+  function cleanDocsDemoRouteQuery() {
+    if (!isDocsDemo || window.location.protocol === "file:") return;
+    const url = new URL(window.location.href);
+    const routeKeys = ["path", "screen", "admin_section"];
+    const changed = routeKeys.some((key) => url.searchParams.has(key));
+    if (!changed) return;
+    for (const key of routeKeys) url.searchParams.delete(key);
+    const search = url.searchParams.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${url.pathname}${search ? `?${search}` : ""}${url.hash}`
+    );
+  }
+
+  function initialAdminSectionFromLocation() {
+    const currentQuery = currentSearchParams();
+    if (MOCK && currentQuery.get("admin_section")) {
+      return normalizeAdminSection(currentQuery.get("admin_section"));
+    }
+    const demoRouteParams = docsDemoRouteParams();
+    if (MOCK && demoRouteParams?.adminSection) {
+      return normalizeAdminSection(demoRouteParams.adminSection);
+    }
+    return adminSectionFromPath(routePathnameFromLocation(), routePrefix);
+  }
+
+  function syncDocsDemoSection(section, replace = false, adminSection = null, adminUserId = null) {
+    if (!isDocsDemo || window.location.protocol === "file:") return false;
+    syncSectionPath(section, replace, adminSection, adminUserId, routePrefix);
+    cleanDocsDemoRouteQuery();
+    return true;
+  }
+
+  function syncAppSectionPath(section, replace = false, adminSection = null, adminUserId = null) {
+    if (syncDocsDemoSection(section, replace, adminSection, adminUserId)) return;
+    syncSectionPath(section, replace, adminSection, adminUserId);
   }
 
   $: adminPanelProps = {
     api,
     onClose: closeAdminPanel,
     onToast: (text) => showToast(text),
-    initialSection: adminSectionFromPath(window.location.pathname),
-    initialPaymentId: adminPaymentIdFromPath(window.location.pathname),
-    initialPaymentUserId: adminPaymentsUserIdFromPath(window.location.pathname),
-    initialUserId: adminUserIdFromPath(window.location.pathname),
+    initialSection: screen === "admin" ? adminActiveSection : initialAdminSectionFromLocation(),
+    initialPaymentId: adminPaymentIdFromPath(routePathnameFromLocation(), routePrefix),
+    initialPaymentUserId: adminPaymentsUserIdFromPath(routePathnameFromLocation(), routePrefix),
+    initialUserId: adminUserIdFromPath(routePathnameFromLocation(), routePrefix),
     onSectionChange: handleAdminSectionChange,
     onSettingsSaved: handleAdminPersistedSaved,
     onTariffsSaved: handleAdminPersistedSaved,
     onThemesSaved: handleAdminPersistedSaved,
     onTranslationsSaved: handleAdminTranslationsSaved,
+    routePrefix,
     brandTitle,
     brand,
     appFaviconUrl: CFG.faviconUrl,
@@ -1032,11 +1266,13 @@
 
     if (shouldMountAdmin) {
       try {
-        if (adminMountHandle) {
+        if (adminMountHandle && adminMountedTarget === adminMountTarget) {
           adminMountHandle.update?.(props);
         } else {
+          destroyAdminMount();
           adminMountTarget.replaceChildren();
           adminMountHandle = adminBundleApi.mount(adminMountTarget, props);
+          adminMountedTarget = adminMountTarget;
         }
       } catch (error) {
         adminBundleError = error?.message || "admin_bundle_mount_failed";
@@ -1052,6 +1288,11 @@
     const shareToken = publicInstallTokenFromPath(window.location.pathname);
     if (shareToken) {
       await loadPublicInstall(shareToken);
+      return;
+    }
+    if (MOCK && isDemoAuthMock()) {
+      prepareDemoAuthState();
+      showLogin();
       return;
     }
     await runWebappBoot({
@@ -1101,7 +1342,7 @@
     window.history.replaceState(null, "", `${u.pathname}${qs}${u.hash}`);
   }
 
-  function isPasswordLoginPath(pathname = window.location.pathname) {
+  function isPasswordLoginPath(pathname = routePathnameFromLocation()) {
     return (
       String(pathname || "")
         .replace(/\/+$/, "")
@@ -1111,7 +1352,15 @@
 
   function syncPasswordLoginPath(enabled, replace = false) {
     if (typeof window === "undefined" || window.location.protocol === "file:") return;
-    const targetPath = enabled ? "/login/password" : "/";
+    const targetPath = enabled ? "/login/password" : isDocsDemo ? "/login" : "/";
+    if (isDocsDemo) {
+      const targetRuntimePath = withRoutePrefix(targetPath, routePrefix);
+      if (window.location.pathname === targetRuntimePath) return;
+      const nextUrl = `${targetRuntimePath}${window.location.search}${window.location.hash}`;
+      window.history[replace ? "replaceState" : "pushState"](null, "", nextUrl);
+      cleanDocsDemoRouteQuery();
+      return;
+    }
     if (window.location.pathname === targetPath) return;
     const nextUrl = `${targetPath}${window.location.search}${window.location.hash}`;
     window.history[replace ? "replaceState" : "pushState"](null, "", nextUrl);
@@ -1130,6 +1379,16 @@
   }
 
   async function loadData(options = {}) {
+    const preserveView = options?.preserveView === true;
+    const preservedSection = preserveView
+      ? normalizeSection(options?.section || screen || activeTab)
+      : null;
+    const preservedAdminSection =
+      preserveView && preservedSection === "admin"
+        ? normalizeAdminSection(
+            options?.adminSection || adminActiveSection || initialAdminSectionFromLocation()
+          )
+        : null;
     const payload = await api(options?.fresh ? "/me?fresh=1" : "/me");
     if (!payload.ok) throw new Error(payload.error || "load_failed");
     data = payload;
@@ -1140,10 +1399,12 @@
       paymentStep: "tariff",
       selectedMethod: payload.payment_methods?.[0]?.id || "",
     }));
-    let section =
-      MOCK && query.get("screen")
-        ? normalizeSection(query.get("screen"))
-        : sectionFromPath(window.location.pathname);
+    const currentQuery = currentSearchParams();
+    let section = preserveView
+      ? preservedSection
+      : MOCK && currentQuery.get("screen")
+        ? normalizeSection(currentQuery.get("screen"))
+        : sectionFromPath(routePathnameFromLocation(), routePrefix);
     if (section === "admin" && !payload.user?.is_admin) section = "settings";
     if (section === "devices" && !payload.settings?.my_devices_enabled) section = "home";
     if (section === "support" && payload.settings?.support_tickets_enabled === false) {
@@ -1156,11 +1417,12 @@
       section = "home";
     }
     const initialAdminSection =
-      section === "admin" ? adminSectionFromPath(window.location.pathname) : null;
+      section === "admin" ? preservedAdminSection || initialAdminSectionFromLocation() : null;
     if (section === "admin" && payload.user?.is_admin) {
       try {
         await ensureI18nScope("admin");
         await ensureAdminBundle();
+        adminActiveSection = initialAdminSection || "stats";
       } catch (_error) {
         void _error;
         section = "settings";
@@ -1169,7 +1431,10 @@
       }
     }
     const initialSupportTicketId =
-      section === "support" ? supportTicketIdFromPath(window.location.pathname) : null;
+      section === "support"
+        ? supportTicketIdFromPath(routePathnameFromLocation(), routePrefix)
+        : null;
+    if (isDocsDemo) docsDemoParentRouteConsumed = true;
     activeTab =
       section === "admin"
         ? "settings"
@@ -1187,7 +1452,7 @@
       supportStore.startPolling({ includeList: false });
     }
     if (section === "support" && initialSupportTicketId) {
-      const targetPath = `/support/${initialSupportTicketId}`;
+      const targetPath = withRoutePrefix(`/support/${initialSupportTicketId}`, routePrefix);
       if (window.location.protocol !== "file:" && window.location.pathname !== targetPath) {
         window.history.replaceState(
           null,
@@ -1195,11 +1460,12 @@
           `${targetPath}${window.location.search}${window.location.hash}`
         );
       }
+      cleanDocsDemoRouteQuery();
     } else {
-      syncSectionPath(section, true, initialAdminSection);
+      syncAppSectionPath(section, true, initialAdminSection);
     }
     if (section === "devices" && payload.settings?.my_devices_enabled) {
-      await devicesStore.loadDevices(true);
+      await devicesStore.loadDevices(true, true);
     }
     if (section === "install") {
       await installGuidesStore.load(true);
@@ -1411,12 +1677,12 @@
     activeTab = "home";
     if (useInstallGuides) {
       screen = "install";
-      syncSectionPath("install", replace);
+      syncAppSectionPath("install", replace);
       installGuidesStore.load(true);
       return;
     }
     screen = "home";
-    syncSectionPath("home", replace);
+    syncAppSectionPath("home", replace);
   }
 
   async function handleSubscriptionActivated(context = {}) {
@@ -1519,7 +1785,7 @@
     billingStore.closePaymentModal();
     activeTab = "home";
     screen = "home";
-    syncSectionPath("home");
+    syncAppSectionPath("home");
   }
 
   function goInstall() {
@@ -1530,7 +1796,7 @@
     billingStore.closePaymentModal();
     activeTab = "home";
     screen = "install";
-    syncSectionPath("install");
+    syncAppSectionPath("install");
     installGuidesStore.load(true);
   }
 
@@ -1538,7 +1804,7 @@
     billingStore.closePaymentModal();
     activeTab = "invite";
     screen = "invite";
-    syncSectionPath("invite");
+    syncAppSectionPath("invite");
   }
 
   function goDevices() {
@@ -1546,7 +1812,7 @@
     billingStore.closePaymentModal();
     activeTab = "devices";
     screen = "devices";
-    syncSectionPath("devices");
+    syncAppSectionPath("devices");
     devicesStore.loadDevices(devicesEnabled);
   }
 
@@ -1555,7 +1821,7 @@
     billingStore.closePaymentModal();
     activeTab = "support";
     screen = "support";
-    syncSectionPath("support");
+    syncAppSectionPath("support");
     supportStore.loadList();
     supportStore.startPolling({ includeList: true });
   }
@@ -1611,13 +1877,16 @@
     billingStore.closePaymentModal();
     activeTab = "settings";
     screen = "settings";
-    syncSectionPath("settings");
+    syncAppSectionPath("settings");
   }
 
   async function openAdminPanel() {
     if (!isAdmin) return;
     clearLanguageClickGuard();
     billingStore.closePaymentModal();
+    const nextAdminSection = normalizeAdminSection(
+      adminActiveSection || adminSectionFromPath(routePathnameFromLocation(), routePrefix)
+    );
     try {
       await ensureI18nScope("admin");
       await ensureAdminBundle();
@@ -1628,28 +1897,22 @@
     }
     activeTab = "settings";
     screen = "admin";
-    syncSectionPath("admin", false, adminSectionFromPath(window.location.pathname));
+    adminActiveSection = nextAdminSection;
+    syncAppSectionPath("admin", false, adminActiveSection);
   }
 
   function closeAdminPanel() {
     screen = "settings";
     activeTab = "settings";
-    syncSectionPath("settings");
+    syncAppSectionPath("settings");
   }
 
   function handleAdminSectionChange(adminSection, adminUserId = null) {
     if (screen !== "admin") return;
+    const nextAdminSection = normalizeAdminSection(adminSection);
+    adminActiveSection = nextAdminSection;
     if (window.location.protocol === "file:") return;
-    const targetPath =
-      adminSection === "users" && adminUserId
-        ? `/admin/users/${adminUserId}`
-        : `/admin/${adminSection}`;
-    if (window.location.pathname === targetPath) return;
-    window.history.pushState(
-      null,
-      "",
-      `${targetPath}${window.location.search}${window.location.hash}`
-    );
+    syncAppSectionPath("admin", false, nextAdminSection, adminUserId);
   }
 
   function adminPayloadHasLogoChange(options = {}) {
@@ -1724,7 +1987,9 @@
       return t("wa_pay_full_subscription", {}, "Оплатить полную подписку");
     }
     if (trafficMode || selectedPlan?.sale_mode === "traffic_package") return t("wa_buy_traffic");
-    return subscription.active ? t("wa_renew") : t("wa_pay_subscription");
+    return subscription.active
+      ? t("wa_renew_subscription", {}, "Продлить подписку")
+      : t("wa_pay_subscription");
   }
 </script>
 
@@ -1738,7 +2003,7 @@
 <Tooltip.Provider>
   {#key currentLang}
     {#if isPreviewBoard}
-      <PreviewBoard config={CFG} mockData={DEV_MOCK.data} />
+      <svelte:component this={previewBoardComponent} config={CFG} mockData={MOCK_SOURCE.data} />
     {:else}
       <div class="app-shell {shellToneClass} {shellThemeClass}" style={shellStyle}>
         {#if mode === "loading"}
@@ -1805,8 +2070,7 @@
             requestEmailCode={() => authStore.requestEmailCode((s) => (screen = s))}
             loginWithEmailPassword={authStore.loginWithEmailPassword}
             verifyEmailCode={authStore.verifyEmailCode}
-            openTelegramLogin={() =>
-              authStore.openTelegramLogin(telegramOAuthClientId, () => telegramMiniAppInitData)}
+            openTelegramLogin={openLoginTelegram}
             {openExternalLink}
             {submitEmailOnEnter}
             onBackToLogin={() => (screen = "login")}
@@ -1933,6 +2197,7 @@
                 <SupportTicketScreen
                   maxBodyLength={appSettings?.support_ticket_max_body_length || 4000}
                   {brand}
+                  {user}
                   userAvatarUrl={profileAvatarUrl}
                   userInitials={telegramProfileName
                     ? telegramProfileName.slice(0, 2).toUpperCase()
@@ -1943,6 +2208,7 @@
                 <SupportScreen
                   maxSubjectLength={appSettings?.support_ticket_max_subject_length || 160}
                   maxBodyLength={appSettings?.support_ticket_max_body_length || 4000}
+                  {user}
                   {t}
                 />
               {/if}
@@ -1969,12 +2235,11 @@
                 {userAgreementUrl}
                 {userLanguage}
                 showLogout={!telegramMiniAppContext}
-                linkTelegramAccount={() =>
-                  accountStore.linkTelegramAccount(() => telegramMiniAppInitData)}
+                linkTelegramAccount={linkTelegramFromSettings}
                 logout={accountStore.logout}
                 {openAdminPanel}
                 {openExternalLink}
-                openLinkEmailDialog={accountStore.openLinkEmailDialog}
+                openLinkEmailDialog={openSettingsLinkEmailDialog}
                 openSetPasswordDialog={accountStore.openSetPasswordDialog}
                 {setLanguageMenuOpen}
                 {t}

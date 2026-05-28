@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
+import { withRoutePrefix } from "../../webapp/routes.js";
 
-export function createAdminSupportStore({ api, onToast, at }) {
+export function createAdminSupportStore({ api, onToast, at, routePrefix = "" }) {
   const OPEN_TICKET_POLL_MS = 3_000;
   const STATS_POLL_MS = 30_000;
   const HIDDEN_POLL_MS = 300_000;
@@ -58,7 +59,10 @@ export function createAdminSupportStore({ api, onToast, at }) {
   function pushTicketPath(ticketId) {
     if (typeof window === "undefined" || window.location.protocol === "file:") return;
     if (active !== "support") return;
-    const target = ticketId ? `/admin/support/${ticketId}` : "/admin/support";
+    const target = withRoutePrefix(
+      ticketId ? `/admin/support/${ticketId}` : "/admin/support",
+      routePrefix
+    );
     if (window.location.pathname !== target) {
       window.history.pushState(
         null,
@@ -193,17 +197,26 @@ export function createAdminSupportStore({ api, onToast, at }) {
         body: JSON.stringify({ body, is_internal_note: internal }),
       });
       if (!res?.ok) throw res;
-      state.update((s) => ({
-        ...s,
-        openedTicket: res.ticket
-          ? { ...s.openedTicket, ...res.ticket, user: res.ticket.user || s.openedTicket?.user }
-          : s.openedTicket,
-        messages: [...s.messages, res.message],
-      }));
-      await loadList();
-      await loadStats();
+      state.update((s) =>
+        s.openedTicketId === current
+          ? {
+              ...s,
+              openedTicket: res.ticket
+                ? {
+                    ...s.openedTicket,
+                    ...res.ticket,
+                    user: res.ticket.user || s.openedTicket?.user,
+                  }
+                : s.openedTicket,
+              messages: res.message ? [...s.messages, res.message] : s.messages,
+            }
+          : s
+      );
+      void Promise.allSettled([loadList({ silent: true }), loadStats()]);
+      return true;
     } catch (error) {
       onToast(error?.message || at("support_send_failed", {}, "Send failed"));
+      return false;
     } finally {
       state.update((s) => ({ ...s, sending: false }));
     }

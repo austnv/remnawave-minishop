@@ -1,12 +1,13 @@
 <script>
   import {
     CheckCircle2,
-    ChevronsUpDown,
+    CircleQuestionMark,
     CircleX,
+    CreditCard,
     Database,
     Download,
     Gift,
-    RefreshCw,
+    Repeat2,
   } from "$components/ui/icons.js";
 
   import BrandMark from "$lib/webapp/BrandMark.svelte";
@@ -50,6 +51,26 @@
   function trafficResetLabel(sub) {
     return trafficResetLabelFn(sub, t);
   }
+  function regularTrafficDepleted(sub = subscription) {
+    const used = Number(sub?.traffic_used_bytes || 0);
+    const limit = Number(sub?.traffic_limit_bytes || 0);
+    return limit > 0 && used >= limit;
+  }
+  function regularTrafficCardClass(sub = subscription) {
+    return [
+      "traffic-card-compact",
+      regularTrafficTopupBarClickable ? "traffic-card-clickable" : "",
+      regularTrafficDepleted(sub) ? "traffic-card-depleted" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  function regularTrafficMetaLabel(sub = subscription) {
+    return regularTrafficDepleted(sub) ? t("wa_traffic_depleted") : trafficResetLabel(sub);
+  }
+  function premiumTrafficAvailable(sub = subscription) {
+    return !regularTrafficDepleted(sub);
+  }
   function premiumTrafficPercent(sub) {
     return premiumTrafficPercentFn(sub);
   }
@@ -58,6 +79,11 @@
   }
   function premiumTitle(sub = subscription) {
     return premiumTitleFn(sub, t);
+  }
+  function premiumTrafficMetaLabel(sub = subscription) {
+    return sub?.premium_is_limited
+      ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен")
+      : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц");
   }
   function premiumServerLabels(sub) {
     return premiumServerLabelsFn(sub);
@@ -101,35 +127,52 @@
     <Card class={`status-card${subscription.active ? "" : " status-card-inactive"}`}>
       {#if subscription.active}
         <div class="sub-status">
-          <CheckCircle2 size={23} />
-          <div>
+          <CheckCircle2 class="sub-status-icon" size={23} />
+          <div class="sub-status-main">
             <h2>
               {trafficMode ? t("wa_home_access_active") : t("wa_home_subscription_active")} | {activeSubscriptionTermLabel(
                 subscription
               )}
             </h2>
-            {#if hasActiveTariffSubscription && hasMultipleTariffs && currentTariffName}
-              <p class="current-tariff-line">
-                {t("wa_current_tariff", { tariff: currentTariffName })}
+            <div
+              class:sub-status-details-with-tariff={hasActiveTariffSubscription &&
+                hasMultipleTariffs &&
+                currentTariffName}
+              class="sub-status-details"
+            >
+              {#if hasActiveTariffSubscription && hasMultipleTariffs && currentTariffName}
+                <p class="current-tariff-line">
+                  {t("wa_current_tariff", { tariff: currentTariffName })}
+                </p>
+              {/if}
+              <p class="subscription-end-line">
+                {subscription.end_date_text
+                  ? t("wa_until_date", { date: subscription.end_date_text })
+                  : subscription.remaining_text}
               </p>
-            {/if}
-            <p>
-              {subscription.end_date_text
-                ? t("wa_until_date", { date: subscription.end_date_text })
-                : subscription.remaining_text}
-            </p>
+            </div>
           </div>
+          {#if canChangeTariff}
+            <Button
+              class="status-tariff-action"
+              variant="secondary"
+              onclick={openTariffChangeModal}
+            >
+              <Repeat2 size={17} />
+              {t("wa_change_tariff")}
+            </Button>
+          {/if}
         </div>
       {:else}
         <div class="sub-status sub-status-inactive">
-          <CircleX size={23} />
+          <CircleX class="sub-status-icon" size={23} />
           <h2>{t("wa_home_subscription_inactive")}</h2>
         </div>
       {/if}
     </Card>
 
     {#if subscription.active}
-      <Card class={regularTrafficTopupBarClickable ? "traffic-card-clickable" : ""}>
+      <Card compact class={regularTrafficCardClass(subscription)}>
         {#if regularTrafficTopupBarClickable}
           <button
             class="card-click-target"
@@ -138,45 +181,58 @@
             aria-label={t("wa_add_traffic")}
           ></button>
         {/if}
-        <div class="traffic-top">
-          <span>{t("wa_home_traffic_used")}</span>
-          <strong>{trafficLabel(subscription)}</strong>
+        <div class="traffic-summary-row">
+          <span class="traffic-summary-left">
+            {t("wa_home_traffic_used")}
+            <span class="traffic-summary-separator" aria-hidden="true">|</span>
+            {regularTrafficMetaLabel(subscription)}
+          </span>
+          <strong class="traffic-summary-right">
+            <span>{trafficLabel(subscription)}</span>
+            <span class="traffic-summary-separator" aria-hidden="true">|</span>
+            <span>{trafficPercent(subscription)}%</span>
+          </strong>
         </div>
         <LinearProgress value={trafficPercent(subscription)} label={t("wa_home_traffic_used")} />
-        <div class="traffic-meta">
-          <span>{trafficResetLabel(subscription)}</span>
-          <span class="traffic-percent">{trafficPercent(subscription)}%</span>
-        </div>
       </Card>
-      {#if subscription?.premium_unlimited_override}
-        <Card class="premium-traffic-card">
-          <div class="traffic-top">
-            <span>{premiumTitle(subscription)}</span>
-            <strong>∞</strong>
-          </div>
-          <div class="traffic-meta premium-traffic-meta">
-            {#if premiumServerLabels(subscription).length}
-              <details class="premium-server-dropdown">
-                <summary>
-                  <span>{t("wa_premium_unlimited", {}, "Безлимит на premium-сервера")}</span>
-                  <ChevronsUpDown size={13} />
-                </summary>
-                <div class="premium-server-list premium-server-list-dropdown">
-                  <div>
-                    {#each premiumServerLabels(subscription).slice(0, 8) as label}
-                      <span>{label}</span>
-                    {/each}
-                  </div>
+      {#if premiumTrafficAvailable(subscription) && subscription?.premium_unlimited_override}
+        <Card compact class="traffic-card-compact premium-traffic-card">
+          {#if premiumServerLabels(subscription).length}
+            <details class="premium-server-dropdown premium-server-dropdown-inline">
+              <summary class="traffic-summary-row premium-server-summary">
+                <span class="traffic-summary-left premium-summary-trigger">
+                  <span class="premium-summary-copy">
+                    {premiumTitle(subscription)}
+                    <span class="traffic-summary-separator" aria-hidden="true">|</span>
+                    {t("wa_premium_unlimited", {}, "Безлимит на premium-сервера")}
+                  </span>
+                  <CircleQuestionMark class="premium-server-help-icon" size={15} />
+                </span>
+                <strong class="traffic-summary-right">∞</strong>
+              </summary>
+              <div class="premium-server-list premium-server-list-dropdown">
+                <div>
+                  {#each premiumServerLabels(subscription).slice(0, 8) as label}
+                    <span>{label}</span>
+                  {/each}
                 </div>
-              </details>
-            {:else}
-              <span>{t("wa_premium_unlimited", {}, "Безлимит на premium-сервера")}</span>
-            {/if}
-          </div>
+              </div>
+            </details>
+          {:else}
+            <div class="traffic-summary-row">
+              <span class="traffic-summary-left">
+                {premiumTitle(subscription)}
+                <span class="traffic-summary-separator" aria-hidden="true">|</span>
+                {t("wa_premium_unlimited", {}, "Безлимит на premium-сервера")}
+              </span>
+              <strong class="traffic-summary-right">∞</strong>
+            </div>
+          {/if}
         </Card>
-      {:else if Number(subscription?.premium_limit_bytes || 0) > 0}
+      {:else if premiumTrafficAvailable(subscription) && Number(subscription?.premium_limit_bytes || 0) > 0}
         <Card
-          class={`${premiumTrafficTopupBarClickable ? "traffic-card-clickable " : ""}premium-traffic-card${subscription?.premium_is_limited ? " premium-traffic-card-limited" : ""}`}
+          compact
+          class={`traffic-card-compact ${premiumTrafficTopupBarClickable ? "traffic-card-clickable " : ""}premium-traffic-card${subscription?.premium_is_limited ? " premium-traffic-card-limited" : ""}`}
         >
           {#if premiumTrafficTopupBarClickable}
             <button
@@ -186,43 +242,50 @@
               aria-label={t("wa_add_traffic_premium", { target: premiumTitle(subscription) })}
             ></button>
           {/if}
-          <div class="traffic-top">
-            <span>{premiumTitle(subscription)}</span>
-            <strong>{premiumTrafficLabel(subscription)}</strong>
-          </div>
+          {#if premiumServerLabels(subscription).length}
+            <details class="premium-server-dropdown premium-server-dropdown-inline">
+              <summary class="traffic-summary-row premium-server-summary">
+                <span class="traffic-summary-left premium-summary-trigger">
+                  <span class="premium-summary-copy">
+                    {premiumTitle(subscription)}
+                    <span class="traffic-summary-separator" aria-hidden="true">|</span>
+                    {premiumTrafficMetaLabel(subscription)}
+                  </span>
+                  <CircleQuestionMark class="premium-server-help-icon" size={15} />
+                </span>
+                <strong class="traffic-summary-right">
+                  <span>{premiumTrafficLabel(subscription)}</span>
+                  <span class="traffic-summary-separator" aria-hidden="true">|</span>
+                  <span>{premiumTrafficPercent(subscription)}%</span>
+                </strong>
+              </summary>
+              <div class="premium-server-list premium-server-list-dropdown">
+                <div>
+                  {#each premiumServerLabels(subscription).slice(0, 8) as label}
+                    <span>{label}</span>
+                  {/each}
+                </div>
+              </div>
+            </details>
+          {:else}
+            <div class="traffic-summary-row">
+              <span class="traffic-summary-left">
+                {premiumTitle(subscription)}
+                <span class="traffic-summary-separator" aria-hidden="true">|</span>
+                {premiumTrafficMetaLabel(subscription)}
+              </span>
+              <strong class="traffic-summary-right">
+                <span>{premiumTrafficLabel(subscription)}</span>
+                <span class="traffic-summary-separator" aria-hidden="true">|</span>
+                <span>{premiumTrafficPercent(subscription)}%</span>
+              </strong>
+            </div>
+          {/if}
           <LinearProgress
             class="premium-progress"
             value={premiumTrafficPercent(subscription)}
             label={premiumTitle(subscription)}
           />
-          <div class="traffic-meta premium-traffic-meta">
-            {#if premiumServerLabels(subscription).length}
-              <details class="premium-server-dropdown">
-                <summary>
-                  <span
-                    >{subscription?.premium_is_limited
-                      ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен")
-                      : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span
-                  >
-                  <ChevronsUpDown size={13} />
-                </summary>
-                <div class="premium-server-list premium-server-list-dropdown">
-                  <div>
-                    {#each premiumServerLabels(subscription).slice(0, 8) as label}
-                      <span>{label}</span>
-                    {/each}
-                  </div>
-                </div>
-              </details>
-            {:else}
-              <span
-                >{subscription?.premium_is_limited
-                  ? t("wa_premium_access_limited", {}, "Доступ к premium временно ограничен")
-                  : t("wa_premium_reset_monthly", {}, "Отдельный лимит на месяц")}</span
-              >
-            {/if}
-            <span class="traffic-percent">{premiumTrafficPercent(subscription)}%</span>
-          </div>
         </Card>
       {/if}
     {:else if trialOfferAvailable}
@@ -271,25 +334,19 @@
         onclick={openPaymentModal}
       >
         {#if subscription.active}
-          <RefreshCw size={18} />
+          <CreditCard size={18} />
         {:else if trafficMode}
           <Database size={18} />
         {/if}
         {primaryPayActionLabel()}
       </Button>
-      {#if canChangeTariff}
-        <Button class="wide" variant="secondary" onclick={openTariffChangeModal}>
-          <RefreshCw size={18} />
-          {t("wa_change_tariff")}
-        </Button>
-      {/if}
       {#if regularTrafficTopupUnlocked}
         <Button class="wide" variant="secondary" onclick={openRegularTopupModal}>
           <Database size={18} />
           {t("wa_add_traffic")}
         </Button>
       {/if}
-      {#if premiumTrafficTopupUnlocked}
+      {#if premiumTrafficTopupUnlocked && premiumTrafficAvailable(subscription)}
         <Button class="wide" variant="secondary" onclick={openPremiumTopupModal}>
           <Database size={18} />
           {t("wa_add_traffic_premium", { target: premiumTitle(subscription) })}

@@ -543,9 +543,7 @@ async def hwid_devices_list_callback(
         renewal=renewal_available,
     )
     text_key = (
-        "select_hwid_device_renewal_package"
-        if renewal_available
-        else "select_hwid_device_package"
+        "select_hwid_device_renewal_package" if renewal_available else "select_hwid_device_package"
     )
     await callback.message.edit_text(
         get_text(

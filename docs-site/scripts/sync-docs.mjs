@@ -8,6 +8,7 @@ const sourceDir = path.join(repoRoot, 'docs');
 const outputDir = path.join(siteRoot, 'src', 'content', 'docs');
 
 const descriptions = {
+  'getting-started/demo.md': 'Как устроен статический демо-режим Remnawave Minishop и почему он собирается только вместе с документацией.',
   'index.md': 'Документация по запуску, настройке и сопровождению Telegram Mini App для Remnawave.',
   'getting-started/overview.md': 'Что входит в Remnawave Minishop и как связаны бот, Mini App, backend, worker и Remnawave Panel.',
   'getting-started/setup.md': 'Минимальный путь запуска Remnawave Minishop через Docker Compose.',
@@ -19,9 +20,12 @@ const descriptions = {
   'features/payments.md': 'Платежные провайдеры, кнопки оплаты и webhook-обработка.',
   'features/subscriptions.md': 'Тарифы на срок и по трафику, premium-сквады, HWID-устройства и жизненный цикл подписки.',
   'features/tariffs.md': 'Каталог тарифов, модели на срок/по трафику, premium-сквады и HWID-устройства.',
-  'features/web-app.md': 'Telegram Mini App, авторизация, публичные инструкции и проксирование.',
+  'features/web-app.md': 'Telegram Mini App, публичные инструкции, проксирование и реферальные ссылки.',
+  'features/telegram-auth.md': 'Telegram Mini Apps initData, Telegram OAuth, BotFather и настройка входа через Telegram.',
+  'features/email-login.md': 'SMTP, одноразовые коды, magic link, парольный вход и привязка email-аккаунтов.',
   'features/webapp-themes.md': 'Кастомные темы, CSS-токены, ассеты и пайплайн создания темы.',
   'features/admin-panel.md': 'Возможности админ-панели, управление пользователями, настройками, тарифами и поддержкой.',
+  'features/backups.md': 'Автоматические бэкапы, отправка архивов в Telegram, локальное хранение и восстановление БД/compose-папки из админки.',
   'features/support.md': 'Пользовательские тикеты, список обращений в админке, уведомления и лимиты поддержки.',
   'migrations/index.md': 'Готовые сценарии миграции в Remnawave Minishop с других ботов.',
   'migrations/remnawave-tg-shop.md': 'Перенос данных со старого remnawave-tg-shop на split-архитектуру Minishop.',
@@ -97,8 +101,8 @@ function extraFrontmatter(sourceRelativePath) {
     '  image:',
     '    html: \'<img class="minishop-hero-screenshot" src="/remnawave-minishop.webp" alt="Интерфейс Remnawave Minishop" width="1920" height="1080" loading="eager" decoding="async" />\'',
     '  actions:',
-    '    - text: "Обзор"',
-    '      link: /getting-started/overview/',
+    '    - text: "Демо"',
+    '      link: /demo/home',
     '      icon: right-arrow',
     '    - text: "Установка"',
     '      link: /getting-started/setup/',

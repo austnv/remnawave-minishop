@@ -64,14 +64,16 @@ class MigrationDocumentationFactsTests(unittest.TestCase):
         missing = sorted(name for name in EXPECTED_CONTAINER_NAMES if name not in self.doc)
         self.assertFalse(
             missing,
-            f"migrations/remnawave-tg-shop.md is missing container names from current compose: {missing}",
+            "migrations/remnawave-tg-shop.md is missing container names "
+            f"from current compose: {missing}",
         )
 
     def test_doc_lists_every_volume_in_current_compose(self):
         missing = sorted(name for name in EXPECTED_VOLUME_NAMES if name not in self.doc)
         self.assertFalse(
             missing,
-            f"migrations/remnawave-tg-shop.md is missing volume names from current compose: {missing}",
+            "migrations/remnawave-tg-shop.md is missing volume names "
+            f"from current compose: {missing}",
         )
 
     def test_doc_warns_about_renamed_telegram_webhook_secret(self):
@@ -234,7 +236,8 @@ class DocComposeFileReferencesTests(unittest.TestCase):
                 self.assertIn(relpath, doc)
                 self.assertTrue(
                     (REPO_ROOT / relpath).is_file(),
-                    f"{relpath} is referenced in migrations/remnawave-tg-shop.md but missing on disk",
+                    f"{relpath} is referenced in migrations/remnawave-tg-shop.md "
+                    "but missing on disk",
                 )
 
     def test_doc_references_migrator_module_path(self):
