@@ -821,6 +821,7 @@
   "wa_method_other_title": "Другие способы",
   "wa_unlimited_traffic": "Безлимитный трафик",
   "wa_traffic_of": "{used} из {limit}",
+  "wa_traffic_depleted": "Трафик закончился",
   "wa_language_default": "Русский",
   "wa_telegram_not_linked": "Telegram не привязан",
   "wa_tg_id_not_linked": "TG ID не привязан",

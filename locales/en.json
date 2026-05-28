@@ -821,6 +821,7 @@
   "wa_method_other_title": "Other methods",
   "wa_unlimited_traffic": "Unlimited traffic",
   "wa_traffic_of": "{used} of {limit}",
+  "wa_traffic_depleted": "Traffic depleted",
   "wa_language_default": "English",
   "wa_telegram_not_linked": "Telegram not linked",
   "wa_tg_id_not_linked": "TG ID not linked",

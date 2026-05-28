@@ -337,6 +337,33 @@ a {
   cursor: pointer;
 }
 
+.traffic-card-depleted {
+  border-color: var(--danger-border);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--danger) 16%, var(--surface-sheen-soft)),
+      var(--surface-sheen-soft)
+    ),
+    var(--panel);
+}
+
+.traffic-card-depleted .traffic-top span,
+.traffic-card-depleted .traffic-top strong,
+.traffic-card-depleted .traffic-meta,
+.traffic-card-depleted .traffic-percent {
+  color: var(--danger-text);
+}
+
+.traffic-card-depleted .progress {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.traffic-card-depleted .progress span {
+  background: linear-gradient(90deg, var(--danger), color-mix(in srgb, var(--danger) 68%, white));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
 .card-click-target {
   position: absolute;
   z-index: 6;

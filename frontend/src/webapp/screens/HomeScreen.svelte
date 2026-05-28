@@ -51,6 +51,22 @@
   function trafficResetLabel(sub) {
     return trafficResetLabelFn(sub, t);
   }
+  function regularTrafficDepleted(sub = subscription) {
+    const used = Number(sub?.traffic_used_bytes || 0);
+    const limit = Number(sub?.traffic_limit_bytes || 0);
+    return limit > 0 && used >= limit;
+  }
+  function regularTrafficCardClass(sub = subscription) {
+    return [
+      regularTrafficTopupBarClickable ? "traffic-card-clickable" : "",
+      regularTrafficDepleted(sub) ? "traffic-card-depleted" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  function regularTrafficMetaLabel(sub = subscription) {
+    return regularTrafficDepleted(sub) ? t("wa_traffic_depleted") : trafficResetLabel(sub);
+  }
   function premiumTrafficPercent(sub) {
     return premiumTrafficPercentFn(sub);
   }
@@ -140,7 +156,7 @@
     </Card>
 
     {#if subscription.active}
-      <Card class={regularTrafficTopupBarClickable ? "traffic-card-clickable" : ""}>
+      <Card class={regularTrafficCardClass(subscription)}>
         {#if regularTrafficTopupBarClickable}
           <button
             class="card-click-target"
@@ -155,7 +171,7 @@
         </div>
         <LinearProgress value={trafficPercent(subscription)} label={t("wa_home_traffic_used")} />
         <div class="traffic-meta">
-          <span>{trafficResetLabel(subscription)}</span>
+          <span>{regularTrafficMetaLabel(subscription)}</span>
           <span class="traffic-percent">{trafficPercent(subscription)}%</span>
         </div>
       </Card>
