@@ -102,7 +102,7 @@ function extraFrontmatter(sourceRelativePath) {
     '    html: \'<img class="minishop-hero-screenshot" src="/remnawave-minishop.webp" alt="Интерфейс Remnawave Minishop" width="1920" height="1080" loading="eager" decoding="async" />\'',
     '  actions:',
     '    - text: "Демо"',
-    '      link: /demo/',
+    '      link: /demo/home',
     '      icon: right-arrow',
     '    - text: "Установка"',
     '      link: /getting-started/setup/',

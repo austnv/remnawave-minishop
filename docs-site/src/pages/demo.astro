@@ -1,5 +1,5 @@
 ---
-const defaultDemoSrc = '/demo/runtime/app.html?screen=home&mock=tariffs';
+const defaultDemoSrc = '/demo/runtime/app.html?path=/home&mock=tariffs';
 const docsHref = '/getting-started/demo/';
 ---
 
@@ -80,6 +80,43 @@ const docsHref = '/getting-started/demo/';
         line-height: 1.2;
       }
 
+      .demo-topbar__state {
+        display: flex;
+        flex: 0 1 24rem;
+        gap: 0.5rem;
+        align-items: center;
+        justify-content: flex-end;
+        min-width: 0;
+      }
+
+      .demo-topbar__state-label {
+        flex: 0 0 auto;
+        color: #94a3b8;
+        font-size: 0.78rem;
+        font-weight: 650;
+        line-height: 1;
+      }
+
+      .demo-topbar__state-select {
+        min-width: 13.25rem;
+        max-width: 100%;
+        border: 1px solid rgb(148 163 184 / 28%);
+        border-radius: 7px;
+        padding: 0.42rem 1.9rem 0.42rem 0.65rem;
+        background: rgb(15 23 42 / 82%);
+        color: #f8fafc;
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 650;
+        line-height: 1.2;
+      }
+
+      .demo-topbar__state-select:focus-visible {
+        outline: 2px solid rgb(0 254 122 / 72%);
+        outline-offset: 2px;
+      }
+
       .demo-topbar__back {
         flex: 0 0 auto;
         border: 1px solid rgb(0 254 122 / 45%);
@@ -158,6 +195,7 @@ const docsHref = '/getting-started/demo/';
 
         .demo-topbar__panel {
           display: flex;
+          flex-wrap: wrap;
           gap: 0.55rem;
           align-items: center;
           width: min(20rem, calc(100vw - 1.1rem));
@@ -180,6 +218,23 @@ const docsHref = '/getting-started/demo/';
           font-size: 0.78rem;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .demo-topbar__state {
+          flex: 1 1 100%;
+          order: 3;
+          width: 100%;
+          justify-content: stretch;
+        }
+
+        .demo-topbar__state-label {
+          display: none;
+        }
+
+        .demo-topbar__state-select {
+          width: 100%;
+          min-width: 0;
+          font-size: 0.78rem;
         }
 
         .demo-topbar__actions {
@@ -229,6 +284,18 @@ const docsHref = '/getting-started/demo/';
         <div class="demo-topbar__title">
           <strong>remnawave-minishop demo</strong>
         </div>
+        <label class="demo-topbar__state">
+          <span class="demo-topbar__state-label">Состояние</span>
+          <select class="demo-topbar__state-select" aria-label="Состояние личного кабинета">
+            <option value="tariffs">По умолчанию</option>
+            <option value="depleted">Трафик закончился</option>
+            <option value="no-subscription">Нет подписки</option>
+            <option value="trial">Доступна пробная подписка</option>
+            <option value="expiring">Подписка скоро закончится</option>
+            <option value="traffic">Продажа трафика</option>
+            <option value="devices">Лимит устройств</option>
+          </select>
+        </label>
         <div class="demo-topbar__actions">
           <a class="demo-topbar__back" href={docsHref}>К документации</a>
           <button class="demo-topbar__hide" type="button" aria-label="Скрыть панель">
@@ -244,24 +311,6 @@ const docsHref = '/getting-started/demo/';
       src={defaultDemoSrc}
       loading="eager"
     ></iframe>
-    <script is:inline>
-      const frame = document.getElementById('demo-frame');
-      const params = new URLSearchParams(window.location.search);
-      if (!params.has('screen')) params.set('screen', 'home');
-      if (!params.has('mock')) params.set('mock', 'tariffs');
-      frame.src = `/demo/runtime/app.html?${params.toString()}${window.location.hash || ''}`;
-
-      const topbar = document.querySelector('.demo-topbar');
-      const toggle = document.querySelector('.demo-topbar__toggle');
-      const hide = document.querySelector('.demo-topbar__hide');
-
-      const setCollapsed = (collapsed) => {
-        topbar.toggleAttribute('data-collapsed', collapsed);
-        toggle.setAttribute('aria-expanded', String(!collapsed));
-      };
-
-      toggle.addEventListener('click', () => setCollapsed(false));
-      hide.addEventListener('click', () => setCollapsed(true));
-    </script>
+    <script is:inline src="/demo/demo-shell.js"></script>
   </body>
 </html>

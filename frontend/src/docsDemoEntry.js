@@ -70,9 +70,19 @@ function prepareMockConfig() {
   copyThemeAssets(DEV_MOCK.data.themes_catalog);
 }
 
+function parentSearchParams() {
+  try {
+    if (window.parent === window) return null;
+    return new URLSearchParams(window.parent.location.search);
+  } catch (_error) {
+    return null;
+  }
+}
+
 async function bootstrap() {
   const params = new URLSearchParams(window.location.search);
-  applyPreviewMock(params.get("mock"));
+  const parentParams = parentSearchParams();
+  applyPreviewMock(params.get("mock") || parentParams?.get("mock"));
   prepareMockConfig();
   try {
     await loadInstallGuidesConfig();
