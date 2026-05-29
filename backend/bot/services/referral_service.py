@@ -33,6 +33,7 @@ class ReferralService:
         purchased_subscription_months: int,
         current_payment_db_id: Optional[int] = None,
         skip_if_active_before_payment: bool = True,
+        tariff_key: Optional[str] = None,
     ) -> Dict[str, Any]:
 
         referee_final_end_date: Optional[datetime] = None
@@ -94,11 +95,9 @@ class ReferralService:
                 else self.i18n.gettext(default_lang_for_placeholder, "friend_placeholder")
             )
 
-            inviter_bonus_days = self.settings.referral_bonus_inviter.get(
-                purchased_subscription_months
-            )
-            referee_bonus_days = self.settings.referral_bonus_referee.get(
-                purchased_subscription_months
+            inviter_bonus_days, referee_bonus_days = self._referral_bonus_days_for_payment(
+                purchased_subscription_months,
+                tariff_key=tariff_key,
             )
 
             if inviter_bonus_days and inviter_bonus_days > 0:
@@ -262,6 +261,35 @@ class ReferralService:
             )
 
             raise
+
+    def _referral_bonus_days_for_payment(
+        self,
+        purchased_subscription_months: int,
+        *,
+        tariff_key: Optional[str] = None,
+    ) -> tuple[Optional[int], Optional[int]]:
+        months = int(purchased_subscription_months)
+        tariffs_config = getattr(self.settings, "tariffs_config", None)
+        if tariff_key and tariffs_config:
+            try:
+                tariff = tariffs_config.require(str(tariff_key))
+            except Exception:
+                logging.warning(
+                    "Referral bonuses skipped: tariff %s was not found.",
+                    tariff_key,
+                )
+                return None, None
+            if tariff.billing_model != "period":
+                return None, None
+            return (
+                tariff.referral_inviter_bonus_days(months),
+                tariff.referral_referee_bonus_days(months),
+            )
+
+        return (
+            self.settings.referral_bonus_inviter.get(months),
+            self.settings.referral_bonus_referee.get(months),
+        )
 
     async def generate_referral_link(
         self, session: AsyncSession, bot_username: str, inviter_user_id: int

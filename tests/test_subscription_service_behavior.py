@@ -393,6 +393,65 @@ class SubscriptionServiceActivationDispatchTests(unittest.IsolatedAsyncioTestCas
             self.assertEqual(kwargs["payment_db_id"], 12)
 
 
+class SubscriptionServiceBonusExtensionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_referral_extension_preserves_existing_tariff_limit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings = _make_settings(
+                _tariffs_config_payload(),
+                tmpdir,
+                USER_TRAFFIC_LIMIT_GB=999,
+            )
+            service = _make_service(settings)
+            service._get_or_create_panel_user_link_details = AsyncMock(
+                return_value=("panel-user", "short-uuid", "short", False)
+            )
+            service.panel_service.update_user_details_on_panel = AsyncMock(
+                return_value={"ok": True}
+            )
+            active_sub = SimpleNamespace(
+                subscription_id=10,
+                end_date=datetime.now(timezone.utc) + timedelta(days=5),
+                traffic_limit_bytes=100 * GIB,
+                tariff_key="standard",
+            )
+            updated_sub = SimpleNamespace(
+                subscription_id=10,
+                end_date=active_sub.end_date + timedelta(days=3),
+                traffic_limit_bytes=100 * GIB,
+                tariff_key="standard",
+            )
+
+            with (
+                patch(
+                    "bot.services.subscription_service_impl.lifecycle.user_dal.get_user_by_id",
+                    AsyncMock(return_value=SimpleNamespace(user_id=42)),
+                ),
+                patch(
+                    "bot.services.subscription_service_impl.lifecycle.subscription_dal.get_active_subscription_by_user_id",
+                    AsyncMock(return_value=active_sub),
+                ),
+                patch(
+                    "bot.services.subscription_service_impl.lifecycle.subscription_dal.update_subscription_end_date",
+                    AsyncMock(return_value=updated_sub),
+                ),
+                patch(
+                    "bot.services.subscription_service_impl.lifecycle.subscription_dal.update_subscription",
+                    AsyncMock(),
+                ) as update_subscription,
+            ):
+                await service.extend_active_subscription_days(
+                    session=AsyncMock(),
+                    user_id=42,
+                    bonus_days=3,
+                    reason="referral bonus from Alice",
+                )
+
+            update_subscription.assert_not_awaited()
+            payload = service.panel_service.update_user_details_on_panel.await_args.args[1]
+            self.assertNotIn("trafficLimitBytes", payload)
+            self.assertNotIn("trafficLimitStrategy", payload)
+
+
 class SubscriptionServiceActiveDetailsTests(unittest.IsolatedAsyncioTestCase):
     def _local_active_sub(self) -> SimpleNamespace:
         return SimpleNamespace(

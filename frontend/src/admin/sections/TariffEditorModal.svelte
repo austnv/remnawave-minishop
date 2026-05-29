@@ -501,7 +501,13 @@
             <AdminButton
               size="sm"
               onclick={() =>
-                tariffsStore.addDraftRow("periodRows", { months: 1, rub: "", stars: "" })}
+                tariffsStore.addDraftRow("periodRows", {
+                  months: 1,
+                  rub: "",
+                  stars: "",
+                  referral_inviter: "",
+                  referral_referee: "",
+                })}
             >
               <Plus size={13} />
               {at("tariff_btn_period", {}, "Период")}
@@ -517,14 +523,16 @@
             </p>
           {:else}
             <div class="admin-row-editor">
-              <div class="admin-row-editor-line admin-row-editor-4 admin-row-editor-header">
+              <div class="admin-row-editor-line admin-row-editor-6 admin-row-editor-header">
                 <span>{at("tariff_col_period_months", {}, "Срок, мес.")}</span>
                 <span>{at("tariff_col_price_rub", {}, "Цена, ₽")}</span>
                 <span>{at("tariff_col_price_stars_full", {}, "Цена, ⭐ Stars")}</span>
+                <span>{at("tariff_col_ref_inviter", {}, "Бонус приглашающему")}</span>
+                <span>{at("tariff_col_ref_referee", {}, "Бонус приглашённому")}</span>
                 <span></span>
               </div>
               {#each tariffDraft.periodRows as row, index}
-                <div class="admin-row-editor-line admin-row-editor-4">
+                <div class="admin-row-editor-line admin-row-editor-6">
                   <input
                     class="input"
                     type="number"
@@ -550,6 +558,24 @@
                     placeholder="150"
                     bind:value={row.stars}
                     aria-label={at("tariff_label_price_stars", {}, "Цена в Telegram Stars")}
+                  />
+                  <input
+                    class="input"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="3"
+                    bind:value={row.referral_inviter}
+                    aria-label={at("tariff_label_ref_inviter", {}, "Бонус приглашающему")}
+                  />
+                  <input
+                    class="input"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="1"
+                    bind:value={row.referral_referee}
+                    aria-label={at("tariff_label_ref_referee", {}, "Бонус приглашённому")}
                   />
                   <AdminButton
                     size="sm"

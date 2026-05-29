@@ -66,6 +66,8 @@ ADMIN_TARIFF_SETTINGS_PAGE_KEYS = {
     "admin_tariffs_legacy_subtitle",
     "admin_tariffs_legacy_period",
     "admin_tariffs_legacy_enabled",
+    "admin_tariffs_legacy_ref_inviter",
+    "admin_tariffs_legacy_ref_referee",
     "admin_tariffs_legacy_traffic_packages",
     "admin_tariffs_legacy_stars_traffic_packages",
     "admin_tariffs_legacy_traffic_hint",

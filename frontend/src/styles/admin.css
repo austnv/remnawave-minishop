@@ -3274,7 +3274,9 @@
 
 .admin-legacy-tariff-row {
   display: grid;
-  grid-template-columns: minmax(72px, 0.7fr) minmax(92px, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(58px, 0.7fr) minmax(74px, 0.8fr) minmax(0, 1fr) minmax(0, 1fr)
+    minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -3391,6 +3393,12 @@
 
 .admin-row-editor-line.admin-row-editor-4 {
   grid-template-columns: minmax(80px, 0.8fr) minmax(100px, 1fr) minmax(100px, 1fr) 32px;
+}
+
+.admin-row-editor-line.admin-row-editor-6 {
+  grid-template-columns:
+    minmax(72px, 0.8fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(120px, 1fr)
+    minmax(120px, 1fr) 32px;
 }
 
 .admin-package-columns {
@@ -3568,7 +3576,8 @@
   .admin-form-row.admin-form-row-3,
   .admin-package-columns,
   .admin-row-editor-line,
-  .admin-row-editor-line.admin-row-editor-4 {
+  .admin-row-editor-line.admin-row-editor-4,
+  .admin-row-editor-line.admin-row-editor-6 {
     grid-template-columns: 1fr;
   }
 

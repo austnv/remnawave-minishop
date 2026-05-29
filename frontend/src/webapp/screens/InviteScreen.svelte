@@ -58,7 +58,7 @@
         {#if referralBonusDetails.length}
           <p class="referral-bonus-intro">{t("wa_referral_bonus_paid_intro")}</p>
         {/if}
-        {#each referralBonusDetails as bonus, index (bonus.months || index)}
+        {#each referralBonusDetails as bonus, index (bonus.id || `${bonus.tariff_key || "legacy"}:${bonus.months || index}`)}
           <div class="referral-bonus-row">
             <strong>{bonus.title || `${bonus.months || "?"}`}</strong>
             <small

@@ -156,12 +156,47 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
     }
 
 
-def _serialize_referral_bonus_details(settings: Settings, lang: str) -> List[Dict[str, Any]]:
+def _legacy_referral_bonus_periods(settings: Settings) -> List[int]:
     if getattr(settings, "traffic_sale_mode", False):
         return []
 
+    return sorted(int(months) for months in settings.subscription_options)
+
+
+def _serialize_tariff_referral_bonus_details(settings: Settings, lang: str) -> List[Dict[str, Any]]:
+    tariffs_config = settings.tariffs_config
+    if not tariffs_config:
+        return []
+
     details: List[Dict[str, Any]] = []
-    for months, _price in sorted(settings.subscription_options.items()):
+    for tariff in tariffs_config.enabled_tariffs:
+        if tariff.billing_model != "period":
+            continue
+        for months in sorted(int(month) for month in tariff.enabled_periods):
+            inviter_days = tariff.referral_inviter_bonus_days(months)
+            friend_days = tariff.referral_referee_bonus_days(months)
+            if inviter_days is None and friend_days is None:
+                continue
+            details.append(
+                {
+                    "id": f"{tariff.key}:{months}",
+                    "tariff_key": tariff.key,
+                    "tariff_name": tariff.name(lang),
+                    "months": int(months),
+                    "title": f"{tariff.name(lang)} - {_format_months_title(int(months), lang)}",
+                    "inviter_days": int(inviter_days or 0),
+                    "friend_days": int(friend_days or 0),
+                }
+            )
+    return details
+
+
+def _serialize_referral_bonus_details(settings: Settings, lang: str) -> List[Dict[str, Any]]:
+    if settings.tariffs_config:
+        return _serialize_tariff_referral_bonus_details(settings, lang)
+
+    details: List[Dict[str, Any]] = []
+    for months in _legacy_referral_bonus_periods(settings):
         inviter_days = settings.referral_bonus_inviter.get(months)
         friend_days = settings.referral_bonus_referee.get(months)
         if inviter_days is None and friend_days is None:

@@ -704,6 +704,9 @@ class SubscriptionLifecycleMixin:
         active_sub = await subscription_dal.get_active_subscription_by_user_id(
             session, user_id, panel_uuid
         )
+        preserve_tariff_limits = bool(
+            active_sub and active_sub.tariff_key and self._tariffs_config()
+        )
         if not active_sub or not active_sub.end_date:
             logging.info(
                 f"No active subscription found for user {user_id}. Creating new one for {bonus_days} days."  # noqa: E501
@@ -748,6 +751,7 @@ class SubscriptionLifecycleMixin:
 
             if (
                 apply_main_traffic_limit
+                and not preserve_tariff_limits
                 and updated_sub_model
                 and updated_sub_model.traffic_limit_bytes != self.settings.user_traffic_limit_bytes
             ):
@@ -762,7 +766,9 @@ class SubscriptionLifecycleMixin:
             panel_update_payload = self._build_panel_update_payload(
                 expire_at=new_end_date_obj,
                 traffic_limit_bytes=(
-                    self.settings.user_traffic_limit_bytes if apply_main_traffic_limit else None
+                    self.settings.user_traffic_limit_bytes
+                    if apply_main_traffic_limit and not preserve_tariff_limits
+                    else None
                 ),
                 include_uuid=False,
                 include_default_squads=False,

@@ -75,6 +75,9 @@ from .shared import (
 from .shared import (
     sale_mode_base as _sale_mode_base,
 )
+from .shared import (
+    sale_mode_tariff_key as _sale_mode_tariff_key,
+)
 
 
 class YooKassaConfig(ProviderEnvConfig):
@@ -749,6 +752,7 @@ async def process_successful_payment(
                 months_for_activation or int(subscription_months) or 1,
                 current_payment_db_id=payment_db_id,
                 skip_if_active_before_payment=False,
+                tariff_key=_sale_mode_tariff_key(sale_mode),
             )
         applied_referee_bonus_days_from_referral: Optional[int] = None
         if referral_bonus_info and referral_bonus_info.get("referee_new_end_date"):

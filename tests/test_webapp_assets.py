@@ -83,6 +83,98 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plans[1]["traffic_gb"], 50.0)
         self.assertEqual(plans[1]["stars_price"], 2500)
 
+    def test_referral_bonus_details_use_custom_tariff_periods(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "tariffs.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "default_tariff": "standard",
+                        "tariffs": [
+                            {
+                                "key": "standard",
+                                "names": {"en": "Standard"},
+                                "descriptions": {"en": "Custom periods"},
+                                "squad_uuids": ["uuid"],
+                                "billing_model": "period",
+                                "monthly_gb": 100,
+                                "prices_rub": {
+                                    "2": 400,
+                                    "4": 800,
+                                    "8": 1600,
+                                    "16": 3200,
+                                },
+                                "prices_stars": {},
+                                "referral_bonus_days_inviter": {
+                                    "2": 5,
+                                    "4": 10,
+                                    "16": 40,
+                                },
+                                "referral_bonus_days_referee": {
+                                    "2": 1,
+                                    "4": 2,
+                                    "8": 4,
+                                },
+                                "enabled_periods": [2, 4, 8, 16],
+                                "enabled": True,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = Settings(
+                _env_file=None,
+                BOT_TOKEN="token",
+                POSTGRES_USER="app_user",
+                POSTGRES_PASSWORD="app_password",
+                TARIFFS_CONFIG_PATH=str(path),
+            )
+
+            details = subscription_webapp._serialize_referral_bonus_details(settings, "en")
+
+        self.assertEqual(
+            details,
+            [
+                {
+                    "id": "standard:2",
+                    "tariff_key": "standard",
+                    "tariff_name": "Standard",
+                    "months": 2,
+                    "title": "Standard - 2 months",
+                    "inviter_days": 5,
+                    "friend_days": 1,
+                },
+                {
+                    "id": "standard:4",
+                    "tariff_key": "standard",
+                    "tariff_name": "Standard",
+                    "months": 4,
+                    "title": "Standard - 4 months",
+                    "inviter_days": 10,
+                    "friend_days": 2,
+                },
+                {
+                    "id": "standard:8",
+                    "tariff_key": "standard",
+                    "tariff_name": "Standard",
+                    "months": 8,
+                    "title": "Standard - 8 months",
+                    "inviter_days": 0,
+                    "friend_days": 4,
+                },
+                {
+                    "id": "standard:16",
+                    "tariff_key": "standard",
+                    "tariff_name": "Standard",
+                    "months": 16,
+                    "title": "Standard - 16 months",
+                    "inviter_days": 40,
+                    "friend_days": 0,
+                },
+            ],
+        )
+
     def test_subscription_template_does_not_block_on_telegram_sdk(self):
         html = subscription_webapp.TEMPLATE_PATH.read_text(encoding="utf-8")
 
@@ -653,6 +745,9 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             YOOKASSA_ENABLED=False,
             CRYPTOPAY_ENABLED=False,
             TARIFFS_CONFIG_PATH="missing-tariffs.json",
+            MONTH_3_ENABLED=False,
+            MONTH_6_ENABLED=False,
+            MONTH_12_ENABLED=False,
             RUB_PRICE_1_MONTH=None,
             STARS_PRICE_1_MONTH=250,
         )
