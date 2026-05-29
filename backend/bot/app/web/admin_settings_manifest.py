@@ -30,6 +30,11 @@ class SettingField:
     i18n_label_key: Optional[str] = None
     i18n_description_key: Optional[str] = None
     i18n_subsection_key: Optional[str] = None
+    webhook_path: Optional[str] = None
+    webhook_requires_base_url: bool = False
+    webhook_provider_id: Optional[str] = None
+    webhook_hint_i18n_key: Optional[str] = None
+    webhook_hint: str = ""
 
 
 SETTINGS_MANIFEST: List[SettingField] = [
@@ -84,44 +89,44 @@ SETTINGS_MANIFEST: List[SettingField] = [
     SettingField(
         "PANEL_API_URL",
         "url",
-        "general",
+        "remnawave",
         "URL API Remnawave",
         "Например, https://panel.example.com/api.",
-        subsection="Remnawave",
     ),
     SettingField(
         "PANEL_API_KEY",
         "string",
-        "general",
+        "remnawave",
         "API-ключ Remnawave",
         "Секретный ключ API панели.",
         secret=True,
-        subsection="Remnawave",
     ),
     SettingField(
         "PANEL_WEBHOOK_SECRET",
         "string",
-        "general",
+        "remnawave",
         "Секрет вебхуков Remnawave",
         "Используется для проверки входящих вебхуков панели.",
         secret=True,
-        subsection="Remnawave",
+        webhook_path="/webhook/panel",
+        webhook_requires_base_url=True,
+        webhook_provider_id="remnawave",
+        webhook_hint_i18n_key="admin_settings_panel_webhook_url_hint",
+        webhook_hint="Use this URL as WEBHOOK_URL in Remnawave Panel.",
     ),
     SettingField(
         "USER_SQUAD_UUIDS",
         "string",
-        "general",
+        "remnawave",
         "Internal Squads по умолчанию",
         "UUID через запятую для legacy-режима без JSON-каталога тарифов.",
-        subsection="Remnawave",
     ),
     SettingField(
         "USER_EXTERNAL_SQUAD_UUID",
         "string",
-        "general",
+        "remnawave",
         "External Squad по умолчанию",
         "Необязательный UUID External Squad для новых пользователей.",
-        subsection="Remnawave",
     ),
     # ─── Web app appearance ────────────────────────────────────────
     SettingField(
@@ -707,6 +712,7 @@ def manifest_payload() -> List[dict]:
     sections_order = {
         "general": 1,
         "appearance": 2,
+        "remnawave": 3,
         "pricing": 11,
         "payments": 4,
         "trial": 5,
@@ -773,6 +779,15 @@ def manifest_payload() -> List[dict]:
             item["default"] = default_value
         if webhook_metadata:
             item.update(webhook_metadata)
+        if field.webhook_path:
+            item["webhook_path"] = field.webhook_path
+            item["webhook_requires_base_url"] = field.webhook_requires_base_url
+            if field.webhook_provider_id:
+                item["provider_id"] = field.webhook_provider_id
+            if field.webhook_hint_i18n_key:
+                item["webhook_hint_i18n_key"] = field.webhook_hint_i18n_key
+            if field.webhook_hint:
+                item["webhook_hint"] = field.webhook_hint
         if field.choices:
             item["choices"] = [
                 {

@@ -198,6 +198,8 @@
       url,
       requiresBaseUrl: Boolean(field.webhook_requires_base_url),
       baseConfigured: field.webhook_base_url_configured !== false,
+      hintI18nKey: field.webhook_hint_i18n_key || "",
+      hintFallback: field.webhook_hint || "",
     };
   }
 
@@ -333,6 +335,7 @@
   function sectionTitle(id) {
     const map = {
       general: "Общие",
+      remnawave: "Remnawave Panel",
       appearance: "Внешний вид",
       pricing: "Тарифы и цены",
       payments: "Платёжные системы",
@@ -415,9 +418,9 @@
       <small>
         {webhook.url
           ? at(
-              "settings_provider_webhook_url_hint",
+              adminLocaleKey(webhook.hintI18nKey || "settings_provider_webhook_url_hint"),
               {},
-              "Use this URL in the provider webhook settings."
+              webhook.hintFallback || "Use this URL in the provider webhook settings."
             )
           : at(
               "settings_provider_webhook_base_missing",
