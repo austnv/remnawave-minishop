@@ -1,4 +1,5 @@
 <script>
+  import { ColorInput, FileInput, Input, Textarea } from "$components/ui/index.js";
   import {
     Check,
     ChevronRight,
@@ -515,13 +516,13 @@
           >
         </div>
       {:else if field.type === "color"}
-        <input
+        <ColorInput
           class="admin-color"
-          type="color"
           value={valueFor(field) || "#00fe7a"}
+          ariaLabel={fieldLabelText(field)}
           oninput={(e) => settingsStore.markDirty(field.key, e.currentTarget.value)}
         />
-        <input
+        <Input
           class="input"
           type="text"
           value={valueFor(field) || ""}
@@ -560,7 +561,7 @@
           onValueChange={(value) => settingsStore.markDirty(field.key, value)}
         />
       {:else if field.type === "int" || field.type === "float"}
-        <input
+        <Input
           class="input"
           type="number"
           step={field.type === "float" ? "0.1" : "1"}
@@ -571,19 +572,18 @@
           oninput={(e) => settingsStore.markDirty(field.key, e.currentTarget.value)}
         />
       {:else if field.type === "text"}
-        <textarea
+        <Textarea
           class="admin-setting-textarea"
           rows="4"
           placeholder={fieldPlaceholderText(field)}
           value={valueFor(field) ?? ""}
           oninput={(e) => settingsStore.markDirty(field.key, e.currentTarget.value)}
-        ></textarea>
+        />
       {:else if field.type === "json"}
         <div class="admin-json-toolbar">
-          <input
+          <FileInput
             id={"json-file-" + field.key}
             class="admin-json-file-input"
-            type="file"
             accept="application/json,.json"
             onchange={(event) => handleJsonFile(field, event)}
           />
@@ -605,16 +605,16 @@
             </AdminButton>
           {/if}
         </div>
-        <textarea
+        <Textarea
           class="admin-setting-textarea admin-setting-json-textarea"
           rows="10"
           spellcheck="false"
           placeholder={fieldPlaceholderText(field)}
           value={valueFor(field) ?? ""}
           oninput={(e) => settingsStore.markDirty(field.key, e.currentTarget.value)}
-        ></textarea>
+        />
       {:else if field.secret}
-        <input
+        <Input
           class="input"
           type={revealed ? "text" : "password"}
           placeholder={secretPlaceholder(field)}
@@ -631,7 +631,7 @@
           {#if revealed}<EyeOff size={13} />{:else}<Eye size={13} />{/if}
         </AdminButton>
       {:else}
-        <input
+        <Input
           class="input"
           type="text"
           placeholder={fieldPlaceholderText(field)}
@@ -816,7 +816,7 @@
     <div class="admin-icon-picker-toolbar">
       <label class="admin-icon-picker-search">
         <Search size={15} />
-        <input
+        <Input
           bind:value={iconPickerSearch}
           class="input"
           type="text"

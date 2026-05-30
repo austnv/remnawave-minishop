@@ -1,4 +1,5 @@
 <script>
+  import { Input } from "$components/ui/index.js";
   import {
     ChevronRight,
     RefreshCw,
@@ -403,7 +404,7 @@
                 <code>TRIAL_DURATION_DAYS</code>
               </div>
               <div class="admin-setting-control">
-                <input
+                <Input
                   class="input"
                   type="number"
                   min="0"
@@ -439,7 +440,7 @@
                 <code>TRIAL_TRAFFIC_LIMIT_GB</code>
               </div>
               <div class="admin-setting-control">
-                <input
+                <Input
                   class="input"
                   type="number"
                   min="0"
@@ -591,7 +592,7 @@
                     onValueChange={handleTrialSquadSelect}
                   />
                 {/key}
-                <input
+                <Input
                   class="input"
                   type="text"
                   placeholder={valueForKey("USER_SQUAD_UUIDS", settingsDirty, settingsFieldMap) ||
@@ -837,7 +838,7 @@
                     <Switch.Thumb class="admin-switch-thumb" />
                   </Switch.Root>
                 </div>
-                <input
+                <Input
                   class="input"
                   type="number"
                   min="0"
@@ -845,7 +846,7 @@
                   value={valueForKey(rubKey, settingsDirty, settingsFieldMap)}
                   oninput={(event) => setSetting(rubKey, event.currentTarget.value)}
                 />
-                <input
+                <Input
                   class="input"
                   type="number"
                   min="0"
@@ -853,7 +854,7 @@
                   value={valueForKey(starsKey, settingsDirty, settingsFieldMap)}
                   oninput={(event) => setSetting(starsKey, event.currentTarget.value)}
                 />
-                <input
+                <Input
                   class="input"
                   type="number"
                   min="0"
@@ -861,7 +862,7 @@
                   value={valueForKey(inviterKey, settingsDirty, settingsFieldMap)}
                   oninput={(event) => setSetting(inviterKey, event.currentTarget.value)}
                 />
-                <input
+                <Input
                   class="input"
                   type="number"
                   min="0"
@@ -877,7 +878,7 @@
             <label class="admin-field-label admin-field-label-compact">
               <span>{at("tariffs_legacy_traffic_packages", {}, "Traffic packages")}</span>
               <small>{at("tariffs_legacy_traffic_hint", {}, "Format: 10:199,50:799")}</small>
-              <input
+              <Input
                 class="input"
                 type="text"
                 value={valueForKey("TRAFFIC_PACKAGES", settingsDirty, settingsFieldMap)}
@@ -889,7 +890,7 @@
                 >{at("tariffs_legacy_stars_traffic_packages", {}, "Traffic packages, Stars")}</span
               >
               <small>{at("tariffs_legacy_traffic_hint", {}, "Format: 10:199,50:799")}</small>
-              <input
+              <Input
                 class="input"
                 type="text"
                 value={valueForKey("STARS_TRAFFIC_PACKAGES", settingsDirty, settingsFieldMap)}

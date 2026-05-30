@@ -4,7 +4,7 @@
   import { Check, ChevronsUpDown, LifeBuoy, MessageSquarePlus } from "$components/ui/icons.js";
   import Button from "$components/ui/button.svelte";
   import Card from "$components/ui/card.svelte";
-  import { Skeleton } from "$components/ui/index.js";
+  import { Input, Skeleton, Textarea } from "$components/ui/index.js";
   import { TicketCard } from "$components/patterns/webapp/index.js";
   import { Select, Tabs } from "$components/ui/primitives.js";
   import {
@@ -169,7 +169,7 @@
         <div class="support-create-panel-inner" in:fade={{ duration: 140 }}>
           <label class="support-field">
             <span>{t("wa_support_subject")}</span>
-            <input
+            <Input
               class="input"
               bind:value={subject}
               maxlength={maxSubjectLength}
@@ -255,13 +255,13 @@
 
           <label class="support-field">
             <span>{t("wa_support_message")}</span>
-            <textarea
+            <Textarea
               class="textarea support-message-input"
               bind:value={body}
               maxlength={maxBodyLength}
               rows="5"
               placeholder={t("wa_support_message_placeholder")}
-            ></textarea>
+            />
             <small>{body.length}/{maxBodyLength}</small>
           </label>
 

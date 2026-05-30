@@ -1,4 +1,5 @@
 <script>
+  import { Input } from "$components/ui/index.js";
   import { getContext, onMount } from "svelte";
   import {
     AdminButton,
@@ -31,7 +32,7 @@
 
 <div class="admin-toolbar admin-toolbar-card">
   <div class="admin-toolbar-search admin-toolbar-search-actions">
-    <input
+    <Input
       type="search"
       class="input"
       placeholder={at("logs_user_filter_placeholder", {}, "Фильтр по ID пользователя")}

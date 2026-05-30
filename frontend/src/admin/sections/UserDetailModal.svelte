@@ -1,6 +1,6 @@
 <script>
   import { Label, Separator, Tabs } from "$components/ui/primitives.js";
-  import { Checkbox } from "$components/ui/index.js";
+  import { Checkbox, Input, Textarea } from "$components/ui/index.js";
   import Dialog from "$components/ui/dialog.svelte";
   import {
     AdminBadge,
@@ -632,7 +632,7 @@
                 <Label.Root class="admin-field-label admin-extend-field">
                   <span>{at("user_label_extend", {}, "Продлить подписку")}</span>
                   <div class="admin-extend-control">
-                    <input
+                    <Input
                       class="input"
                       type="number"
                       min="1"
@@ -662,7 +662,7 @@
                       <span>{at("user_premium_override_bonus", {}, "Доп. премиум-трафик, GB")}</span
                       >
                       <small>{at("user_premium_override_bonus_hint", {}, "")}</small>
-                      <input
+                      <Input
                         class="input"
                         type="number"
                         min="0"
@@ -741,7 +741,7 @@
                         >{at("user_regular_override_bonus", {}, "Доп. основной трафик, GB")}</span
                       >
                       <small>{at("user_regular_override_bonus_hint", {}, "")}</small>
-                      <input
+                      <Input
                         class="input"
                         type="number"
                         min="0"
@@ -837,7 +837,7 @@
                     <Label.Root class="admin-field-label admin-extend-field">
                       <span>{at("user_traffic_grant_gb", {}, "ГБ к выдаче")}</span>
                       <div class="admin-extend-control">
-                        <input
+                        <Input
                           class="input"
                           type="number"
                           min="0"
@@ -869,12 +869,12 @@
                     "Поддерживается HTML-разметка Telegram"
                   )}</small
                 >
-                <textarea
+                <Textarea
                   class="admin-textarea"
                   rows="3"
                   placeholder={at("user_placeholder_msg", {}, "Текст сообщения")}
                   bind:value={$usersStore.userMessageDraft}
-                ></textarea>
+                />
               </Label.Root>
               <div class="admin-message-actions">
                 <AdminButton
