@@ -402,6 +402,38 @@ SETTINGS_MANIFEST: List[SettingField] = [
         "REFERRAL_WELCOME_BONUS_DAYS", "int", "referral", "Приветственный бонус (дней)", min=0
     ),
     SettingField("LEGACY_REFS", "bool", "referral", "Поддержка старых ref-ссылок"),
+    SettingField(
+        "MIGRATION_REMNASHOP_REFERRAL_CODE_COMPAT_ENABLED",
+        "bool",
+        "migrations",
+        "Старые ref-ссылки Remnashop",
+        "Принимать импортированные ref-коды Remnashop вместе с текущими кодами пользователей.",
+        subsection="Remnashop",
+    ),
+    SettingField(
+        "MIGRATION_REMNASHOP_PROMO_CODE_COMPAT_ENABLED",
+        "bool",
+        "migrations",
+        "Старые промокоды Remnashop",
+        "Пробовать точное совпадение промокода перед обычной uppercase-нормализацией.",
+        subsection="Remnashop",
+    ),
+    SettingField(
+        "MIGRATION_REMNASHOP_IMPORTED_AT",
+        "string",
+        "migrations",
+        "Последний импорт Remnashop",
+        "Заполняется скриптом импорта. Можно очистить, если отметка больше не нужна.",
+        subsection="Remnashop",
+    ),
+    SettingField(
+        "MIGRATION_REMNASHOP_NOTES",
+        "text",
+        "migrations",
+        "Заметки по миграции Remnashop",
+        "Внутренние заметки оператора по перенесенному инстансу.",
+        subsection="Remnashop",
+    ),
     # ─── Notifications ─────────────────────────────────────────────
     SettingField(
         "SUBSCRIPTION_NOTIFICATIONS_ENABLED",
@@ -734,6 +766,7 @@ def manifest_payload() -> List[dict]:
         "devices": 10,
         "subscription_guides": 10,
         "system": 12,
+        "migrations": 13,
     }
     exclusive_map = {
         key: opposite
