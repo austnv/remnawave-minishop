@@ -857,6 +857,29 @@ async def get_user_ids_without_active_subscription(session: AsyncSession) -> Lis
     return result.scalars().all()
 
 
+async def get_user_ids_without_any_subscription(session: AsyncSession) -> List[int]:
+    """Return non-banned user IDs who never had any subscription or trial.
+
+    These are users who registered but have no ``Subscription`` rows at all —
+    no active, no expired and no trial history. In other words, accounts that
+    signed up and never did anything.
+    """
+    any_sub = aliased(Subscription)
+
+    stmt = (
+        select(User.user_id)
+        .outerjoin(any_sub, any_sub.user_id == User.user_id)
+        .where(
+            and_(
+                User.is_banned == False,
+                any_sub.user_id.is_(None),
+            )
+        )
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
 def _expired_subscription_exists_for_user(now: datetime):
     expired_subs = aliased(Subscription)
     normalized_status = func.lower(func.coalesce(expired_subs.status_from_panel, ""))

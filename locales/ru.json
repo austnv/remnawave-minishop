@@ -1143,6 +1143,7 @@
   "admin_broadcast_target_active": "С подпиской",
   "admin_broadcast_target_inactive": "Без подписки",
   "admin_broadcast_target_expired": "С просроченной подпиской",
+  "admin_broadcast_target_never": "Без подписки и без истории",
   "admin_expired_at": "Истекла {date}",
   "admin_expired_badge": "Expired {date}",
   "admin_stats_error": "Не удалось загрузить статистику: {error}",

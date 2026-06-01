@@ -658,6 +658,12 @@ function demoApiResponse(path, cleanPath, options, context) {
   const params = queryParams(path);
 
   if (cleanPath === "/admin/stats") return clone(DEMO_DATASET.stats);
+  if (cleanPath === "/admin/broadcast/audience-counts") {
+    return {
+      ok: true,
+      counts: { all: 1280, active: 742, inactive: 538, expired: 311, never: 227 },
+    };
+  }
   if (cleanPath === "/admin/sync") return { ok: true, status: "queued" };
 
   if (cleanPath === "/admin/payments") {
