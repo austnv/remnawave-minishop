@@ -22,6 +22,19 @@ _INTERNAL_SQUAD_BULK_RE = re.compile(
 _LIVE_POST_ENDPOINTS = frozenset({"/system/tools/happ/encrypt"})
 _KNOWN_TRAFFIC_STRATEGIES = frozenset({"NO_RESET", "DAY", "WEEK", "MONTH"})
 
+# Constant path templates for intercepted endpoints. The logged path is rebuilt
+# from these literals (never from the raw endpoint) so user/squad UUIDs and any
+# other id-like segment can never reach the log as clear text.
+_USER_ACTION_TEMPLATES = {
+    "enable": "/users/<id>/actions/enable",
+    "disable": "/users/<id>/actions/disable",
+    "reset-traffic": "/users/<id>/actions/reset-traffic",
+}
+_SQUAD_BULK_TEMPLATES = {
+    "add-users": "/internal-squads/<id>/bulk-actions/add-users",
+    "remove-users": "/internal-squads/<id>/bulk-actions/remove-users",
+}
+
 # Panel payloads can carry proxy credentials (e.g. trojanPassword, ssPassword,
 # vless/vmess uuids) and PII (email, telegramId). Redact such values before they
 # reach the dry-run log so secrets are never written in clear text.
@@ -102,17 +115,61 @@ class PanelDryRunApiService(PanelApiService):
 
     @staticmethod
     def _safe_endpoint(endpoint: str) -> str:
-        """Mask opaque id-like segments so logged paths carry no private ids."""
-        return _ENDPOINT_ID_RE.sub("<id>", str(endpoint or ""))
+        """Rebuild the logged path from constant templates so no id leaks.
+
+        Intercepted endpoints are a known, finite set. Each is mapped to a literal
+        template; the raw endpoint (which may embed a user/squad UUID) is never
+        echoed into the log, only matched against. Unknown paths fall back to a
+        regex mask of id-like segments.
+        """
+        raw = str(endpoint or "")
+        if match := _USER_ACTION_RE.match(raw):
+            return _USER_ACTION_TEMPLATES.get(match.group("action"), "/users/<id>/actions/<action>")
+        if match := _INTERNAL_SQUAD_BULK_RE.match(raw):
+            return _SQUAD_BULK_TEMPLATES.get(
+                match.group("action"), "/internal-squads/<id>/bulk-actions/<action>"
+            )
+        if raw == "/users":
+            return "/users"
+        if raw.startswith("/users/"):
+            return "/users/<id>"
+        if raw.startswith("/internal-squads/"):
+            return "/internal-squads/<id>"
+        return _ENDPOINT_ID_RE.sub("<id>", raw)
+
+    @staticmethod
+    def _summarize_leaf(value: Any) -> Any:
+        """Reduce a scalar to a non-sensitive type token.
+
+        Leaf values can carry PII or proxy credentials, so the log never echoes
+        them — only their JSON type. ``None`` is kept so absent fields stay
+        distinguishable from present ones.
+        """
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return "<bool>"
+        if isinstance(value, int):
+            return "<int>"
+        if isinstance(value, float):
+            return "<float>"
+        if isinstance(value, str):
+            return "<str>"
+        return f"<{type(value).__name__}>"
 
     @classmethod
     def _redact(cls, value: Any, _depth: int = 0) -> Any:
-        """Recursively replace values under sensitive keys with a placeholder."""
+        """Recursively summarize values, keeping only keys and JSON shape.
+
+        Sensitive keys collapse to a placeholder and every scalar leaf is replaced
+        by a type token, so the resulting structure shows which fields a mutation
+        would touch without ever logging a field value.
+        """
         if _depth > 6:
             return "..."
         if isinstance(value, dict):
             return {
-                k: (
+                str(k): (
                     _REDACTED
                     if isinstance(k, str) and _SENSITIVE_KEY_RE.search(k)
                     else cls._redact(v, _depth + 1)
@@ -121,7 +178,7 @@ class PanelDryRunApiService(PanelApiService):
             }
         if isinstance(value, (list, tuple)):
             return [cls._redact(item, _depth + 1) for item in value]
-        return value
+        return cls._summarize_leaf(value)
 
     @classmethod
     def _payload_preview(cls, payload: Any) -> str:
