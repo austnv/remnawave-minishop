@@ -131,7 +131,11 @@ class PackageSet(RootModel[Dict[str, List[TrafficPackage]]]):
 
     @property
     def non_stars_currencies(self) -> List[str]:
-        return [currency for currency, packages in self.root.items() if currency != "stars" and packages]
+        return [
+            currency
+            for currency, packages in self.root.items()
+            if currency != "stars" and packages
+        ]
 
     def has_any(self) -> bool:
         return any(bool(packages) for packages in self.root.values())

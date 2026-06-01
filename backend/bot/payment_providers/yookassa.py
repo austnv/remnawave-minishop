@@ -895,7 +895,10 @@ async def process_successful_payment(
             i18n=i18n,
             user_id=user_id,
             amount=payment_value,
-            currency=amount_data.get("currency", default_payment_currency_code_for_settings(settings)),
+            currency=amount_data.get(
+                "currency",
+                default_payment_currency_code_for_settings(settings),
+            ),
             months_for_admin=int(subscription_months) if sale_mode_base == "subscription" else 0,
             traffic_gb_for_admin=(
                 traffic_amount_gb if is_traffic_sale_base(sale_mode_base) else None
@@ -2941,6 +2944,9 @@ SPEC = PaymentProviderSpec(
     presentation_class=YooKassaPresentation,
     manifest_fields=_CONFIG_MANIFEST + _PRESENTATION_MANIFEST,
     supported_currencies=("RUB",),
-    currency_support_note="YooKassa public payment API examples and limits are RUB-based; treat non-RUB as unsupported unless your YooKassa contract confirms otherwise.",
+    currency_support_note=(
+        "YooKassa public payment API examples and limits are RUB-based; "
+        "treat non-RUB as unsupported unless your YooKassa contract confirms otherwise."
+    ),
     currency_support_url="https://yookassa.ru/developers/payment-acceptance/integration-scenarios/smart-payment",
 )

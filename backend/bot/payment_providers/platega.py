@@ -823,7 +823,10 @@ SBP_SPEC = PaymentProviderSpec(
     manifest_fields=_CONFIG_MANIFEST
     + _platega_presentation_manifest("Platega", "CreditCard", "PLATEGA_SBP"),
     supported_currencies_resolver=lambda config: getattr(config, "SUPPORTED_CURRENCIES", "RUB"),
-    currency_support_note="Platega currencies are merchant/method-specific; configure the codes enabled for your account.",
+    currency_support_note=(
+        "Platega currencies are merchant/method-specific; configure the codes "
+        "enabled for your account."
+    ),
     currency_support_url="https://docs.platega.io/",
 )
 
@@ -851,7 +854,10 @@ CRYPTO_SPEC = PaymentProviderSpec(
     presentation_class=PlategaCryptoPresentation,
     manifest_fields=_platega_presentation_manifest("Platega", "Bitcoin", "PLATEGA_CRYPTO"),
     supported_currencies_resolver=lambda config: getattr(config, "SUPPORTED_CURRENCIES", "RUB"),
-    currency_support_note="Platega currencies are merchant/method-specific; configure the codes enabled for your account.",
+    currency_support_note=(
+        "Platega currencies are merchant/method-specific; configure the codes "
+        "enabled for your account."
+    ),
     currency_support_url="https://docs.platega.io/",
 )
 

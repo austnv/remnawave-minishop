@@ -894,6 +894,9 @@ SPEC = PaymentProviderSpec(
     supported_currencies_resolver=lambda config: getattr(
         config, "SUPPORTED_CURRENCIES", HELEKET_DEFAULT_SUPPORTED_CURRENCIES
     ),
-    currency_support_note="Heleket supports crypto and fiat invoice currencies, but exact availability can depend on service/account settings.",
+    currency_support_note=(
+        "Heleket supports crypto and fiat invoice currencies, but exact availability "
+        "can depend on service/account settings."
+    ),
     currency_support_url="https://doc.heleket.com/methods/payments/creating-invoice",
 )

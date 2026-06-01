@@ -640,6 +640,9 @@ SPEC = PaymentProviderSpec(
     presentation_class=CryptoPayPresentation,
     manifest_fields=_CONFIG_MANIFEST + _PRESENTATION_MANIFEST,
     supported_currencies_resolver=_cryptopay_supported_currencies,
-    currency_support_note="Crypto Pay supports different sets for fiat invoices and crypto invoices; CURRENCY_TYPE selects which set is active.",
+    currency_support_note=(
+        "Crypto Pay supports different sets for fiat invoices and crypto invoices; "
+        "CURRENCY_TYPE selects which set is active."
+    ),
     currency_support_url="https://help.crypt.bot/crypto-pay-api/",
 )

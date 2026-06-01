@@ -25,7 +25,10 @@ async def admin_tariffs_get_route(request: web.Request) -> web.Response:
                     "topup_packages_default": {"rub": [], "stars": []},
                     "tariffs": [],
                 },
-                "provider_currency_support": _provider_currency_support_payload(settings, request.app),
+                "provider_currency_support": _provider_currency_support_payload(
+                    settings,
+                    request.app,
+                ),
             }
         )
 
@@ -71,7 +74,10 @@ async def admin_tariffs_save_route(request: web.Request) -> web.Response:
     )
 
 
-def _provider_currency_support_payload(settings: Settings, app: web.Application) -> List[Dict[str, Any]]:
+def _provider_currency_support_payload(
+    settings: Settings,
+    app: web.Application,
+) -> List[Dict[str, Any]]:
     from bot.payment_providers import iter_provider_specs, resolve_provider_presentation
 
     default_currency = default_payment_currency_code_for_settings(settings)

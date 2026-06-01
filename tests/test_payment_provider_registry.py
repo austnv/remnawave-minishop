@@ -258,7 +258,10 @@ def test_payment_method_keyboard_filters_providers_by_payment_currency(monkeypat
     )
 
     callbacks = [
-        button.callback_data for row in markup.inline_keyboard for button in row if button.callback_data
+        button.callback_data
+        for row in markup.inline_keyboard
+        for button in row
+        if button.callback_data
     ]
     assert "pay_wata:1:10:subscription" in callbacks
     assert all(not callback.startswith("pay_yk:") for callback in callbacks)

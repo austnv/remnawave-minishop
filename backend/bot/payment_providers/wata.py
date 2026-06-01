@@ -1207,6 +1207,9 @@ SPEC = PaymentProviderSpec(
     presentation_class=WataPresentation,
     manifest_fields=_CONFIG_MANIFEST + _PRESENTATION_MANIFEST,
     supported_currencies=WATA_SUPPORTED_CURRENCIES,
-    currency_support_note="WATA H2H payment links and widget document RUB, USD and EUR as payment currencies.",
+    currency_support_note=(
+        "WATA H2H payment links and widget document RUB, USD and EUR as "
+        "payment currencies."
+    ),
     currency_support_url="https://wata.pro/api",
 )
