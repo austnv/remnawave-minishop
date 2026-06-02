@@ -41,6 +41,67 @@ from db.models import User
 router = Router(name="user_start_router")
 
 
+def _remnashop_referral_compat_enabled(settings: Settings) -> bool:
+    return bool(getattr(settings, "MIGRATION_REMNASHOP_REFERRAL_CODE_COMPAT_ENABLED", False))
+
+
+def _referral_code_lookup_candidates(
+    raw_ref_value: str,
+    *,
+    remnashop_compat: bool,
+) -> list[str]:
+    value = str(raw_ref_value or "").strip()
+    if not value:
+        return []
+
+    candidates = [value]
+    if value and value[0].lower() == "u":
+        stripped_current_prefix = value[1:]
+        if remnashop_compat:
+            candidates.append(stripped_current_prefix)
+        else:
+            candidates = [stripped_current_prefix]
+
+    unique: list[str] = []
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if candidate and candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+async def _resolve_referrer_from_start_ref(
+    session: AsyncSession,
+    raw_ref_value: str,
+    *,
+    settings: Settings,
+    current_user_id: int,
+) -> Optional[int]:
+    ref_user: Optional[User] = None
+    if raw_ref_value.isdigit() and settings.LEGACY_REFS:
+        potential_referrer_id = int(raw_ref_value)
+        if potential_referrer_id != current_user_id:
+            ref_user = await user_dal.get_user_by_id(session, potential_referrer_id)
+
+    include_legacy = _remnashop_referral_compat_enabled(settings)
+    if not ref_user:
+        for code in _referral_code_lookup_candidates(
+            raw_ref_value,
+            remnashop_compat=include_legacy,
+        ):
+            ref_user = await user_dal.get_user_by_referral_code(
+                session,
+                code,
+                include_legacy=include_legacy,
+            )
+            if ref_user:
+                break
+
+    if ref_user and ref_user.user_id != current_user_id:
+        return int(ref_user.user_id)
+    return None
+
+
 async def should_show_trial_button(
     settings: Settings,
     subscription_service: SubscriptionService,
@@ -412,14 +473,10 @@ async def ensure_required_channel_subscription(
 
 
 @router.message(CommandStart())
+@router.message(CommandStart(magic=F.args.regexp(r"^ref_([A-Za-z0-9_-]{1,64})$").as_("ref_match")))
 @router.message(
-    CommandStart(
-        magic=F.args.regexp(r"^ref_((?:[uU][A-Za-z0-9]{9})|(?:[A-Za-z0-9]{9})|\d+)$").as_(
-            "ref_match"
-        )
-    )
+    CommandStart(magic=F.args.regexp(r"^promo_([A-Za-z0-9_-]{1,100})$").as_("promo_match"))
 )
-@router.message(CommandStart(magic=F.args.regexp(r"^promo_(\w+)$").as_("promo_match")))
 @router.message(CommandStart(magic=F.args.regexp(r"^admin_user_(\d+)$").as_("admin_user_match")))
 @router.message(CommandStart(magic=F.args.regexp(r"^ticket_(\d+)$").as_("ticket_match")))
 @router.message(CommandStart(magic=F.args.regexp(r"^notifications$").as_("notifications_match")))
@@ -536,22 +593,12 @@ async def start_command_handler(
 
     if ref_match:
         raw_ref_value = ref_match.group(1)
-        if raw_ref_value.isdigit():
-            if settings.LEGACY_REFS:
-                potential_referrer_id = int(raw_ref_value)
-                if potential_referrer_id != user_id and await user_dal.get_user_by_id(
-                    session, potential_referrer_id
-                ):
-                    referred_by_user_id = potential_referrer_id
-        else:
-            normalized_code = raw_ref_value.strip()
-            if normalized_code and normalized_code[0].lower() == "u":
-                normalized_code = normalized_code[1:]
-            ref_user = None
-            if normalized_code:
-                ref_user = await user_dal.get_user_by_referral_code(session, normalized_code)
-            if ref_user and ref_user.user_id != user_id:
-                referred_by_user_id = ref_user.user_id
+        referred_by_user_id = await _resolve_referrer_from_start_ref(
+            session,
+            raw_ref_value,
+            settings=settings,
+            current_user_id=user_id,
+        )
     elif promo_match:
         promo_code_to_apply = promo_match.group(1)
         logging.info(f"User {user_id} started with promo code: {promo_code_to_apply}")

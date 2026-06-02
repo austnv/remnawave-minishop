@@ -713,6 +713,7 @@ async def email_auth_verify_route(request: web.Request) -> web.Response:
                     session,
                     referral_param,
                     current_user_id=None,
+                    settings=settings,
                 )
                 db_user, _ = await user_dal.create_email_user(
                     session,
@@ -821,6 +822,7 @@ async def email_auth_magic_route(request: web.Request) -> web.Response:
                     session,
                     referral_param,
                     current_user_id=None,
+                    settings=settings,
                 )
                 db_user, _ = await user_dal.create_email_user(
                     session,
@@ -1292,17 +1294,35 @@ async def _link_telegram_to_user(
     return current_user
 
 
-def _normalize_referral_param(raw: Optional[str]) -> Optional[str]:
+def _remnashop_referral_compat_enabled(settings: Optional[Settings]) -> bool:
+    if settings is None:
+        return False
+    return bool(getattr(settings, "MIGRATION_REMNASHOP_REFERRAL_CODE_COMPAT_ENABLED", False))
+
+
+def _strip_referral_param_prefix(
+    raw: Optional[str],
+    *,
+    preserve_current_u_prefix: bool,
+) -> str:
     value = (raw or "").strip()
     if not value:
-        return None
+        return ""
 
     value_lower = value.lower()
-    if value_lower.startswith("ref_u"):
+    if value_lower.startswith("ref_u") and not preserve_current_u_prefix:
         value = value[5:]
     elif value_lower.startswith("ref_"):
         value = value[4:]
-    elif value and value[0].lower() == "u" and len(value) == 10:
+    return value
+
+
+def _normalize_referral_param(raw: Optional[str]) -> Optional[str]:
+    value = _strip_referral_param_prefix(raw, preserve_current_u_prefix=False)
+    if not value:
+        return None
+
+    if value and value[0].lower() == "u" and len(value) == 10:
         value = value[1:]
 
     if not re.fullmatch(r"[A-Za-z0-9]{1,32}", value):
@@ -1310,26 +1330,64 @@ def _normalize_referral_param(raw: Optional[str]) -> Optional[str]:
     return value.upper()
 
 
+def _referral_param_lookup_candidates(
+    raw: Optional[str],
+    *,
+    remnashop_compat: bool,
+) -> List[str]:
+    if not remnashop_compat:
+        normalized = _normalize_referral_param(raw)
+        return [normalized] if normalized else []
+
+    value = _strip_referral_param_prefix(raw, preserve_current_u_prefix=True)
+    if not value or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", value):
+        return []
+
+    candidates = [value]
+    if value and value[0].lower() == "u":
+        candidates.append(value[1:])
+
+    unique: List[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
 async def _resolve_referrer_id(
     session: AsyncSession,
     raw_referral_param: Optional[str],
     *,
     current_user_id: Optional[int],
+    settings: Optional[Settings] = None,
 ) -> Optional[int]:
-    normalized = _normalize_referral_param(raw_referral_param)
-    if not normalized:
+    remnashop_compat = _remnashop_referral_compat_enabled(settings)
+    candidates = _referral_param_lookup_candidates(
+        raw_referral_param,
+        remnashop_compat=remnashop_compat,
+    )
+    if not candidates:
         return None
 
-    ref_user = None
-    if normalized.isdigit():
-        ref_user = await user_dal.get_user_by_id(session, int(normalized))
-    if not ref_user:
-        ref_user = await user_dal.get_user_by_referral_code(session, normalized)
-    if not ref_user:
-        return None
-    if current_user_id is not None and int(ref_user.user_id) == int(current_user_id):
-        return None
-    return int(ref_user.user_id)
+    for normalized in candidates:
+        ref_user = None
+        if normalized.isdigit() and not remnashop_compat:
+            ref_user = await user_dal.get_user_by_id(session, int(normalized))
+        if not ref_user:
+            ref_user = await user_dal.get_user_by_referral_code(
+                session,
+                normalized,
+                include_legacy=remnashop_compat,
+            )
+        if not ref_user and normalized.isdigit() and remnashop_compat:
+            ref_user = await user_dal.get_user_by_id(session, int(normalized))
+        if not ref_user:
+            continue
+        if current_user_id is not None and int(ref_user.user_id) == int(current_user_id):
+            continue
+        return int(ref_user.user_id)
+
+    return None
 
 
 async def _apply_referral_to_existing_user(
@@ -1345,6 +1403,7 @@ async def _apply_referral_to_existing_user(
         session,
         raw_referral_param,
         current_user_id=int(user.user_id),
+        settings=request.app["settings"],
     )
     if not referred_by_id:
         return False
@@ -1427,6 +1486,7 @@ async def _ensure_user_from_telegram(
             session,
             referral_param or telegram_user.get("start_param"),
             current_user_id=user_id,
+            settings=settings,
         )
         db_user, created = await user_dal.create_user(
             session,

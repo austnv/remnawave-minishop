@@ -1070,6 +1070,79 @@ def _migration_0033_add_trial_eligibility_reset_marker(connection: Connection) -
         )
 
 
+def _migration_0034_add_legacy_import_compatibility(connection: Connection) -> None:
+    inspector = inspect(connection)
+    table_names = set(inspector.get_table_names())
+
+    if "users" in table_names:
+        columns = {col["name"]: col for col in inspector.get_columns("users")}
+        referral_column = columns.get("referral_code")
+        length = getattr(referral_column.get("type"), "length", None) if referral_column else None
+        if referral_column and (length is None or int(length) < 64):
+            connection.execute(
+                text("ALTER TABLE users ALTER COLUMN referral_code TYPE VARCHAR(64)")
+            )
+
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS legacy_referral_codes (
+                legacy_code_id SERIAL PRIMARY KEY,
+                source VARCHAR(64) NOT NULL DEFAULT 'remnashop',
+                code VARCHAR(128) NOT NULL,
+                user_id BIGINT NOT NULL REFERENCES users(user_id),
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NULL,
+                CONSTRAINT uq_legacy_referral_source_code UNIQUE (source, code)
+            )
+            """
+        )
+    )
+    for stmt in [
+        (
+            "CREATE INDEX IF NOT EXISTS ix_legacy_referral_codes_source "
+            "ON legacy_referral_codes (source)"
+        ),
+        "CREATE INDEX IF NOT EXISTS ix_legacy_referral_codes_code ON legacy_referral_codes (code)",
+        (
+            "CREATE INDEX IF NOT EXISTS ix_legacy_referral_codes_user_id "
+            "ON legacy_referral_codes (user_id)"
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_legacy_referral_codes_is_active "
+            "ON legacy_referral_codes (is_active)"
+        ),
+    ]:
+        connection.execute(text(stmt))
+
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS legacy_import_mappings (
+                source VARCHAR(64) NOT NULL,
+                entity_type VARCHAR(64) NOT NULL,
+                source_id VARCHAR(128) NOT NULL,
+                target_table VARCHAR(128) NOT NULL,
+                target_id VARCHAR(128) NOT NULL,
+                metadata_json TEXT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NULL,
+                PRIMARY KEY (source, entity_type, source_id)
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_legacy_import_mappings_target
+            ON legacy_import_mappings (target_table, target_id)
+            """
+        )
+    )
+
+
 MIGRATIONS: List[Migration] = [
     Migration(
         id="0001_add_channel_subscription_fields",
@@ -1246,6 +1319,11 @@ MIGRATIONS: List[Migration] = [
         id="0033_add_trial_eligibility_reset_marker",
         description="Track admin resets of per-user trial eligibility without deleting history",
         upgrade=_migration_0033_add_trial_eligibility_reset_marker,
+    ),
+    Migration(
+        id="0034_add_legacy_import_compatibility",
+        description="Store legacy import mappings and referral codes for source-bot migrations",
+        upgrade=_migration_0034_add_legacy_import_compatibility,
     ),
 ]
 

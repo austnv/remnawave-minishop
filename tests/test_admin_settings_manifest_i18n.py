@@ -44,6 +44,13 @@ BACKUP_SETTINGS = (
     "BACKUP_COMPOSE_ENABLED",
 )
 
+REMNASHOP_MIGRATION_SETTINGS = (
+    "MIGRATION_REMNASHOP_REFERRAL_CODE_COMPAT_ENABLED",
+    "MIGRATION_REMNASHOP_PROMO_CODE_COMPAT_ENABLED",
+    "MIGRATION_REMNASHOP_IMPORTED_AT",
+    "MIGRATION_REMNASHOP_NOTES",
+)
+
 ADMIN_TARIFF_SETTINGS_PAGE_KEYS = {
     "admin_tariffs_trial_title",
     "admin_tariffs_trial_subtitle",
@@ -199,6 +206,27 @@ def test_backup_settings_i18n_keys_exist():
 
         assert "admin_settings_section_backups" in messages
         for setting_key in BACKUP_SETTINGS:
+            field = manifest[setting_key]
+            assert field["i18n_label_key"] in messages
+            assert field["i18n_description_key"] in messages
+
+
+def test_remnashop_migration_settings_i18n_keys_exist():
+    manifest = _manifest_by_key()
+
+    for setting_key in REMNASHOP_MIGRATION_SETTINGS:
+        field = manifest[setting_key]
+        assert field["section"] == "migrations"
+        assert field["section_order"] == 13
+        assert field["subsection"] == "Remnashop"
+        assert field["i18n_subsection_key"] == "admin_settings_subsection_remnashop"
+
+    for language in ("ru", "en"):
+        messages = _locale(language)
+
+        assert "admin_settings_section_migrations" in messages
+        assert "admin_settings_subsection_remnashop" in messages
+        for setting_key in REMNASHOP_MIGRATION_SETTINGS:
             field = manifest[setting_key]
             assert field["i18n_label_key"] in messages
             assert field["i18n_description_key"] in messages

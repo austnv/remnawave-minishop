@@ -571,9 +571,7 @@
                   {#each openedUserDetail.subscriptions.slice(0, 8) as sub}
                     <div class="admin-mini-list-row">
                       <div>
-                        <strong
-                          >{subscriptionDisplayLabel(sub)}</strong
-                        >
+                        <strong>{subscriptionDisplayLabel(sub)}</strong>
                         <small
                           >{at(
                             "user_history_until",

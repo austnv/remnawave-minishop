@@ -290,6 +290,24 @@ class Settings(BaseSettings):
         default=True,
         description="Allow legacy referral links like ref_<telegram_id> to continue working. Defaults to True when unset.",  # noqa: E501
     )
+    MIGRATION_REMNASHOP_REFERRAL_CODE_COMPAT_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Accept referral links imported from snoups/remnashop via legacy_referral_codes."
+        ),
+    )
+    MIGRATION_REMNASHOP_PROMO_CODE_COMPAT_ENABLED: bool = Field(
+        default=False,
+        description="Try exact legacy Remnashop promo codes before uppercase normalization.",
+    )
+    MIGRATION_REMNASHOP_IMPORTED_AT: Optional[str] = Field(
+        default=None,
+        description="Timestamp of the latest Remnashop import run, managed by the import script.",
+    )
+    MIGRATION_REMNASHOP_NOTES: Optional[str] = Field(
+        default=None,
+        description="Operator notes for instances migrated from Remnashop.",
+    )
 
     APP_RUNTIME_MODE: str = Field(
         default="production",
