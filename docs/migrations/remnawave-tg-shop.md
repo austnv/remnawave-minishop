@@ -15,7 +15,7 @@ sh install.sh
 ```
 
 В меню выберите `Install new stack and run legacy migration` или
-`Run legacy migration only`, затем источник `Legacy remnawave-tg-shop`.
+`Run legacy migration only`, затем источник `Old remnawave-tg-shop`.
 Wizard поддерживает два режима:
 
 - `Copy old Docker volumes` - тот же безопасный сценарий, что и старый

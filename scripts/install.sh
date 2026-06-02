@@ -1,16 +1,13 @@
 #!/bin/sh
 set -u
 
-# Dependency-light installer for fresh Linux hosts.
-# It intentionally avoids Python and clones only the files selected by the user.
+# Interactive installer for fresh Docker Compose hosts.
 
 DEFAULT_REPO="${MINISHOP_INSTALL_REPO:-3252a8/remnawave-minishop}"
 DEFAULT_REF="${MINISHOP_INSTALL_REF:-main}"
 DEFAULT_IMAGE_TAG="${MINISHOP_IMAGE_TAG:-latest}"
 INSTALL_STATE_DIR=".installer"
 IMPORTER_CACHE_PATH="$INSTALL_STATE_DIR/import_legacy.py"
-APP_UID=10001
-APP_GID=10001
 OLD_TGSHOP_DB_VOLUME="remnawave-tg-shop-db-data"
 NEW_MINISHOP_DB_VOLUME="remnawave-minishop-db-data"
 OLD_TGSHOP_CADDY_DATA_VOLUME="remnawave-tg-shop-caddy-data"
@@ -85,7 +82,7 @@ banner() {
     printf '\n'
     color "Remnawave MiniShop Install Wizard" "$BOLD$CYAN"
     printf '\n'
-    color "Install, configure, start, and migrate legacy bot data." "$DIM"
+    color "Install, configure, start, and migrate existing bot data." "$DIM"
     printf '\n\n'
 }
 
@@ -132,8 +129,8 @@ Environment overrides:
   LEGACY_TGSHOP_SOURCE_DSN default remnawave-tg-shop source DSN for dump/restore
 
 The wizard is interactive by design. It never overwrites files without
-confirmation. Remnashop imports always run dry-run first; legacy
-remnawave-tg-shop can be migrated from Docker volumes or a PostgreSQL DSN.
+confirmation. Remnashop imports always run dry-run first; remnawave-tg-shop
+can be migrated from Docker volumes or a PostgreSQL DSN.
 EOF
 }
 
@@ -638,21 +635,6 @@ write_env_file() {
     ok "Wrote $ENV_PATH"
 }
 
-prepare_data_directory() {
-    section "Prepare data directory"
-    data_dir="$TARGET_DIR/data"
-    mkdir -p "$data_dir/themes" "$data_dir/webapp-logo" "$data_dir/webapp-emoji" "$data_dir/backups"
-    if [ ! -f "$data_dir/locales-overrides.json" ]; then
-        printf '{}\n' > "$data_dir/locales-overrides.json"
-    fi
-    if command -v chown >/dev/null 2>&1; then
-        if ! chown -R "$APP_UID:$APP_GID" "$data_dir" 2>/dev/null; then
-            warn "Could not chown data files. Run: sudo chown -R $APP_UID:$APP_GID data"
-        fi
-    fi
-    ok "Prepared $data_dir"
-}
-
 require_docker() {
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
         COMPOSE_STYLE="docker"
@@ -742,7 +724,7 @@ copy_volume_if_safe() {
         if [ "$required" = "1" ]; then
             warn "Target volume $target_volume is already not empty."
             warn "It may already be migrated, or the target stack may have been started with an empty database."
-            if confirm "Continue without copying the legacy database volume?" 0; then
+            if confirm "Continue without copying the old database volume?" 0; then
                 return 0
             fi
             return 1
@@ -762,7 +744,7 @@ copy_volume_if_safe() {
 }
 
 stop_known_legacy_containers() {
-    section "Stop legacy containers"
+    section "Stop old containers"
     stopped=0
     for container in $KNOWN_LEGACY_CONTAINERS; do
         if docker inspect "$container" >/dev/null 2>&1; then
@@ -775,7 +757,7 @@ stop_known_legacy_containers() {
         fi
     done
     if [ "$stopped" = "0" ]; then
-        info "No known legacy containers found."
+        info "No known old containers found."
     fi
 }
 
@@ -847,7 +829,7 @@ run_import_command() {
 choose_legacy_source() {
     choose "Source bot" "1" "1|2|3" \
         "1. Remnashop - import users, subscriptions, payments, referrals and promo codes." \
-        "2. Legacy remnawave-tg-shop - upgrade an old compatible database/volume." \
+        "2. Old remnawave-tg-shop - upgrade an old compatible database/volume." \
         "3. Skip migration"
     case "$CHOICE_VALUE" in
         1) LEGACY_SOURCE="remnashop" ;;
@@ -941,7 +923,7 @@ prepare_compose_without_starting_apps() {
 }
 
 run_tgshop_volume_migration() {
-    section "Legacy remnawave-tg-shop volume migration"
+    section "Old remnawave-tg-shop volume migration"
     warn "This path copies the old PostgreSQL Docker volume into the new Minishop volume."
     warn "Old volumes are not deleted; keep them until you verify the new stack."
 
@@ -964,7 +946,7 @@ run_tgshop_volume_migration() {
 }
 
 run_tgshop_dsn_migration() {
-    section "Legacy remnawave-tg-shop DSN migration"
+    section "Old remnawave-tg-shop DSN migration"
     warn "The old standalone helper did not support direct DSN import."
     warn "This wizard path dumps the old PostgreSQL database, restores it into target Compose PostgreSQL, then runs Minishop schema migrations."
     warn "The target database will be dropped and recreated before restore."
@@ -992,7 +974,7 @@ run_tgshop_dsn_migration() {
     (cd "$TARGET_DIR" && run_compose exec -T postgres sh -c \
         'dropdb -U "$POSTGRES_USER" --if-exists "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"') || return 1
 
-    section "Dump and restore legacy database"
+    section "Dump and restore old database"
     (cd "$TARGET_DIR" && run_compose run --rm --no-deps \
         -e "SOURCE_DSN=$SOURCE_DSN" \
         -e "TARGET_DSN=$TARGET_DSN" \
@@ -1006,7 +988,7 @@ run_tgshop_dsn_migration() {
 }
 
 run_remnawave_tg_shop_migration() {
-    section "Legacy remnawave-tg-shop migration"
+    section "Old remnawave-tg-shop migration"
     ENV_PATH="$TARGET_DIR/.env"
     if [ ! -f "$ENV_PATH" ]; then
         fail ".env not found. Install or generate configuration first."
@@ -1067,10 +1049,9 @@ install_flow() {
     download_profile_files || return 1
     write_env_file || return 1
     mkdir -p "$TARGET_DIR/$INSTALL_STATE_DIR"
-    prepare_data_directory || return 1
     if [ "$with_migration" = "1" ]; then
         choose_legacy_source
-    elif confirm "Run a legacy bot migration now?" 0; then
+    elif confirm "Run a migration from another bot now?" 0; then
         choose_legacy_source
     fi
 

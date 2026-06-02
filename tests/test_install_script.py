@@ -43,7 +43,7 @@ def test_shell_installer_downloads_raw_files_and_runs_import_in_container():
 def test_shell_installer_supports_legacy_tgshop_volume_and_dsn_paths():
     script = INSTALL_SCRIPT.read_text(encoding="utf-8")
 
-    assert "Legacy remnawave-tg-shop" in script
+    assert "Old remnawave-tg-shop" in script
     assert "remnawave-tg-shop-db-data" in script
     assert "remnawave-minishop-db-data" in script
     assert "pg_dump --clean --if-exists" in script
