@@ -24,16 +24,61 @@ sh install.sh
 Данные, которые не имеют прямого аналога, сохраняются в служебных таблицах миграции или
 message logs как заметки, чтобы администратор мог проверить их после переноса.
 
+## Настройки и платежные провайдеры
+
+Если указать старый Remnashop `.env`, importer дополнительно переносит часть
+настроек в админские overrides:
+
+- `REMNAWAVE_HOST` -> `PANEL_API_URL`;
+- `REMNAWAVE_TOKEN` -> `PANEL_API_KEY`;
+- `REMNAWAVE_WEBHOOK_SECRET` -> `PANEL_WEBHOOK_SECRET`;
+- `BOT_SUPPORT_USERNAME` -> `SUPPORT_LINK`;
+- `APP_DEFAULT_LOCALE` -> `DEFAULT_LANGUAGE`;
+- `BOT_MINI_APP` -> `SUBSCRIPTION_MINI_APP_URL`, если там уже HTTPS URL.
+
+Платежные провайдеры берутся из таблицы Remnashop `payment_gateways`.
+Поддерживаются и автоматически маппятся: Telegram Stars, YooKassa, WATA,
+CryptoPay, Heleket, FreeKassa и Platega. Для них importer переносит флаги
+включения, API-ключи/merchant IDs и доступные provider-specific параметры в
+раздел настроек админки.
+
+Провайдеры YooMoney, Cryptomus, MulenPay, PayMaster, RoboKassa и UrlPay сейчас
+не имеют прямого аналога в Minishop. Если они были в Remnashop, importer
+оставит предупреждение в JSON-сводке и notes миграции, а настроить их нужно
+вручную или через будущий отдельный provider.
+
+Remnashop может хранить секреты в формате `enc_...`. Для расшифровки нужен
+старый `APP_CRYPT_KEY`; проще всего указать путь к старому `.env` в wizard или
+передать `--source-env-file`. Если ключ не передан или неверный, зашифрованные
+значения будут пропущены с предупреждением, остальные данные продолжат
+импортироваться.
+
+После успешного применения wizard печатает список новых адресов webhook. Их
+нужно указать во внешних сервисах вместо старых Remnashop URL:
+
+- Remnawave Panel -> `WEBHOOK_URL`: `WEBHOOK_BASE_URL` + `/webhook/panel`;
+- YooKassa HTTP notifications URL: `WEBHOOK_BASE_URL` + `/webhook/yookassa`;
+- WATA webhook/callback URL: `WEBHOOK_BASE_URL` + `/webhook/wata`;
+- CryptoBot/Crypto Pay webhook URL: `WEBHOOK_BASE_URL` + `/webhook/cryptopay`;
+- Heleket payment webhook/callback URL: `WEBHOOK_BASE_URL` + `/webhook/heleket`;
+- FreeKassa notification/result URL: `WEBHOOK_BASE_URL` + `/webhook/freekassa`;
+- Platega webhook URL: `WEBHOOK_BASE_URL` + `/webhook/platega`;
+- Telegram webhook `WEBHOOK_BASE_URL` + `/tg/webhook` выставляется ботом
+  автоматически при старте.
+
 ## Flow wizard
 
 1. Wizard скачивает compose-профиль и `backend/scripts/import_legacy.py` через
    `raw.githubusercontent.com`, без клонирования репозитория.
 2. Вы указываете source PostgreSQL DSN Remnashop и schema, обычно `public`.
-3. Вы выбираете целевую БД: текущую compose-БД или ручной target DSN.
-4. При необходимости указываете JSON map тарифов Remnashop в локальные
+3. Опционально указываете путь к старому Remnashop `.env` для `APP_CRYPT_KEY`,
+   Remnawave API settings и переносимых payment/provider settings.
+4. Вы выбираете целевую БД: текущую compose-БД или ручной target DSN.
+5. При необходимости указываете JSON map тарифов Remnashop в локальные
    `tariff_key`, например `{"basic": "standard_month"}`.
-5. Wizard запускает `dry-run` и показывает JSON-сводку.
-6. После подтверждения `y` importer применяет изменения и перезапускает
+6. Wizard запускает `dry-run` и показывает JSON-сводку.
+7. После подтверждения `y` importer применяет изменения, печатает список новых
+   webhook URL для Remnawave Panel и платежных провайдеров, затем перезапускает
    `backend`/`worker`, чтобы настройки совместимости перечитались.
 
 Если source DB находится на том же Docker host, помните, что DSN выполняется
@@ -51,6 +96,7 @@ docker compose run --rm backend \
     --source-type remnashop \
     --source-dsn 'postgresql://old_user:old_password@old_host:5432/remnashop' \
     --source-schema public \
+    --source-env-file /path/to/remnashop/.env \
     --dry-run
 ```
 

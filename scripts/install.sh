@@ -47,6 +47,7 @@ COMPOSE_STYLE=""
 PROMPT_VALUE=""
 CHOICE_VALUE=""
 LEGACY_SOURCE=""
+SOURCE_ENV_PATH=""
 
 COMPOSE_PROJECT_NAME_VALUE=""
 IMAGE_TAG_VALUE=""
@@ -128,6 +129,7 @@ Environment overrides:
   MINISHOP_INSTALL_REF    default ref ($DEFAULT_REF)
   MINISHOP_IMAGE_TAG      default image tag ($DEFAULT_IMAGE_TAG)
   REMNASHOP_SOURCE_DSN    default source DSN for migration
+  REMNASHOP_SOURCE_ENV_FILE default source Remnashop .env path for migration
   LEGACY_TGSHOP_SOURCE_DSN default remnawave-tg-shop source DSN for dump/restore
 
 The wizard is interactive by design. It never overwrites files without
@@ -838,10 +840,52 @@ local_target_dsn() {
     printf 'postgresql://%s:%s@postgres:5432/%s' "$POSTGRES_USER_VALUE" "$POSTGRES_PASSWORD_VALUE" "$POSTGRES_DB_VALUE"
 }
 
+target_webhook_base_url() {
+    public_url=$(env_get WEBHOOK_PUBLIC_URL "")
+    if [ -n "$public_url" ]; then
+        printf '%s' "$public_url" | sed 's:/*$::'
+        return 0
+    fi
+    host=$(env_get WEBHOOK_HOST "")
+    if [ -n "$host" ]; then
+        printf 'https://%s' "$host" | sed 's:/*$::'
+        return 0
+    fi
+    printf ''
+}
+
+remnashop_webhook_checklist() {
+    section "Update external webhooks"
+    base_url=$(target_webhook_base_url)
+    if [ -z "$base_url" ]; then
+        warn "Could not determine webhook base URL from .env. Set WEBHOOK_HOST or WEBHOOK_PUBLIC_URL, then use WEBHOOK_BASE_URL + paths below."
+        base_url="WEBHOOK_BASE_URL"
+    fi
+
+    info "Set these URLs in external dashboards after the migration:"
+    printf '  Remnawave Panel -> WEBHOOK_URL: %s/webhook/panel\n' "$base_url"
+    panel_secret=$(env_get PANEL_WEBHOOK_SECRET "")
+    if [ -n "$panel_secret" ]; then
+        printf '  Remnawave Panel -> webhook secret: %s\n' "$(mask_secret "$panel_secret")"
+    else
+        warn "PANEL_WEBHOOK_SECRET is empty; set it in Minishop and in Remnawave Panel."
+    fi
+    printf '  YooKassa merchant cabinet -> HTTP notifications URL: %s/webhook/yookassa\n' "$base_url"
+    printf '  WATA merchant dashboard -> webhook/callback URL: %s/webhook/wata\n' "$base_url"
+    printf '  CryptoBot/Crypto Pay app -> webhook URL: %s/webhook/cryptopay\n' "$base_url"
+    printf '  Heleket merchant dashboard -> payment webhook/callback URL: %s/webhook/heleket\n' "$base_url"
+    printf '  FreeKassa shop settings -> notification/result URL: %s/webhook/freekassa\n' "$base_url"
+    printf '  Platega merchant/project settings -> webhook URL: %s/webhook/platega\n' "$base_url"
+    printf '  Telegram webhook: %s/tg/webhook (configured automatically on bot startup)\n' "$base_url"
+}
+
 run_import_command() {
     dry="$1"
     set -- run --rm \
         -v "$IMPORTER_PATH:/app/backend/scripts/import_legacy.py:ro"
+    if [ -n "$SOURCE_ENV_PATH" ]; then
+        set -- "$@" -v "$SOURCE_ENV_PATH:/tmp/remnashop.env:ro"
+    fi
     if [ -n "$TARIFF_MAP_PATH" ]; then
         set -- "$@" -v "$TARIFF_MAP_PATH:/tmp/tariff-map.json:ro"
     fi
@@ -850,6 +894,9 @@ run_import_command() {
         --source-dsn "$SOURCE_DSN" \
         --source-schema "$SOURCE_SCHEMA" \
         --target-dsn "$TARGET_DSN"
+    if [ -n "$SOURCE_ENV_PATH" ]; then
+        set -- "$@" --source-env-file /tmp/remnashop.env
+    fi
     if [ -n "$TARIFF_MAP_PATH" ]; then
         set -- "$@" --tariff-map-json /tmp/tariff-map.json
     fi
@@ -861,7 +908,7 @@ run_import_command() {
 
 choose_legacy_source() {
     choose "Source bot" "1" "1|2|3" \
-        "1. Remnashop - import users, subscriptions, payments, referrals and promo codes." \
+        "1. Remnashop - import users, subscriptions, payments, provider settings and promo codes." \
         "2. Old remnawave-tg-shop - upgrade an old compatible database/volume." \
         "3. Skip migration"
     case "$CHOICE_VALUE" in
@@ -895,6 +942,20 @@ run_remnashop_migration() {
     SOURCE_DSN="$PROMPT_VALUE"
     prompt_value "Source schema" "public" 1 0 ""
     SOURCE_SCHEMA="$PROMPT_VALUE"
+    prompt_value "Optional source Remnashop .env path (empty to skip)" "${REMNASHOP_SOURCE_ENV_FILE:-}" 0 0 ""
+    SOURCE_ENV_PATH="$PROMPT_VALUE"
+    if [ -n "$SOURCE_ENV_PATH" ]; then
+        source_env_dir=$(dirname "$SOURCE_ENV_PATH")
+        if [ ! -d "$source_env_dir" ]; then
+            fail "Source .env directory not found: $source_env_dir"
+            return 1
+        fi
+        SOURCE_ENV_PATH=$(cd "$source_env_dir" && pwd)/$(basename "$SOURCE_ENV_PATH")
+        if [ ! -f "$SOURCE_ENV_PATH" ]; then
+            fail "Source Remnashop .env not found: $SOURCE_ENV_PATH"
+            return 1
+        fi
+    fi
 
     choose "Target database" "1" "1|2" \
         "1. This Docker Compose stack database (recommended)" \
@@ -936,6 +997,7 @@ run_remnashop_migration() {
 
     section "Apply import"
     run_import_command 0 || return 1
+    remnashop_webhook_checklist
     if confirm "Restart backend and worker so setting overrides are reloaded?" 1; then
         (cd "$TARGET_DIR" && run_compose restart backend worker) || true
     fi

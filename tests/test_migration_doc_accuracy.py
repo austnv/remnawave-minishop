@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOC_PATH = REPO_ROOT / "docs" / "migrations" / "remnawave-tg-shop.md"
+REMNASHOP_DOC_PATH = REPO_ROOT / "docs" / "migrations" / "remnashop.md"
 INSTALL_SCRIPT_PATH = REPO_ROOT / "scripts" / "install.sh"
 REMOVED_SCRIPT_PATH = REPO_ROOT / "scripts" / "migrate_to_minishop.sh"
 COMPOSE_FILES = (
@@ -183,6 +184,31 @@ class DocComposeFileReferencesTests(unittest.TestCase):
         doc = _read(DOC_PATH)
         self.assertIn("backend/db/migrator.py", doc)
         self.assertTrue((REPO_ROOT / "backend" / "db" / "migrator.py").is_file())
+
+
+class RemnashopMigrationDocumentationFactsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.doc = _read(REMNASHOP_DOC_PATH)
+
+    def test_doc_mentions_env_payment_gateways_and_encrypted_secrets(self):
+        self.assertIn("--source-env-file", self.doc)
+        self.assertIn("APP_CRYPT_KEY", self.doc)
+        self.assertIn("payment_gateways", self.doc)
+        self.assertIn("enc_", self.doc)
+
+    def test_doc_lists_new_webhook_paths_after_migration(self):
+        for path in (
+            "/webhook/panel",
+            "/webhook/yookassa",
+            "/webhook/wata",
+            "/webhook/cryptopay",
+            "/webhook/heleket",
+            "/webhook/freekassa",
+            "/webhook/platega",
+            "/tg/webhook",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, self.doc)
 
 
 class MigrationFootprintRegexTests(unittest.TestCase):

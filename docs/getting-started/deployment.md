@@ -42,7 +42,11 @@ sh install.sh
 ```
 
 Миграция Remnashop в wizard сначала запускает `dry-run`, показывает JSON-сводку
-и только после отдельного подтверждения применяет изменения в целевую БД.
+и только после отдельного подтверждения применяет изменения в целевую БД. Если
+указать старый Remnashop `.env`, wizard передаст importer-у `APP_CRYPT_KEY`,
+Remnawave API settings и поддерживаемые payment provider settings из таблицы
+`payment_gateways`. После применения wizard печатает новые webhook URL для
+Remnawave Panel и платежных провайдеров.
 Миграция со старого `remnawave-tg-shop` работает как upgrade совместимой БД:
 либо копирует старый Docker volume, либо делает `pg_dump` по source DSN,
 восстанавливает дамп в целевую compose-БД и запускает сервис `migrate`.

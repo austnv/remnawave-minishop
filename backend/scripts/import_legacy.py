@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import re
+import shlex
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -53,13 +54,47 @@ from db.models import (  # noqa: E402
     User,
 )
 
+try:  # cryptography is already used by the app for payment webhook validation.
+    from cryptography.fernet import Fernet
+except Exception:  # pragma: no cover - defensive fallback for minimal tooling.
+    Fernet = None  # type: ignore[assignment]
+
 SOURCE = "remnashop"
+REMNASHOP_ENCRYPTED_PREFIX = "enc_"
 GIB = 1024**3
 UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
 )
 SAFE_SCHEMA_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+REMNASHOP_PAYMENT_WEBHOOK_PATH = "/api/v1/payments/{gateway}"
+REMNASHOP_PANEL_WEBHOOK_PATH = "/api/v1/remnawave"
+
+SUPPORTED_REMNASHOP_PROVIDER_TYPES = {
+    "TELEGRAM_STARS",
+    "YOOKASSA",
+    "HELEKET",
+    "CRYPTOPAY",
+    "FREEKASSA",
+    "PLATEGA",
+    "WATA",
+}
+UNSUPPORTED_REMNASHOP_PROVIDER_TYPES = {
+    "YOOMONEY",
+    "CRYPTOMUS",
+    "MULENPAY",
+    "PAYMASTER",
+    "ROBOKASSA",
+    "URLPAY",
+}
+PAYMENT_WEBHOOK_PATHS = {
+    "yookassa": "/webhook/yookassa",
+    "wata": "/webhook/wata",
+    "cryptopay": "/webhook/cryptopay",
+    "heleket": "/webhook/heleket",
+    "freekassa": "/webhook/freekassa",
+    "platega": "/webhook/platega",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +193,365 @@ def _jsonish(value: Any) -> dict[str, Any]:
             return {}
         return decoded if isinstance(decoded, dict) else {}
     return {}
+
+
+def _strip_env_value(value: str) -> str:
+    lexer = shlex.shlex(value, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return value.strip().strip("\"'")
+    return " ".join(tokens).strip()
+
+
+def parse_remnashop_env_text(text_value: str) -> dict[str, str]:
+    env: dict[str, str] = {}
+    for raw_line in str(text_value or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+            continue
+        env[key] = _strip_env_value(value)
+    return env
+
+
+def read_remnashop_env_file(path: Optional[str]) -> dict[str, str]:
+    if not path:
+        return {}
+    return parse_remnashop_env_text(Path(path).read_text(encoding="utf-8"))
+
+
+def _clean_url(value: Any) -> Optional[str]:
+    text_value = str(value or "").strip().rstrip("/")
+    return text_value or None
+
+
+def _remnashop_panel_api_url(value: Any) -> Optional[str]:
+    host = _clean_url(value)
+    if not host:
+        return None
+    if "://" not in host:
+        if "." in host:
+            host = f"https://{host}"
+        else:
+            host = f"http://{host}:3000"
+    if not host.rstrip("/").endswith("/api"):
+        host = f"{host.rstrip('/')}/api"
+    return host
+
+
+def _source_public_base_from_env(env: dict[str, str]) -> Optional[str]:
+    domain = _clean_url(env.get("APP_DOMAIN"))
+    if not domain:
+        return None
+    if "://" not in domain:
+        domain = f"https://{domain}"
+    return domain
+
+
+def _support_link_from_username(value: Any) -> Optional[str]:
+    username = str(value or "").strip().lstrip("@")
+    if not username:
+        return None
+    return f"https://t.me/{username}"
+
+
+def _mini_app_url_from_env(value: Any) -> Optional[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.lower() in {"true", "false", "0", "1"}:
+        return None
+    return raw if raw.startswith("https://") else None
+
+
+def _add_override(overrides: dict[str, Any], key: str, value: Any) -> None:
+    if value is None:
+        return
+    if isinstance(value, str) and not value.strip():
+        return
+    overrides[key] = value
+
+
+def remnashop_env_overrides(env: dict[str, str]) -> dict[str, Any]:
+    overrides: dict[str, Any] = {}
+    _add_override(overrides, "PANEL_API_URL", _remnashop_panel_api_url(env.get("REMNAWAVE_HOST")))
+    _add_override(overrides, "PANEL_API_KEY", env.get("REMNAWAVE_TOKEN"))
+    _add_override(overrides, "PANEL_WEBHOOK_SECRET", env.get("REMNAWAVE_WEBHOOK_SECRET"))
+    _add_override(
+        overrides,
+        "SUPPORT_LINK",
+        _support_link_from_username(env.get("BOT_SUPPORT_USERNAME")),
+    )
+    _add_override(overrides, "DEFAULT_LANGUAGE", env.get("APP_DEFAULT_LOCALE"))
+    _add_override(
+        overrides,
+        "SUBSCRIPTION_MINI_APP_URL",
+        _mini_app_url_from_env(env.get("BOT_MINI_APP")),
+    )
+    return overrides
+
+
+def remnashop_source_urls_from_env(env: dict[str, str]) -> dict[str, str]:
+    base = _source_public_base_from_env(env)
+    if not base:
+        return {}
+    return {
+        "telegram": f"{base}/api/v1/telegram",
+        "remnawave_panel": f"{base}{REMNASHOP_PANEL_WEBHOOK_PATH}",
+        "payments": f"{base}/api/v1/payments/<gateway>",
+    }
+
+
+def _normalize_gateway_type(value: Any) -> str:
+    if hasattr(value, "value"):
+        value = value.value
+    text_value = str(value or "").strip().upper()
+    if "." in text_value:
+        text_value = text_value.rsplit(".", 1)[-1]
+    return re.sub(r"[^A-Z0-9_]+", "_", text_value).strip("_")
+
+
+def _normalize_currency(value: Any) -> Optional[str]:
+    text_value = str(value or "").strip().upper()
+    if "." in text_value:
+        text_value = text_value.rsplit(".", 1)[-1]
+    aliases = {"RUR": "RUB", "STARS": "XTR", "STAR": "XTR"}
+    normalized = aliases.get(text_value, text_value)
+    return normalized or None
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "active"}
+
+
+def _is_encrypted_remnashop_value(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith(REMNASHOP_ENCRYPTED_PREFIX)
+
+
+def remnashop_decrypt_value(value: Any, crypt_key: Optional[str]) -> tuple[Any, bool]:
+    if not _is_encrypted_remnashop_value(value):
+        return value, False
+    if not crypt_key or Fernet is None:
+        return None, True
+    try:
+        token = str(value).removeprefix(REMNASHOP_ENCRYPTED_PREFIX).encode()
+        return Fernet(crypt_key.encode()).decrypt(token).decode(), False
+    except Exception:
+        return None, True
+
+
+def remnashop_decrypt_recursive(
+    value: Any,
+    crypt_key: Optional[str],
+    *,
+    skipped_paths: Optional[list[str]] = None,
+    path: str = "",
+) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: remnashop_decrypt_recursive(
+                item,
+                crypt_key,
+                skipped_paths=skipped_paths,
+                path=f"{path}.{key}" if path else str(key),
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            remnashop_decrypt_recursive(
+                item,
+                crypt_key,
+                skipped_paths=skipped_paths,
+                path=f"{path}[{index}]",
+            )
+            for index, item in enumerate(value)
+        ]
+    decrypted, skipped = remnashop_decrypt_value(value, crypt_key)
+    if skipped and skipped_paths is not None:
+        skipped_paths.append(path or "<value>")
+    return decrypted
+
+
+def _provider_mapping_result(
+    gateway_type: str,
+    provider_ids: Iterable[str],
+    overrides: dict[str, Any],
+    warnings: Optional[list[str]] = None,
+) -> dict[str, Any]:
+    return {
+        "source_type": gateway_type,
+        "provider_ids": [provider for provider in provider_ids if provider],
+        "overrides": overrides,
+        "warnings": warnings or [],
+        "supported": True,
+    }
+
+
+def remnashop_payment_gateway_overrides(
+    row: dict[str, Any],
+    *,
+    crypt_key: Optional[str] = None,
+) -> dict[str, Any]:
+    gateway_type = _normalize_gateway_type(row.get("type"))
+    if gateway_type not in SUPPORTED_REMNASHOP_PROVIDER_TYPES:
+        return {
+            "source_type": gateway_type,
+            "provider_ids": [],
+            "overrides": {},
+            "warnings": [],
+            "supported": False,
+        }
+
+    skipped_secret_paths: list[str] = []
+    settings = remnashop_decrypt_recursive(
+        _jsonish(row.get("settings")),
+        crypt_key,
+        skipped_paths=skipped_secret_paths,
+    )
+    active = _truthy(row.get("is_active"))
+    currency = _normalize_currency(row.get("currency"))
+    overrides: dict[str, Any] = {}
+    warnings = [
+        (
+            f"Skipped encrypted Remnashop {gateway_type} setting '{path}': "
+            "APP_CRYPT_KEY is missing or invalid"
+        )
+        for path in skipped_secret_paths
+    ]
+
+    if gateway_type == "TELEGRAM_STARS":
+        _add_override(overrides, "STARS_ENABLED", active)
+        return _provider_mapping_result(gateway_type, ["stars"], overrides, warnings)
+
+    if gateway_type == "YOOKASSA":
+        _add_override(overrides, "YOOKASSA_ENABLED", active)
+        _add_override(overrides, "YOOKASSA_SHOP_ID", settings.get("shop_id"))
+        _add_override(overrides, "YOOKASSA_SECRET_KEY", settings.get("api_key"))
+        _add_override(overrides, "YOOKASSA_DEFAULT_RECEIPT_EMAIL", settings.get("customer"))
+        _add_override(overrides, "YOOKASSA_VAT_CODE", settings.get("vat_code"))
+        if currency and currency != "RUB":
+            warnings.append(
+                f"YooKassa supports RUB only in this shop; source currency was {currency}"
+            )
+        return _provider_mapping_result(gateway_type, ["yookassa"], overrides, warnings)
+
+    if gateway_type == "WATA":
+        _add_override(overrides, "WATA_ENABLED", active)
+        _add_override(overrides, "WATA_API_TOKEN", settings.get("api_key"))
+        return _provider_mapping_result(gateway_type, ["wata"], overrides, warnings)
+
+    if gateway_type == "CRYPTOPAY":
+        _add_override(overrides, "CRYPTOPAY_ENABLED", active)
+        _add_override(overrides, "CRYPTOPAY_TOKEN", settings.get("api_key"))
+        if currency:
+            _add_override(overrides, "CRYPTOPAY_ASSET", currency)
+        return _provider_mapping_result(gateway_type, ["cryptopay"], overrides, warnings)
+
+    if gateway_type == "HELEKET":
+        _add_override(overrides, "HELEKET_ENABLED", active)
+        _add_override(overrides, "HELEKET_MERCHANT_ID", settings.get("merchant_id"))
+        _add_override(overrides, "HELEKET_API_KEY", settings.get("api_key"))
+        if currency:
+            _add_override(overrides, "HELEKET_CURRENCY", currency)
+            _add_override(overrides, "HELEKET_SUPPORTED_CURRENCIES", currency)
+        return _provider_mapping_result(gateway_type, ["heleket"], overrides, warnings)
+
+    if gateway_type == "FREEKASSA":
+        _add_override(overrides, "FREEKASSA_ENABLED", active)
+        _add_override(overrides, "FREEKASSA_MERCHANT_ID", settings.get("shop_id"))
+        _add_override(overrides, "FREEKASSA_API_KEY", settings.get("api_key"))
+        _add_override(overrides, "FREEKASSA_SECOND_SECRET", settings.get("secret_word_2"))
+        _add_override(overrides, "FREEKASSA_PAYMENT_METHOD_ID", settings.get("payment_system_id"))
+        _add_override(overrides, "FREEKASSA_PAYMENT_IP", settings.get("customer_ip"))
+        if settings.get("customer_email"):
+            warnings.append(
+                "FreeKassa customer_email was captured by Remnashop but is not a "
+                "Minishop provider setting"
+            )
+        return _provider_mapping_result(gateway_type, ["freekassa"], overrides, warnings)
+
+    if gateway_type == "PLATEGA":
+        _add_override(overrides, "PLATEGA_ENABLED", active)
+        _add_override(overrides, "PLATEGA_SBP_ENABLED", active)
+        _add_override(overrides, "PLATEGA_MERCHANT_ID", settings.get("merchant_id"))
+        _add_override(overrides, "PLATEGA_SECRET", settings.get("api_key"))
+        _add_override(overrides, "PLATEGA_PAYMENT_METHOD", settings.get("payment_method"))
+        _add_override(overrides, "PLATEGA_SBP_METHOD", settings.get("payment_method"))
+        if currency:
+            _add_override(overrides, "PLATEGA_SUPPORTED_CURRENCIES", currency)
+        return _provider_mapping_result(gateway_type, ["platega_sbp"], overrides, warnings)
+
+    return _provider_mapping_result(gateway_type, [], overrides, warnings)
+
+
+def _target_webhook_url(base_url: Optional[str], path: str) -> Optional[str]:
+    base = _clean_url(base_url)
+    if not base:
+        return None
+    return f"{base}{path if path.startswith('/') else '/' + path}"
+
+
+def remnashop_post_migration_actions(
+    *,
+    target_webhook_base_url: Optional[str],
+    imported_provider_ids: Iterable[str],
+    source_env: Optional[dict[str, str]] = None,
+) -> dict[str, Any]:
+    provider_ids = list(dict.fromkeys(imported_provider_ids))
+    payment_actions = []
+    seen_paths: set[str] = set()
+    for provider_id in provider_ids:
+        path = PAYMENT_WEBHOOK_PATHS.get(provider_id)
+        if not path or path in seen_paths:
+            continue
+        seen_paths.add(path)
+        payment_actions.append(
+            {
+                "provider": provider_id,
+                "new_url": _target_webhook_url(target_webhook_base_url, path),
+                "where": {
+                    "yookassa": "YooKassa merchant cabinet -> HTTP notifications URL",
+                    "wata": "WATA merchant dashboard -> webhook/callback URL",
+                    "cryptopay": "CryptoBot/Crypto Pay app -> webhook URL",
+                    "heleket": "Heleket merchant dashboard -> payment webhook/callback URL",
+                    "freekassa": "FreeKassa shop settings -> notification/result URL",
+                    "platega": "Platega merchant/project settings -> webhook URL",
+                }.get(provider_id, "Payment provider dashboard -> webhook/callback URL"),
+            }
+        )
+
+    return {
+        "webhook_base_url_configured": bool(_clean_url(target_webhook_base_url)),
+        "source_urls": remnashop_source_urls_from_env(source_env or {}),
+        "remnawave_panel": {
+            "new_url": _target_webhook_url(target_webhook_base_url, "/webhook/panel"),
+            "where": "Remnawave Panel -> WEBHOOK_URL",
+            "secret": (
+                "Set the Remnawave webhook secret to the value stored in "
+                "PANEL_WEBHOOK_SECRET."
+            ),
+        },
+        "payment_providers": payment_actions,
+        "telegram": {
+            "new_url": _target_webhook_url(target_webhook_base_url, "/tg/webhook"),
+            "where": "Telegram webhook is set automatically by Minishop on startup.",
+        },
+    }
 
 
 def _listish(value: Any) -> list[Any]:
@@ -307,6 +701,9 @@ class RemnashopImporter:
         created_by_admin_id: int,
         tariff_map: dict[str, str],
         write_admin_compat_overrides: bool,
+        source_env: Optional[dict[str, str]] = None,
+        source_crypt_key: Optional[str] = None,
+        target_webhook_base_url: Optional[str] = None,
     ) -> None:
         self.source = source
         self.target = target
@@ -317,8 +714,12 @@ class RemnashopImporter:
         self.created_by_admin_id = created_by_admin_id
         self.tariff_map = tariff_map
         self.write_admin_compat_overrides = write_admin_compat_overrides
+        self.source_env = source_env or {}
+        self.source_crypt_key = source_crypt_key or self.source_env.get("APP_CRYPT_KEY")
+        self.target_webhook_base_url = target_webhook_base_url
         self.tables: set[str] = set()
         self.user_map: dict[int, int] = {}
+        self.imported_payment_provider_ids: list[str] = []
         self.summary: dict[str, Any] = {
             "source": SOURCE,
             "dry_run": dry_run,
@@ -328,6 +729,7 @@ class RemnashopImporter:
             "subscriptions": _counter(),
             "payments": _counter(),
             "promocodes": _counter(),
+            "payment_provider_settings": _counter(),
             "settings": _counter(),
             "warnings": [],
         }
@@ -348,6 +750,12 @@ class RemnashopImporter:
             await self.import_promocodes()
         if self._should_run("settings"):
             await self.import_settings()
+
+        self.summary["post_migration_actions"] = remnashop_post_migration_actions(
+            target_webhook_base_url=self.target_webhook_base_url,
+            imported_provider_ids=self.imported_payment_provider_ids,
+            source_env=self.source_env,
+        )
 
         if self.write_admin_compat_overrides:
             await self._write_admin_overrides()
@@ -486,7 +894,19 @@ class RemnashopImporter:
         result = await self.target.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def _upsert_setting_override(self, key: str, value: Any) -> None:
+    async def _upsert_setting_override(self, key: str, value: Any) -> bool:
+        from bot.app.web.admin_settings_manifest import coerce_value, get_field_by_key
+
+        field = get_field_by_key(key)
+        if field is None:
+            self.summary["warnings"].append(f"Skipped unknown admin setting override: {key}")
+            return False
+        try:
+            value = coerce_value(field, value)
+        except ValueError as exc:
+            self.summary["warnings"].append(f"Skipped invalid admin setting override {key}: {exc}")
+            return False
+
         now = datetime.now(timezone.utc)
         encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
         stmt = (
@@ -507,6 +927,142 @@ class RemnashopImporter:
             )
         )
         await self.target.execute(stmt)
+        return True
+
+    async def _write_setting_overrides(
+        self,
+        overrides: dict[str, Any],
+        *,
+        summary_key: str,
+    ) -> list[str]:
+        written: list[str] = []
+        for key, value in overrides.items():
+            if await self._upsert_setting_override(key, value):
+                written.append(key)
+                self.summary[summary_key]["overrides_written"] += 1
+            else:
+                self.summary[summary_key]["overrides_skipped"] += 1
+        return written
+
+    async def import_env_settings(self) -> list[str]:
+        if not self.source_env:
+            self.summary["settings"]["source_env_missing"] += 1
+            return []
+
+        overrides = remnashop_env_overrides(self.source_env)
+        if not overrides:
+            self.summary["settings"]["source_env_no_supported_values"] += 1
+            return []
+
+        written = await self._write_setting_overrides(overrides, summary_key="settings")
+        if written:
+            self.summary["settings"]["source_env_overrides_written"] += 1
+        await self._upsert_mapping(
+            entity_type="settings_env",
+            source_id="remnashop.env",
+            target_table="app_setting_overrides",
+            target_id=",".join(written) if written else "none",
+            metadata={
+                "override_keys": written,
+                "source_keys_used": sorted(
+                    key
+                    for key in (
+                        "REMNAWAVE_HOST",
+                        "REMNAWAVE_TOKEN",
+                        "REMNAWAVE_WEBHOOK_SECRET",
+                        "BOT_SUPPORT_USERNAME",
+                        "APP_DEFAULT_LOCALE",
+                        "BOT_MINI_APP",
+                    )
+                    if self.source_env.get(key)
+                ),
+                "has_app_crypt_key": bool(self.source_env.get("APP_CRYPT_KEY")),
+                "source_urls": remnashop_source_urls_from_env(self.source_env),
+            },
+        )
+        return written
+
+    async def import_payment_provider_settings(self) -> None:
+        if "payment_gateways" not in self.tables:
+            self.summary["payment_provider_settings"]["missing_source_table"] += 1
+            return
+
+        rows = await self._fetch_rows("payment_gateways", order_by="order_index, id")
+        if not rows:
+            self.summary["payment_provider_settings"]["empty_source_table"] += 1
+            return
+
+        active_provider_ids: list[str] = []
+        for index, row in enumerate(rows):
+            source_id = row.get("id") or row.get("type") or f"row:{index}"
+            mapping = remnashop_payment_gateway_overrides(
+                row,
+                crypt_key=self.source_crypt_key,
+            )
+            gateway_type = mapping["source_type"]
+            self.summary["payment_provider_settings"]["seen"] += 1
+
+            for warning in mapping["warnings"]:
+                self.summary["warnings"].append(warning)
+
+            if not mapping["supported"]:
+                self.summary["payment_provider_settings"]["unsupported"] += 1
+                display_type = gateway_type or str(row.get("type") or "unknown")
+                self.summary["warnings"].append(
+                    f"Remnashop payment provider {display_type} is not supported by "
+                    "Minishop; configure it manually if it is still needed."
+                )
+                await self._upsert_mapping(
+                    entity_type="payment_provider_settings",
+                    source_id=source_id,
+                    target_table="manual_configuration_required",
+                    target_id=display_type,
+                    metadata={
+                        "source_type": display_type,
+                        "active": _truthy(row.get("is_active")),
+                        "currency": _normalize_currency(row.get("currency")),
+                        "supported": False,
+                    },
+                )
+                continue
+
+            written = await self._write_setting_overrides(
+                mapping["overrides"],
+                summary_key="payment_provider_settings",
+            )
+            if written:
+                self.summary["payment_provider_settings"]["providers_mapped"] += 1
+            else:
+                self.summary["payment_provider_settings"]["providers_without_overrides"] += 1
+
+            if _truthy(row.get("is_active")):
+                for provider_id in mapping["provider_ids"]:
+                    if provider_id and provider_id not in active_provider_ids:
+                        active_provider_ids.append(provider_id)
+                    if provider_id and provider_id not in self.imported_payment_provider_ids:
+                        self.imported_payment_provider_ids.append(provider_id)
+
+            await self._upsert_mapping(
+                entity_type="payment_provider_settings",
+                source_id=source_id,
+                target_table="app_setting_overrides",
+                target_id=",".join(written) if written else "none",
+                metadata={
+                    "source_type": gateway_type,
+                    "provider_ids": mapping["provider_ids"],
+                    "active": _truthy(row.get("is_active")),
+                    "currency": _normalize_currency(row.get("currency")),
+                    "override_keys": written,
+                    "source_settings_keys": sorted(_jsonish(row.get("settings")).keys()),
+                    "warnings_count": len(mapping["warnings"]),
+                    "supported": True,
+                },
+            )
+
+        if active_provider_ids:
+            order_value = ",".join(active_provider_ids)
+            if await self._upsert_setting_override("PAYMENT_METHODS_ORDER", order_value):
+                self.summary["payment_provider_settings"]["payment_order_written"] += 1
 
     async def _upsert_legacy_referral_code(self, *, code: str, user_id: int) -> None:
         if len(code) > 128:
@@ -1029,7 +1585,29 @@ class RemnashopImporter:
                 }
                 for plan in plans[:100]
             ],
+            "source_env": {
+                "provided": bool(self.source_env),
+                "supported_keys_present": sorted(
+                    key
+                    for key in (
+                        "REMNAWAVE_HOST",
+                        "REMNAWAVE_TOKEN",
+                        "REMNAWAVE_WEBHOOK_SECRET",
+                        "BOT_SUPPORT_USERNAME",
+                        "APP_DEFAULT_LOCALE",
+                        "BOT_MINI_APP",
+                        "APP_DOMAIN",
+                        "APP_CRYPT_KEY",
+                    )
+                    if self.source_env.get(key)
+                ),
+                "source_urls": remnashop_source_urls_from_env(self.source_env),
+            },
         }
+        env_override_keys = await self.import_env_settings()
+        await self.import_payment_provider_settings()
+        notes["env_override_keys"] = env_override_keys
+        notes["payment_provider_ids"] = list(dict.fromkeys(self.imported_payment_provider_ids))
         await self._upsert_mapping(
             entity_type="settings",
             source_id="singleton",
@@ -1080,6 +1658,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-type", choices=[SOURCE], default=SOURCE)
     parser.add_argument("--source-dsn", required=True)
     parser.add_argument("--source-schema", default="public")
+    parser.add_argument(
+        "--source-env-file",
+        help=(
+            "Path to the source Remnashop .env. Used for APP_CRYPT_KEY, Remnawave "
+            "API settings and selected safe compatibility values."
+        ),
+    )
+    parser.add_argument(
+        "--source-crypt-key",
+        help="Explicit Remnashop APP_CRYPT_KEY. Overrides the value from --source-env-file.",
+    )
     parser.add_argument("--target-dsn")
     parser.add_argument(
         "--only",
@@ -1116,6 +1705,8 @@ async def _prepare_target_schema(engine: Any) -> None:
 
 async def run_import(args: argparse.Namespace) -> dict[str, Any]:
     settings = Settings()
+    source_env = read_remnashop_env_file(args.source_env_file)
+    source_crypt_key = args.source_crypt_key or source_env.get("APP_CRYPT_KEY")
     source_engine = create_async_engine(normalize_async_postgres_dsn(args.source_dsn))
     target_engine = create_async_engine(
         normalize_async_postgres_dsn(args.target_dsn or settings.DATABASE_URL)
@@ -1141,6 +1732,9 @@ async def run_import(args: argparse.Namespace) -> dict[str, Any]:
             created_by_admin_id=args.created_by_admin_id,
             tariff_map=parse_tariff_map(args.tariff_map_json),
             write_admin_compat_overrides=not args.no_admin_compat_overrides,
+            source_env=source_env,
+            source_crypt_key=source_crypt_key,
+            target_webhook_base_url=settings.WEBHOOK_BASE_URL,
         )
         summary = await importer.run()
         if args.dry_run:

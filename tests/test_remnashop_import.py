@@ -1,7 +1,12 @@
 from datetime import datetime, timezone
 
+import pytest
 from scripts.import_legacy import (
+    parse_remnashop_env_text,
+    remnashop_env_overrides,
     remnashop_months_from_plan_snapshot,
+    remnashop_payment_gateway_overrides,
+    remnashop_post_migration_actions,
     remnashop_pricing_amount,
     remnashop_pricing_currency,
     remnashop_sale_mode,
@@ -42,3 +47,166 @@ def test_remnashop_plan_months_prefers_snapshot_then_dates():
         )
         == 3
     )
+
+
+def test_remnashop_env_parser_and_overrides_map_safe_values():
+    env = parse_remnashop_env_text(
+        """
+        # old Remnashop
+        export REMNAWAVE_HOST=panel.example.com
+        REMNAWAVE_TOKEN='panel-token#kept'
+        REMNAWAVE_WEBHOOK_SECRET="panel secret"
+        BOT_SUPPORT_USERNAME=@support_bot # comment
+        APP_DEFAULT_LOCALE=en
+        BOT_MINI_APP=https://app.example.com/
+        APP_DOMAIN=old.example.com
+        """
+    )
+
+    assert env["REMNAWAVE_TOKEN"] == "panel-token#kept"
+    assert env["BOT_SUPPORT_USERNAME"] == "@support_bot"
+
+    overrides = remnashop_env_overrides(env)
+    assert overrides == {
+        "PANEL_API_URL": "https://panel.example.com/api",
+        "PANEL_API_KEY": "panel-token#kept",
+        "PANEL_WEBHOOK_SECRET": "panel secret",
+        "SUPPORT_LINK": "https://t.me/support_bot",
+        "DEFAULT_LANGUAGE": "en",
+        "SUBSCRIPTION_MINI_APP_URL": "https://app.example.com/",
+    }
+
+
+def test_remnashop_yookassa_gateway_maps_to_current_provider_settings():
+    result = remnashop_payment_gateway_overrides(
+        {
+            "type": "YOOKASSA",
+            "currency": "RUB",
+            "is_active": True,
+            "settings": {
+                "shop_id": "shop-1",
+                "api_key": "secret",
+                "customer": "receipt@example.com",
+                "vat_code": 1,
+            },
+        }
+    )
+
+    assert result["supported"] is True
+    assert result["provider_ids"] == ["yookassa"]
+    assert result["overrides"] == {
+        "YOOKASSA_ENABLED": True,
+        "YOOKASSA_SHOP_ID": "shop-1",
+        "YOOKASSA_SECRET_KEY": "secret",
+        "YOOKASSA_DEFAULT_RECEIPT_EMAIL": "receipt@example.com",
+        "YOOKASSA_VAT_CODE": 1,
+    }
+
+
+def test_remnashop_free_kassa_and_platega_gateways_map_available_settings():
+    freekassa = remnashop_payment_gateway_overrides(
+        {
+            "type": "FREEKASSA",
+            "is_active": True,
+            "settings": {
+                "shop_id": "merchant",
+                "api_key": "api",
+                "secret_word_2": "notify-secret",
+                "payment_system_id": 42,
+                "customer_ip": "203.0.113.10",
+                "customer_email": "payer@example.com",
+            },
+        }
+    )
+    assert freekassa["provider_ids"] == ["freekassa"]
+    assert freekassa["overrides"]["FREEKASSA_SECOND_SECRET"] == "notify-secret"
+    assert freekassa["overrides"]["FREEKASSA_PAYMENT_METHOD_ID"] == 42
+    assert any("customer_email" in warning for warning in freekassa["warnings"])
+
+    platega = remnashop_payment_gateway_overrides(
+        {
+            "type": "PLATEGA",
+            "currency": "RUB",
+            "is_active": True,
+            "settings": {
+                "merchant_id": "merchant",
+                "api_key": "secret",
+                "payment_method": 2,
+            },
+        }
+    )
+    assert platega["provider_ids"] == ["platega_sbp"]
+    assert platega["overrides"]["PLATEGA_SBP_ENABLED"] is True
+    assert platega["overrides"]["PLATEGA_SBP_METHOD"] == 2
+
+
+def test_remnashop_unsupported_gateway_is_reported_without_overrides():
+    result = remnashop_payment_gateway_overrides(
+        {
+            "type": "ROBOKASSA",
+            "is_active": True,
+            "settings": {"merchant_login": "shop"},
+        }
+    )
+
+    assert result["supported"] is False
+    assert result["provider_ids"] == []
+    assert result["overrides"] == {}
+
+
+def test_remnashop_encrypted_gateway_settings_need_app_crypt_key():
+    result = remnashop_payment_gateway_overrides(
+        {
+            "type": "WATA",
+            "is_active": True,
+            "settings": {"api_key": "enc_not-a-fernet-token"},
+        }
+    )
+
+    assert result["overrides"] == {"WATA_ENABLED": True}
+    assert any("APP_CRYPT_KEY" in warning for warning in result["warnings"])
+
+
+def test_remnashop_encrypted_gateway_settings_decrypt_with_app_crypt_key():
+    cryptography = pytest.importorskip("cryptography.fernet")
+    key = cryptography.Fernet.generate_key().decode()
+    token = cryptography.Fernet(key.encode()).encrypt(b"wata-token").decode()
+
+    result = remnashop_payment_gateway_overrides(
+        {
+            "type": "WATA",
+            "is_active": True,
+            "settings": {"api_key": f"enc_{token}"},
+        },
+        crypt_key=key,
+    )
+
+    assert result["overrides"] == {
+        "WATA_ENABLED": True,
+        "WATA_API_TOKEN": "wata-token",
+    }
+    assert result["warnings"] == []
+
+
+def test_remnashop_post_migration_actions_include_new_webhook_urls():
+    actions = remnashop_post_migration_actions(
+        target_webhook_base_url="https://webhooks.example.com/",
+        imported_provider_ids=["yookassa", "wata", "yookassa"],
+        source_env={"APP_DOMAIN": "old.example.com"},
+    )
+
+    assert actions["remnawave_panel"]["new_url"] == "https://webhooks.example.com/webhook/panel"
+    assert actions["telegram"]["new_url"] == "https://webhooks.example.com/tg/webhook"
+    assert actions["source_urls"]["payments"] == "https://old.example.com/api/v1/payments/<gateway>"
+    assert actions["payment_providers"] == [
+        {
+            "provider": "yookassa",
+            "new_url": "https://webhooks.example.com/webhook/yookassa",
+            "where": "YooKassa merchant cabinet -> HTTP notifications URL",
+        },
+        {
+            "provider": "wata",
+            "new_url": "https://webhooks.example.com/webhook/wata",
+            "where": "WATA merchant dashboard -> webhook/callback URL",
+        },
+    ]

@@ -36,6 +36,8 @@ def test_shell_installer_downloads_raw_files_and_runs_import_in_container():
     assert "raw.githubusercontent.com" in script
     assert "git clone" not in script
     assert "backend python backend/scripts/import_legacy.py" in script
+    assert "Optional source Remnashop .env path" in script
+    assert "--source-env-file /tmp/remnashop.env" in script
     assert "--dry-run" in script
     assert "Install new stack and run migration" in script
     assert "Run migration only" in script
@@ -61,3 +63,19 @@ def test_shell_installer_only_prepares_data_mount_not_runtime_content():
     assert "webapp-logo" not in script
     assert "webapp-emoji" not in script
     assert "locales-overrides.json" not in script
+
+
+def test_shell_installer_prints_remnashop_webhook_checklist():
+    script = INSTALL_SCRIPT.read_text(encoding="utf-8")
+
+    assert "remnashop_webhook_checklist" in script
+    assert "Remnawave Panel -> WEBHOOK_URL" in script
+    assert "PANEL_WEBHOOK_SECRET" in script
+    assert "/webhook/panel" in script
+    assert "/webhook/yookassa" in script
+    assert "/webhook/wata" in script
+    assert "/webhook/cryptopay" in script
+    assert "/webhook/heleket" in script
+    assert "/webhook/freekassa" in script
+    assert "/webhook/platega" in script
+    assert "/tg/webhook" in script
