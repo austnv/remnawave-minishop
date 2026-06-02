@@ -939,7 +939,7 @@ run_remnashop_migration() {
     if confirm "Restart backend and worker so setting overrides are reloaded?" 1; then
         (cd "$TARGET_DIR" && run_compose restart backend worker) || true
     fi
-    ok "Legacy migration completed."
+    ok "Migration completed."
 }
 
 run_target_schema_migrations() {
@@ -980,11 +980,10 @@ run_tgshop_volume_migration() {
 
 run_tgshop_dsn_migration() {
     section "Old remnawave-tg-shop DSN migration"
-    warn "The old standalone helper did not support direct DSN import."
     warn "This wizard path dumps the old PostgreSQL database, restores it into target Compose PostgreSQL, then runs Minishop schema migrations."
     warn "The target database will be dropped and recreated before restore."
 
-    if ! confirm "Replace target database with the legacy dump?" 0; then
+    if ! confirm "Replace target database with the source dump?" 0; then
         warn "Migration not applied."
         return 0
     fi
@@ -1141,8 +1140,8 @@ main_menu() {
         banner
         choose "Main menu" "1" "1|2|3|4|5|6" \
             "1. Install new stack" \
-            "2. Install new stack and run legacy migration" \
-            "3. Run legacy migration only" \
+            "2. Install new stack and run migration" \
+            "3. Run migration only" \
             "4. Download/update deployment files only" \
             "5. Validate current stack" \
             "6. Exit"

@@ -1,6 +1,6 @@
 # Миграция из Remnashop
 
-Remnashop импортируется через общий legacy-importer `backend/scripts/import_legacy.py`.
+Remnashop импортируется через общий скрипт импорта `backend/scripts/import_legacy.py`.
 Самый удобный путь - интерактивный install wizard:
 
 ```bash
@@ -8,8 +8,8 @@ curl -fsSL https://raw.githubusercontent.com/3252a8/remnawave-minishop/main/scri
 sh install.sh
 ```
 
-В меню выберите `Install new stack and run legacy migration` для нового сервера
-или `Run legacy migration only`, если compose-папка и `.env` уже готовы.
+В меню выберите `Install new stack and run migration` для нового сервера
+или `Run migration only`, если compose-папка и `.env` уже готовы.
 
 ## Что переносится
 
@@ -21,7 +21,7 @@ sh install.sh
 - служебные mappings, чтобы повторный запуск мог работать в режиме `merge`;
 - настройки совместимости Remnashop в админке: старые ref-ссылки и promo codes.
 
-Данные, которые не имеют прямого аналога, сохраняются в legacy mappings или
+Данные, которые не имеют прямого аналога, сохраняются в служебных таблицах миграции или
 message logs как заметки, чтобы администратор мог проверить их после переноса.
 
 ## Flow wizard

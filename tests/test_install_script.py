@@ -37,7 +37,8 @@ def test_shell_installer_downloads_raw_files_and_runs_import_in_container():
     assert "git clone" not in script
     assert "backend python backend/scripts/import_legacy.py" in script
     assert "--dry-run" in script
-    assert "Install new stack and run legacy migration" in script
+    assert "Install new stack and run migration" in script
+    assert "Run migration only" in script
 
 
 def test_shell_installer_supports_legacy_tgshop_volume_and_dsn_paths():
