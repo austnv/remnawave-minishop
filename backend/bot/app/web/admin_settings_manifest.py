@@ -77,14 +77,20 @@ SETTINGS_MANIFEST: List[SettingField] = [
         "int",
         "general",
         "ID обязательного канала",
-        "Telegram ID канала, в котором нужно состоять.",
+        (
+            "Telegram ID канала для проверки подписки. Если бот видит канал, "
+            "ссылка кнопки будет получена автоматически."
+        ),
     ),
     SettingField(
         "REQUIRED_CHANNEL_LINK",
         "string",
         "general",
         "Ссылка на канал",
-        "Имя пользователя или invite-link.",
+        (
+            "Необязательно: публичный @username или invite-link, "
+            "если ссылку нельзя получить по ID канала."
+        ),
     ),
     SettingField(
         "PANEL_API_URL",

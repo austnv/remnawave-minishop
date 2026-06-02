@@ -108,8 +108,8 @@
 | `TERMS_OF_SERVICE_URL` | Условия использования. |
 | `PRIVACY_POLICY_URL` | Политика конфиденциальности. |
 | `USER_AGREEMENT_URL` | Пользовательское соглашение. |
-| `REQUIRED_CHANNEL_ID` | ID обязательного Telegram-канала. |
-| `REQUIRED_CHANNEL_LINK` | Ссылка на обязательный канал. |
+| `REQUIRED_CHANNEL_ID` | ID обязательного Telegram-канала. Используется для проверки подписки и автоматического получения ссылки кнопки, если бот видит канал. |
+| `REQUIRED_CHANNEL_LINK` | Необязательная запасная ссылка на обязательный канал (`@username` или invite-link), если ссылку нельзя получить по ID. |
 | `START_COMMAND_DESCRIPTION` | Описание `/start` для меню Telegram. |
 | `DISABLE_WELCOME_MESSAGE` | Отключить приветствие на `/start`. |
 
