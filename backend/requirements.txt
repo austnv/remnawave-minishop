@@ -12,4 +12,3 @@ aiocryptopay==0.4.8
 PyJWT[crypto]==2.13.0
 Pillow==12.2.0
 redis==6.4.0
-certifi==2026.5.20
