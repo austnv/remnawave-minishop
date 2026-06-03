@@ -326,5 +326,7 @@ def test_docs_email_preview_generator_renders_real_template_html():
     assert all(preview["html"].lstrip().startswith("<!DOCTYPE html>") for preview in previews)
     assert all('<html lang="ru"' in preview["html"] for preview in previews)
     assert all('role="presentation"' in preview["html"] for preview in previews)
+    assert all('src="data:image/png;base64,' in preview["html"] for preview in previews)
+    assert all("cid:webapp-logo" not in preview["html"] for preview in previews)
     assert all("mail-card" not in preview["html"] for preview in previews)
     assert all("email_" not in preview["subject"] + preview["html"] for preview in previews)
