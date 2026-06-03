@@ -300,13 +300,17 @@
     themesStore.setThemeHomeLogoScale(theme.key, value);
   }
 
+  function isThemeControlTarget(target) {
+    return target?.closest?.("button,input,label,.admin-theme-card-option,.ui-range-input");
+  }
+
   function selectTheme(theme, event = null) {
-    if (event?.target?.closest?.("button,input,label")) return;
+    if (isThemeControlTarget(event?.target)) return;
     if (!themesSaving) themesStore.setCurrentTheme(theme.key);
   }
 
   function handleThemeKeydown(event, theme) {
-    if (event?.target?.closest?.("button,input,label")) return;
+    if (isThemeControlTarget(event?.target)) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     selectTheme(theme);
@@ -581,7 +585,7 @@
                   />
                   <span>{at("themes_use_in_admin", {}, "Использовать в админке")}</span>
                 </label>
-                <label class="admin-theme-card-option appearance-logo-scale-row">
+                <div class="admin-theme-card-option appearance-logo-scale-row">
                   <span
                     >{at(
                       "appearance_theme_home_logo_scale",
@@ -610,7 +614,7 @@
                     />
                     %
                   </span>
-                </label>
+                </div>
                 <div class="appearance-theme-actions">
                   <AdminButton
                     size="sm"

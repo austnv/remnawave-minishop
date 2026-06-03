@@ -48,7 +48,7 @@
   {...$$restProps}
 >
   <Slider.Range class="ui-range-input__range" />
-  <Slider.Thumb class="ui-range-input__thumb" aria-label={ariaLabel} />
+  <Slider.Thumb class="ui-range-input__thumb" index={0} aria-label={ariaLabel} />
 </Slider.Root>
 
 <style>
