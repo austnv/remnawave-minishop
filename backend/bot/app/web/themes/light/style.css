@@ -236,9 +236,20 @@ body:has(.theme-key-light) .install-platform-item[data-selected] {
   color: color-mix(in srgb, var(--accent) 58%, #0f172a);
 }
 
+.theme-key-light .ui-sortable {
+  --sortable-drop-line: color-mix(in srgb, var(--accent) 64%, #0f172a);
+}
+
 .theme-key-light .ui-sortable-item.is-drop-target {
-  outline-color: color-mix(in srgb, var(--accent) 48%, #0f172a);
   background: color-mix(in srgb, var(--accent) 8%, #ffffff);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent),
+    0 10px 22px color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.theme-key-light .ui-sortable-item.is-drop-target::before {
+  background: var(--sortable-drop-line);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* Telegram notifications banner: keep the warm warning tint but swap the

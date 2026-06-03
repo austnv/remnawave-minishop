@@ -576,6 +576,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             "ui-sortable-item",
             "ui-sortable-handle",
             "is-drop-target",
+            "ui-sortable-item.is-drop-target::before",
         )
 
         for key in ("light", "ascii", "windows95"):
