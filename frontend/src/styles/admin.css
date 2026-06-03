@@ -3581,13 +3581,8 @@
 }
 
 .admin-row-editor-line.admin-row-editor-drag {
-  grid-template-columns: 24px minmax(90px, 1fr) minmax(110px, 1fr) 32px;
-}
-
-.admin-package-columns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 24px minmax(90px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr)
+    32px;
 }
 
 .admin-dialog-actions {
@@ -3799,7 +3794,6 @@
   }
 
   .admin-form-row.admin-form-row-3,
-  .admin-package-columns,
   .admin-row-editor-line,
   .admin-row-editor-line.admin-row-editor-4,
   .admin-row-editor-line.admin-row-editor-6,
