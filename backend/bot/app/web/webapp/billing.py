@@ -5,6 +5,15 @@ from bot.app.web.webapp.cache_helpers import invalidate_webapp_user_caches
 from db.dal import message_log_dal
 
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _plain_text_message(value: Any) -> str:
+    """Strip Telegram-style HTML markup from a localized message for the web app."""
+    text = _HTML_TAG_RE.sub("", str(value))
+    return html.unescape(text).strip()
+
+
 def _billing_iso_datetime(value: Optional[Any]) -> Optional[str]:
     if not value:
         return None
@@ -69,7 +78,7 @@ async def apply_promo_route(request: web.Request) -> web.Response:
             )
             if not success:
                 await session.commit()
-                return _json_error(400, "promo_apply_failed", str(result))
+                return _json_error(400, "promo_apply_failed", _plain_text_message(result))
             await session.commit()
             end_date = result if isinstance(result, datetime) else None
             return web.json_response(
