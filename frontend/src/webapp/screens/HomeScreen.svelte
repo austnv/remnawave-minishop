@@ -9,9 +9,11 @@
     Download,
     Gift,
     Repeat2,
+    Send,
   } from "$components/ui/icons.js";
 
   import BrandMark from "$lib/webapp/BrandMark.svelte";
+  import { AttentionDot } from "$components/ui/index.js";
   import Button from "$components/ui/button.svelte";
   import Card from "$components/ui/card.svelte";
   import TelegramNotificationsBanner from "../TelegramNotificationsBanner.svelte";
@@ -39,10 +41,12 @@
   export let premiumTrafficTopupUnlocked = false;
   export let regularTrafficTopupBarClickable = false;
   export let regularTrafficTopupUnlocked = false;
+  export let referral = {};
   export let currentTariffName = "";
   export let hasActiveTariffSubscription = false;
   export let hasMultipleTariffs = false;
   export let subscription = {};
+  export let linkTelegramBusy = false;
   export let telegramNotificationsNeedPrompt = false;
   export let telegramNotificationsStartLink = "";
   export let telegramNotificationsStatus = "unknown";
@@ -142,6 +146,14 @@
   $: trialOfferAvailable = Boolean(
     !subscription?.active && appSettings?.trial_enabled && appSettings?.trial_available
   );
+  $: trialRequiresTelegram = Boolean(
+    !subscription?.active && appSettings?.trial_enabled && appSettings?.trial_requires_telegram
+  );
+  $: referralWelcomeRequiresTelegram = Boolean(
+    !subscription?.active &&
+    referral?.welcome_bonus_requires_telegram &&
+    Number(referral?.welcome_bonus_days || 0) > 0
+  );
   $: subscriptionEndMs = subscription?.active ? parseSubscriptionEndMs(subscription) : null;
   $: subscriptionRemainingMs = Math.max(0, Number(subscriptionEndMs || 0) - nowMs);
   $: subscriptionExpiryWarning = Boolean(
@@ -186,6 +198,8 @@
   });
 
   export let activateTrial = () => {};
+  export let linkTelegramAndActivateTrial = () => {};
+  export let linkTelegramAndClaimReferralWelcome = () => {};
   export let openConnectLink = () => {};
   export let openPaymentModal = () => {};
   export let openTelegramNotificationsBot = () => {};
@@ -374,37 +388,113 @@
           />
         </Card>
       {/if}
-    {:else if trialOfferAvailable}
-      <Card class="trial-card trial-offer-card">
-        <div class="trial-card-head">
-          <Gift size={22} />
-          <span>
-            <strong>{t("wa_trial_offer_title", {}, "Можно начать с льготного периода")}</strong>
-            <small>{t("wa_trial_title")}</small>
-          </span>
-        </div>
-        <p class="trial-card-description">
-          {t(
-            "wa_trial_offer_description",
-            { duration: trialDurationLabel(), traffic: trialTrafficLabel() },
-            "Активируйте триал: {duration} доступа и {traffic} для скачивания без оплаты."
-          )}
-        </p>
-        <div class="trial-card-facts">
-          <span>
-            <small>{t("wa_trial_duration_label", {}, "Срок")}</small>
-            <strong>{trialDurationLabel()}</strong>
-          </span>
-          <span>
-            <small>{t("wa_trial_download_traffic_label", {}, "Доступно для скачивания")}</small>
-            <strong>{trialTrafficLabel()}</strong>
-          </span>
-        </div>
-        <Button class="wide trial-card-action" onclick={activateTrial} disabled={trialBusy}>
-          <Gift size={18} />
-          {t("wa_trial_try_free", {}, "Попробовать бесплатно")}
-        </Button>
-      </Card>
+    {:else}
+      {#if referralWelcomeRequiresTelegram}
+        <Card class="trial-card trial-offer-card">
+          <div class="trial-card-head">
+            <Gift size={22} />
+            <span>
+              <strong>
+                {t(
+                  "wa_referral_welcome_telegram_required_title",
+                  {},
+                  "Бонус ждёт привязки Telegram"
+                )}
+              </strong>
+              <small>{t("wa_referral_program_title", {}, "Реферальная программа")}</small>
+            </span>
+          </div>
+          <p class="trial-card-description">
+            {t(
+              "wa_referral_welcome_telegram_required_description",
+              { days: Number(referral?.welcome_bonus_days || 0) },
+              "Привяжите Telegram, чтобы получить {days} бонусных дней за регистрацию по приглашению."
+            )}
+          </p>
+          <Button
+            class="wide trial-card-action settings-telegram-link-btn attention-wrap"
+            variant="telegram"
+            onclick={linkTelegramAndClaimReferralWelcome}
+            disabled={linkTelegramBusy}
+          >
+            <AttentionDot />
+            <Send size={18} />
+            {t("wa_referral_link_telegram_and_claim", {}, "Привязать и получить бонус")}
+          </Button>
+        </Card>
+      {/if}
+
+      {#if trialOfferAvailable}
+        <Card class="trial-card trial-offer-card">
+          <div class="trial-card-head">
+            <Gift size={22} />
+            <span>
+              <strong>{t("wa_trial_offer_title", {}, "Можно начать с льготного периода")}</strong>
+              <small>{t("wa_trial_title")}</small>
+            </span>
+          </div>
+          <p class="trial-card-description">
+            {t(
+              "wa_trial_offer_description",
+              { duration: trialDurationLabel(), traffic: trialTrafficLabel() },
+              "Активируйте триал: {duration} доступа и {traffic} для скачивания без оплаты."
+            )}
+          </p>
+          <div class="trial-card-facts">
+            <span>
+              <small>{t("wa_trial_duration_label", {}, "Срок")}</small>
+              <strong>{trialDurationLabel()}</strong>
+            </span>
+            <span>
+              <small>{t("wa_trial_download_traffic_label", {}, "Доступно для скачивания")}</small>
+              <strong>{trialTrafficLabel()}</strong>
+            </span>
+          </div>
+          <Button class="wide trial-card-action" onclick={activateTrial} disabled={trialBusy}>
+            <Gift size={18} />
+            {t("wa_trial_try_free", {}, "Попробовать бесплатно")}
+          </Button>
+        </Card>
+      {:else if trialRequiresTelegram}
+        <Card class="trial-card trial-offer-card">
+          <div class="trial-card-head">
+            <Gift size={22} />
+            <span>
+              <strong>
+                {t("wa_trial_telegram_required_title", {}, "Привяжите Telegram для триала")}
+              </strong>
+              <small>{t("wa_trial_title")}</small>
+            </span>
+          </div>
+          <p class="trial-card-description">
+            {t(
+              "wa_trial_telegram_required_description",
+              { duration: trialDurationLabel(), traffic: trialTrafficLabel() },
+              "Чтобы активировать триал на {duration} с лимитом {traffic}, сначала привяжите Telegram."
+            )}
+          </p>
+          <div class="trial-card-facts">
+            <span>
+              <small>{t("wa_trial_duration_label", {}, "Срок")}</small>
+              <strong>{trialDurationLabel()}</strong>
+            </span>
+            <span>
+              <small>{t("wa_trial_download_traffic_label", {}, "Доступно для скачивания")}</small>
+              <strong>{trialTrafficLabel()}</strong>
+            </span>
+          </div>
+          <Button
+            class="wide trial-card-action settings-telegram-link-btn attention-wrap"
+            variant="telegram"
+            onclick={linkTelegramAndActivateTrial}
+            disabled={linkTelegramBusy || trialBusy}
+          >
+            <AttentionDot />
+            <Send size={18} />
+            {t("wa_trial_link_telegram_and_activate", {}, "Привязать и активировать")}
+          </Button>
+        </Card>
+      {/if}
     {/if}
 
     <div class="action-stack">

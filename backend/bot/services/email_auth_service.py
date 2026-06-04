@@ -61,9 +61,37 @@ def normalize_email(value: str) -> str:
     return (value or "").strip().lower()
 
 
+def email_domain(value: Optional[str]) -> str:
+    email = normalize_email(value or "")
+    if "@" not in email:
+        return ""
+    return email.rsplit("@", 1)[1].strip().lower().rstrip(".")
+
+
 def is_valid_email(value: str) -> bool:
     email = normalize_email(value)
     return bool(email and len(email) <= 254 and EMAIL_RE.match(email))
+
+
+def _split_disposable_domain_values(value: str) -> list[str]:
+    return [item.strip() for item in re.split(r"[,;\s]+", value or "") if item.strip()]
+
+
+def is_disposable_email(value: Optional[str], settings: Settings) -> bool:
+    domain = email_domain(value)
+    if not domain:
+        return False
+    blocked_domains = getattr(settings, "disposable_email_domains", None)
+    if blocked_domains is None:
+        blocked_domains = _split_disposable_domain_values(
+            str(getattr(settings, "DISPOSABLE_EMAIL_DOMAINS", "") or "")
+        )
+    blocked_domains = blocked_domains or []
+    for blocked in blocked_domains:
+        normalized = str(blocked or "").strip().lower().lstrip("@.")
+        if normalized and (domain == normalized or domain.endswith(f".{normalized}")):
+            return True
+    return False
 
 
 def _email_throttle_identifier(email: str, purpose: str, target_user_id: Optional[int]) -> str:

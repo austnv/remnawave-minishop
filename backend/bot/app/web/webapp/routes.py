@@ -85,6 +85,7 @@ def setup_subscription_webapp_routes(app: web.Application) -> None:
         "/api/account/telegram/notifications/probe",
         account_telegram_notifications_probe_route,
     )
+    app.router.add_post("/api/referral/welcome-bonus/claim", referral_welcome_bonus_claim_route)
     app.router.add_post("/api/promo/apply", apply_promo_route)
     app.router.add_post("/api/trial/activate", activate_trial_route)
     app.router.add_get("/api/devices", devices_route)

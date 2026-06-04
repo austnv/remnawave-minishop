@@ -156,6 +156,9 @@ function applyDemoEmailAuthUser() {
     ...(DEV_MOCK.data.settings || {}),
     trial_enabled: true,
     trial_available: true,
+    trial_without_telegram_enabled: true,
+    trial_requires_telegram: false,
+    trial_block_reason: "",
   };
 }
 
@@ -236,6 +239,9 @@ function applyDemoTelegramAuthUser(authData = {}) {
     ...(DEV_MOCK.data.settings || {}),
     trial_enabled: true,
     trial_available: true,
+    trial_without_telegram_enabled: true,
+    trial_requires_telegram: false,
+    trial_block_reason: "",
   };
 }
 
@@ -254,6 +260,16 @@ function applyDemoEmailLink(email) {
     },
     160
   );
+  DEV_MOCK.data.settings = {
+    ...(DEV_MOCK.data.settings || {}),
+    trial_requires_telegram: false,
+    trial_block_reason: "",
+  };
+  DEV_MOCK.data.referral = {
+    ...(DEV_MOCK.data.referral || {}),
+    welcome_bonus_requires_telegram: false,
+    welcome_bonus_block_reason: "",
+  };
 }
 
 function applyDemoTelegramLink(authData = {}) {
@@ -616,6 +632,23 @@ function demoSettingsValuesByKey() {
   return map;
 }
 
+function demoRuntimeSettingValue(key) {
+  const values = {
+    TRIAL_WITHOUT_TELEGRAM_ENABLED: DEV_MOCK.config.trialWithoutTelegramEnabled ?? true,
+    REFERRAL_WELCOME_BONUS_DAYS:
+      DEV_MOCK.config.referralWelcomeBonusDays ?? DEV_MOCK.data.referral?.welcome_bonus_days ?? 3,
+    REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED:
+      DEV_MOCK.config.referralWelcomeWithoutTelegramEnabled ?? true,
+    REFERRAL_ONE_BONUS_PER_REFEREE:
+      DEV_MOCK.config.referralOneBonusPerReferee ??
+      DEV_MOCK.data.referral?.one_bonus_per_referee ??
+      false,
+    LEGACY_REFS: DEV_MOCK.config.legacyRefs ?? true,
+    DISPOSABLE_EMAIL_DOMAINS: DEV_MOCK.config.disposableEmailDomains || "",
+  };
+  return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : undefined;
+}
+
 function demoSettingsSections(clone) {
   // Section/field structure comes from the manifest snapshot generated off the
   // Python source of truth (scripts/export_settings_manifest.py), so the demo
@@ -633,6 +666,9 @@ function demoSettingsSections(clone) {
         if ("updated_at" in demoField) field.updated_at = demoField.updated_at;
         if ("source" in demoField) field.source = demoField.source;
         if (field.secret && "has_value" in demoField) field.has_value = demoField.has_value;
+      } else {
+        const runtimeValue = demoRuntimeSettingValue(field.key);
+        if (typeof runtimeValue !== "undefined") field.value = runtimeValue;
       }
       if (demoSettingsChanges.has(field.key)) {
         const change = demoSettingsChanges.get(field.key);
@@ -656,6 +692,43 @@ function applyDemoSettingToMock(key, value) {
     DEV_MOCK.config.faviconUrl = value || DEV_MOCK.config.faviconUrl || "";
   }
   if (key === "WEBAPP_FAVICON_USE_CUSTOM") DEV_MOCK.config.faviconUseCustom = Boolean(value);
+  if (key === "TRIAL_ENABLED") {
+    DEV_MOCK.config.trialEnabled = Boolean(value);
+    DEV_MOCK.data.settings.trial_enabled = Boolean(value);
+  }
+  if (key === "TRIAL_DURATION_DAYS") {
+    DEV_MOCK.config.trialDurationDays = value;
+    DEV_MOCK.data.settings.trial_duration_days = Number(value || 0);
+  }
+  if (key === "TRIAL_TRAFFIC_LIMIT_GB") {
+    DEV_MOCK.config.trialTrafficLimitGb = value;
+    DEV_MOCK.data.settings.trial_traffic_limit_gb = Number(value || 0);
+  }
+  if (key === "TRIAL_TRAFFIC_STRATEGY") {
+    DEV_MOCK.config.trialTrafficStrategy = value || "NO_RESET";
+    DEV_MOCK.data.settings.trial_traffic_strategy = value || "NO_RESET";
+  }
+  if (key === "TRIAL_WITHOUT_TELEGRAM_ENABLED") {
+    DEV_MOCK.config.trialWithoutTelegramEnabled = Boolean(value);
+    DEV_MOCK.data.settings.trial_without_telegram_enabled = Boolean(value);
+  }
+  if (key === "TRIAL_SQUAD_UUIDS") DEV_MOCK.config.trialSquadUuids = value || "";
+  if (key === "REFERRAL_WELCOME_BONUS_DAYS") {
+    DEV_MOCK.config.referralWelcomeBonusDays = Number(value || 0);
+    DEV_MOCK.data.referral.welcome_bonus_days = Number(value || 0);
+  }
+  if (key === "REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED") {
+    DEV_MOCK.config.referralWelcomeWithoutTelegramEnabled = Boolean(value);
+    DEV_MOCK.data.referral.welcome_bonus_without_telegram_enabled = Boolean(value);
+  }
+  if (key === "REFERRAL_ONE_BONUS_PER_REFEREE") {
+    DEV_MOCK.config.referralOneBonusPerReferee = Boolean(value);
+    DEV_MOCK.data.referral.one_bonus_per_referee = Boolean(value);
+  }
+  if (key === "LEGACY_REFS") DEV_MOCK.config.legacyRefs = Boolean(value);
+  if (key === "DISPOSABLE_EMAIL_DOMAINS") {
+    DEV_MOCK.config.disposableEmailDomains = value || "";
+  }
 }
 
 function userSnapshotForTicket(ticket) {
@@ -1628,8 +1701,49 @@ export async function mockApi(path, options = {}, context = {}) {
       if (Object.prototype.hasOwnProperty.call(updates, "TRIAL_TRAFFIC_STRATEGY")) {
         DEV_MOCK.config.trialTrafficStrategy = updates.TRIAL_TRAFFIC_STRATEGY || "NO_RESET";
       }
+      if (Object.prototype.hasOwnProperty.call(updates, "TRIAL_WITHOUT_TELEGRAM_ENABLED")) {
+        DEV_MOCK.config.trialWithoutTelegramEnabled = Boolean(
+          updates.TRIAL_WITHOUT_TELEGRAM_ENABLED
+        );
+        DEV_MOCK.data.settings.trial_without_telegram_enabled = Boolean(
+          updates.TRIAL_WITHOUT_TELEGRAM_ENABLED
+        );
+      }
       if (Object.prototype.hasOwnProperty.call(updates, "TRIAL_SQUAD_UUIDS")) {
         DEV_MOCK.config.trialSquadUuids = updates.TRIAL_SQUAD_UUIDS || "";
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, "REFERRAL_WELCOME_BONUS_DAYS")) {
+        DEV_MOCK.config.referralWelcomeBonusDays = Number(updates.REFERRAL_WELCOME_BONUS_DAYS || 0);
+        DEV_MOCK.data.referral.welcome_bonus_days = Number(
+          updates.REFERRAL_WELCOME_BONUS_DAYS || 0
+        );
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(
+          updates,
+          "REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED"
+        )
+      ) {
+        DEV_MOCK.config.referralWelcomeWithoutTelegramEnabled = Boolean(
+          updates.REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED
+        );
+        DEV_MOCK.data.referral.welcome_bonus_without_telegram_enabled = Boolean(
+          updates.REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, "REFERRAL_ONE_BONUS_PER_REFEREE")) {
+        DEV_MOCK.config.referralOneBonusPerReferee = Boolean(
+          updates.REFERRAL_ONE_BONUS_PER_REFEREE
+        );
+        DEV_MOCK.data.referral.one_bonus_per_referee = Boolean(
+          updates.REFERRAL_ONE_BONUS_PER_REFEREE
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, "LEGACY_REFS")) {
+        DEV_MOCK.config.legacyRefs = Boolean(updates.LEGACY_REFS);
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, "DISPOSABLE_EMAIL_DOMAINS")) {
+        DEV_MOCK.config.disposableEmailDomains = updates.DISPOSABLE_EMAIL_DOMAINS || "";
       }
     } catch (_e) {
       void _e;
@@ -1799,12 +1913,60 @@ export async function mockApi(path, options = {}, context = {}) {
               value: DEV_MOCK.config.trialTrafficStrategy || "NO_RESET",
             },
             {
+              key: "TRIAL_WITHOUT_TELEGRAM_ENABLED",
+              type: "bool",
+              section: "pricing",
+              subsection: "trial",
+              label: "Триал без Telegram",
+              value: DEV_MOCK.config.trialWithoutTelegramEnabled ?? true,
+            },
+            {
               key: "TRIAL_SQUAD_UUIDS",
               type: "string",
               section: "pricing",
               subsection: "trial",
               label: "Internal Squads для триала",
               value: DEV_MOCK.config.trialSquadUuids || "",
+            },
+            {
+              key: "REFERRAL_WELCOME_BONUS_DAYS",
+              type: "int",
+              section: "pricing",
+              subsection: "referral",
+              label: "Приветственный бонус (дней)",
+              value: DEV_MOCK.config.referralWelcomeBonusDays ?? 3,
+            },
+            {
+              key: "REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED",
+              type: "bool",
+              section: "pricing",
+              subsection: "referral",
+              label: "Приветственный бонус без Telegram",
+              value: DEV_MOCK.config.referralWelcomeWithoutTelegramEnabled ?? true,
+            },
+            {
+              key: "REFERRAL_ONE_BONUS_PER_REFEREE",
+              type: "bool",
+              section: "pricing",
+              subsection: "referral",
+              label: "Один бонус на приглашённого",
+              value: Boolean(DEV_MOCK.config.referralOneBonusPerReferee),
+            },
+            {
+              key: "LEGACY_REFS",
+              type: "bool",
+              section: "pricing",
+              subsection: "referral",
+              label: "Поддержка старых ref-ссылок",
+              value: DEV_MOCK.config.legacyRefs ?? true,
+            },
+            {
+              key: "DISPOSABLE_EMAIL_DOMAINS",
+              type: "text",
+              section: "pricing",
+              subsection: "referral",
+              label: "Disposable email домены",
+              value: DEV_MOCK.config.disposableEmailDomains || "",
             },
             ...[
               ["MONTH_1_ENABLED", "bool", true],
@@ -2011,6 +2173,39 @@ export async function mockApi(path, options = {}, context = {}) {
     return { ok: true, csrf_token: "local-preview-csrf" };
   }
   if (path === "/promo/apply") return { ok: true, end_date_text: "31.05.2026" };
+  if (
+    path === "/referral/welcome-bonus/claim" &&
+    String(options.method || "").toUpperCase() === "POST"
+  ) {
+    const days = Math.max(1, Number(DEV_MOCK.data.referral?.welcome_bonus_days || 3));
+    DEV_MOCK.data.subscription = {
+      ...DEV_MOCK.data.subscription,
+      active: true,
+      status: "ACTIVE",
+      remaining_text: `${days} д.`,
+      end_date_text: "05.05.2026 12:00",
+      days_left: days,
+      config_link: "https://sub.example.com/sub/referral-preview-token",
+      connect_url: "https://sub.example.com/connect/referral-preview-token",
+      panel_short_uuid: "referral-preview-token",
+      install_share_token: "referral-preview-share",
+      install_share_url: "https://app.example.com/s/referral-preview-share",
+      traffic_limit: "10 GB",
+      traffic_limit_bytes: 10737418240,
+      traffic_used: "0 B",
+      traffic_used_bytes: 0,
+    };
+    DEV_MOCK.data.referral = {
+      ...(DEV_MOCK.data.referral || {}),
+      welcome_bonus_requires_telegram: false,
+      welcome_bonus_block_reason: "",
+    };
+    return {
+      ok: true,
+      claimed: true,
+      end_date_text: "05.05.2026 12:00",
+    };
+  }
   if (path === "/devices") return clone(DEV_MOCK.data.devices);
   if (path === "/devices/topup-options")
     return clone(DEV_MOCK.data.device_topup_options || { ok: true, plans: [] });
@@ -2040,6 +2235,13 @@ export async function mockApi(path, options = {}, context = {}) {
     return { ok: true };
   }
   if (path === "/trial/activate" && String(options.method || "").toUpperCase() === "POST") {
+    if (DEV_MOCK.data.settings?.trial_requires_telegram && !DEV_MOCK.data.user?.telegram_linked) {
+      return {
+        ok: false,
+        error: "trial_telegram_required",
+        message: "telegram_required",
+      };
+    }
     DEV_MOCK.data.subscription = {
       ...DEV_MOCK.data.subscription,
       active: true,

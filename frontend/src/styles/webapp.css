@@ -2028,7 +2028,19 @@ a {
 }
 
 .settings-telegram-link-btn {
+  min-width: 0;
+  height: auto;
+  min-height: 46px;
+  flex-wrap: wrap;
   justify-content: center;
+  padding-block: 10px;
+  line-height: 1.16;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.settings-telegram-link-btn svg {
+  flex: 0 0 auto;
 }
 
 .telegram-notifications-card {

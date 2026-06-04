@@ -408,6 +408,18 @@ SETTINGS_MANIFEST: List[SettingField] = [
         subsection="trial",
     ),
     SettingField(
+        "TRIAL_WITHOUT_TELEGRAM_ENABLED",
+        "bool",
+        "pricing",
+        "Триал без Telegram",
+        (
+            "Если выключено, email-only пользователю нужно привязать Telegram для "
+            "активации триала. Disposable email домены всегда требуют Telegram."
+        ),
+        optional=False,
+        subsection="trial",
+    ),
+    SettingField(
         "TRIAL_SQUAD_UUIDS",
         "string",
         "pricing",
@@ -417,12 +429,50 @@ SETTINGS_MANIFEST: List[SettingField] = [
     ),
     # ─── Referral program ──────────────────────────────────────────
     SettingField(
-        "REFERRAL_ONE_BONUS_PER_REFEREE", "bool", "referral", "Один бонус на приглашённого"
+        "REFERRAL_ONE_BONUS_PER_REFEREE",
+        "bool",
+        "pricing",
+        "Один бонус на приглашённого",
+        subsection="referral",
     ),
     SettingField(
-        "REFERRAL_WELCOME_BONUS_DAYS", "int", "referral", "Приветственный бонус (дней)", min=0
+        "REFERRAL_WELCOME_BONUS_DAYS",
+        "int",
+        "pricing",
+        "Приветственный бонус (дней)",
+        min=0,
+        subsection="referral",
     ),
-    SettingField("LEGACY_REFS", "bool", "referral", "Поддержка старых ref-ссылок"),
+    SettingField(
+        "REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED",
+        "bool",
+        "pricing",
+        "Приветственный бонус без Telegram",
+        (
+            "Если выключено, email-only пользователю нужно привязать Telegram для получения "
+            "реферального приветственного бонуса. Disposable email домены всегда требуют Telegram."
+        ),
+        subsection="referral",
+    ),
+    SettingField(
+        "LEGACY_REFS",
+        "bool",
+        "pricing",
+        "Поддержка старых ref-ссылок",
+        subsection="referral",
+    ),
+    SettingField(
+        "DISPOSABLE_EMAIL_DOMAINS",
+        "text",
+        "pricing",
+        "Disposable email домены",
+        (
+            "Домены по одному на строку или через запятую. Пользователи без Telegram с такими "
+            "email не смогут получить trial или реферальный приветственный бонус."
+        ),
+        placeholder="mailinator.com\ntemp-mail.org\nyopmail.com",
+        subsection="referral",
+    ),
     SettingField(
         "MIGRATION_REMNASHOP_REFERRAL_CODE_COMPAT_ENABLED",
         "bool",

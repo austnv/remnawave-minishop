@@ -42,7 +42,7 @@ from bot.app.web.webapp_auth import (
     verify_webapp_session_token,
 )
 from bot.infra.redis import cache_delete, cache_get_json, cache_set_json, get_redis, redis_key
-from bot.services.email_auth_service import EmailAuthService, normalize_email
+from bot.services.email_auth_service import EmailAuthService, is_disposable_email, normalize_email
 from bot.services.email_templates import render_account_merged
 from bot.services.promo_code_service import PromoCodeService
 from bot.services.referral_service import ReferralService

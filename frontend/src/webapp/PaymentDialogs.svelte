@@ -125,9 +125,9 @@
   function showHwidRenewalUnavailableNote() {
     return Boolean(
       subscription?.active &&
-        Number(subscription?.extra_hwid_devices || 0) > 0 &&
-        isSubscriptionPlan(selectedPlan) &&
-        !showHwidRenewalBlock()
+      Number(subscription?.extra_hwid_devices || 0) > 0 &&
+      isSubscriptionPlan(selectedPlan) &&
+      !showHwidRenewalBlock()
     );
   }
   function hwidRenewalCount(plan = selectedPlan) {
@@ -146,7 +146,7 @@
   function showHwidDesyncNotice() {
     return Boolean(
       subscription?.device_topup_renewal_available &&
-        subscription?.extra_hwid_devices_valid_until_text
+      subscription?.extra_hwid_devices_valid_until_text
     );
   }
   function planKey(plan) {

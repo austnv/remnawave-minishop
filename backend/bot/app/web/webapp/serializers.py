@@ -1,6 +1,11 @@
 # ruff: noqa: F401,F403,F405,I001
 from ._runtime import *  # noqa: F403,F405
 
+from bot.app.web.webapp.auth import (
+    _referral_welcome_telegram_required_reason,
+    _trial_telegram_required_reason,
+    _user_has_linked_telegram,
+)
 from config.subscription_guides_config import subscription_guides_available
 from config.webapp_themes_config import public_themes_catalog_payload
 from bot.services.telegram_notifications import (
@@ -64,11 +69,15 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             if active and local_sub
             else None
         )
-        trial_available = bool(
+        trial_base_available = bool(
             settings.TRIAL_ENABLED
             and settings.TRIAL_DURATION_DAYS > 0
             and not await subscription_service.has_trial_blocking_subscription(session, user_id)
         )
+        trial_telegram_required_reason = (
+            _trial_telegram_required_reason(settings, db_user) if trial_base_available else None
+        )
+        trial_available = bool(trial_base_available and not trial_telegram_required_reason)
         lang = _normalize_language(db_user.language_code or settings.DEFAULT_LANGUAGE)
         plans_payload = _serialize_plans(
             settings,
@@ -95,6 +104,15 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
 
     admin_ids = {int(x) for x in (settings.ADMIN_IDS or [])}
     is_admin = bool(db_user.telegram_id and int(db_user.telegram_id) in admin_ids)
+    telegram_linked = _user_has_linked_telegram(db_user)
+    referral_welcome_days = max(
+        0, int(getattr(settings, "REFERRAL_WELCOME_BONUS_DAYS", 0) or 0)
+    )
+    referral_welcome_telegram_required_reason = (
+        _referral_welcome_telegram_required_reason(settings, db_user)
+        if db_user.referred_by_id and not active and referral_welcome_days > 0
+        else None
+    )
     telegram_notifications_status = normalize_telegram_notification_status(
         getattr(db_user, "telegram_notifications_status", None)
     )
@@ -111,7 +129,7 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
                 db_user.email and db_user.email_verified_at and db_user.password_hash
             ),
             "telegram_id": db_user.telegram_id,
-            "telegram_linked": bool(_telegram_id_for_user(db_user)),
+            "telegram_linked": telegram_linked,
             "telegram_notifications_status": telegram_notifications_status,
             "telegram_notifications_enabled": (
                 telegram_notifications_status == TELEGRAM_NOTIFICATIONS_ENABLED
@@ -137,9 +155,14 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             "webapp_link": webapp_referral_link,
             "invited_count": referral_stats.get("invited_count", 0),
             "purchased_count": referral_stats.get("purchased_count", 0),
-            "welcome_bonus_days": max(
-                0, int(getattr(settings, "REFERRAL_WELCOME_BONUS_DAYS", 0) or 0)
+            "welcome_bonus_days": referral_welcome_days,
+            "welcome_bonus_without_telegram_enabled": bool(
+                getattr(settings, "REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED", True)
             ),
+            "welcome_bonus_requires_telegram": bool(
+                referral_welcome_telegram_required_reason and not telegram_linked
+            ),
+            "welcome_bonus_block_reason": referral_welcome_telegram_required_reason,
             "one_bonus_per_referee": bool(
                 getattr(settings, "REFERRAL_ONE_BONUS_PER_REFEREE", False)
             ),
@@ -174,6 +197,11 @@ async def _build_user_payload(request: web.Request, user_id: int) -> Dict[str, A
             ),
             "trial_enabled": bool(settings.TRIAL_ENABLED),
             "trial_available": trial_available,
+            "trial_without_telegram_enabled": bool(
+                getattr(settings, "TRIAL_WITHOUT_TELEGRAM_ENABLED", True)
+            ),
+            "trial_requires_telegram": bool(trial_telegram_required_reason and not telegram_linked),
+            "trial_block_reason": trial_telegram_required_reason,
             "trial_duration_days": int(settings.TRIAL_DURATION_DAYS or 0),
             "trial_traffic_limit_gb": float(settings.TRIAL_TRAFFIC_LIMIT_GB or 0),
             "trial_traffic_strategy": getattr(settings, "TRIAL_TRAFFIC_STRATEGY", "NO_RESET"),

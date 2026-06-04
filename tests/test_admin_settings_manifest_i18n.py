@@ -55,6 +55,7 @@ ADMIN_TARIFF_SETTINGS_PAGE_KEYS = {
     "admin_tariffs_trial_title",
     "admin_tariffs_trial_subtitle",
     "admin_tariffs_trial_enabled",
+    "admin_tariffs_trial_without_telegram_enabled",
     "admin_tariffs_trial_days",
     "admin_tariffs_trial_traffic",
     "admin_tariffs_trial_strategy",
@@ -69,6 +70,18 @@ ADMIN_TARIFF_SETTINGS_PAGE_KEYS = {
     "admin_tariffs_trial_group_reset_hint",
     "admin_tariffs_trial_group_squads",
     "admin_tariffs_trial_group_squads_hint",
+    "admin_tariffs_referral_title",
+    "admin_tariffs_referral_subtitle",
+    "admin_tariffs_referral_group_welcome",
+    "admin_tariffs_referral_group_welcome_hint",
+    "admin_tariffs_referral_welcome_bonus_days",
+    "admin_tariffs_referral_without_telegram",
+    "admin_tariffs_referral_group_rules",
+    "admin_tariffs_referral_group_rules_hint",
+    "admin_tariffs_referral_one_bonus_per_referee",
+    "admin_tariffs_referral_legacy_refs",
+    "admin_tariffs_referral_disposable_domains",
+    "admin_tariffs_referral_disposable_domains_hint",
     "admin_tariffs_legacy_title",
     "admin_tariffs_legacy_subtitle",
     "admin_tariffs_legacy_period",
@@ -243,6 +256,7 @@ def test_trial_required_settings_reject_empty_values():
         "TRIAL_DURATION_DAYS",
         "TRIAL_TRAFFIC_LIMIT_GB",
         "TRIAL_TRAFFIC_STRATEGY",
+        "TRIAL_WITHOUT_TELEGRAM_ENABLED",
     ):
         with pytest.raises(ValueError):
             coerce_value(get_field_by_key(key), "")
@@ -321,8 +335,20 @@ def test_legacy_tariff_settings_are_separated_from_payment_settings():
     assert manifest["MONTH_1_ENABLED"]["section_order"] == 11
     assert manifest["TRIAL_ENABLED"]["section"] == "pricing"
     assert manifest["TRIAL_ENABLED"]["subsection"] == "trial"
+    assert manifest["TRIAL_WITHOUT_TELEGRAM_ENABLED"]["section"] == "pricing"
+    assert manifest["TRIAL_WITHOUT_TELEGRAM_ENABLED"]["subsection"] == "trial"
     assert manifest["TRIAL_SQUAD_UUIDS"]["section"] == "pricing"
     assert manifest["TRIAL_SQUAD_UUIDS"]["subsection"] == "trial"
+    assert manifest["REFERRAL_WELCOME_BONUS_DAYS"]["section"] == "pricing"
+    assert manifest["REFERRAL_WELCOME_BONUS_DAYS"]["subsection"] == "referral"
+    assert manifest["REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED"]["section"] == "pricing"
+    assert manifest["REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED"]["subsection"] == "referral"
+    assert manifest["REFERRAL_ONE_BONUS_PER_REFEREE"]["section"] == "pricing"
+    assert manifest["REFERRAL_ONE_BONUS_PER_REFEREE"]["subsection"] == "referral"
+    assert manifest["LEGACY_REFS"]["section"] == "pricing"
+    assert manifest["LEGACY_REFS"]["subsection"] == "referral"
+    assert manifest["DISPOSABLE_EMAIL_DOMAINS"]["section"] == "pricing"
+    assert manifest["DISPOSABLE_EMAIL_DOMAINS"]["subsection"] == "referral"
 
 
 def test_platega_settings_share_one_admin_subsection():

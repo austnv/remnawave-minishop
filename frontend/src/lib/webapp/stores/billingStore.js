@@ -352,8 +352,7 @@ export function createBillingStore({
     try {
       const response = await billing.postPayment(
         billing.planPaymentBody(s.selectedPlan, s.selectedMethod, {
-          renewHwidDevices:
-            s.renewHwidDevices && Boolean(s.selectedPlan?.hwid_renewal?.available),
+          renewHwidDevices: s.renewHwidDevices && Boolean(s.selectedPlan?.hwid_renewal?.available),
         })
       );
       const successContext = paymentSuccessContext(s, response);

@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import secrets
 from typing import Any, Dict, List, Optional
 
@@ -25,7 +26,117 @@ DEFAULT_SUBSCRIPTION_PURCHASE_DESCRIPTION_EN = (
 def _split_csv(value: Optional[str]) -> List[str]:
     if not value:
         return []
-    return [item.strip() for item in value.split(",") if item.strip()]
+    return [item.strip() for item in re.split(r"[,;\r\n]+", value) if item.strip()]
+
+
+DEFAULT_DISPOSABLE_EMAIL_DOMAINS = "\n".join(
+    [
+        "10minutemail.com",
+        "10minutemail.net",
+        "10minutemail.org",
+        "20minutemail.com",
+        "33mail.com",
+        "anonbox.net",
+        "anonymbox.com",
+        "armyspy.com",
+        "byom.de",
+        "crazymailing.com",
+        "cuvox.de",
+        "dayrep.com",
+        "deadaddress.com",
+        "dispostable.com",
+        "dodgeit.com",
+        "dodgit.com",
+        "dropmail.me",
+        "easytrashmail.com",
+        "emailfake.com",
+        "emailondeck.com",
+        "emailtemporanea.com",
+        "emailtemporanea.net",
+        "einrot.com",
+        "fakeinbox.com",
+        "filzmail.com",
+        "fleckens.hu",
+        "generator.email",
+        "getairmail.com",
+        "getnada.com",
+        "grr.la",
+        "guerrillamail.biz",
+        "guerrillamail.com",
+        "guerrillamail.de",
+        "guerrillamail.info",
+        "guerrillamail.net",
+        "guerrillamail.org",
+        "guerrillamailblock.com",
+        "gustr.com",
+        "hmamail.com",
+        "incognitomail.org",
+        "inboxbear.com",
+        "jetable.org",
+        "jourrapide.com",
+        "kasmail.com",
+        "mail-temp.com",
+        "mailcatch.com",
+        "maildrop.cc",
+        "mailexpire.com",
+        "mailinator.com",
+        "mailinator.net",
+        "mailinator.org",
+        "mailmetrash.com",
+        "mailnesia.com",
+        "mailnull.com",
+        "mailpoof.com",
+        "mailtothis.com",
+        "mail.tm",
+        "mintemail.com",
+        "mohmal.com",
+        "moakt.com",
+        "mytemp.email",
+        "mytrashmail.com",
+        "nada.email",
+        "no-spam.ws",
+        "pookmail.com",
+        "rhyta.com",
+        "sharklasers.com",
+        "sofort-mail.de",
+        "spam4.me",
+        "spambog.com",
+        "spamdecoy.net",
+        "spamfree24.org",
+        "spamgourmet.com",
+        "spamhole.com",
+        "spam.la",
+        "spammotel.com",
+        "superrito.com",
+        "teleworm.us",
+        "tempail.com",
+        "temp-mail.io",
+        "temp-mail.org",
+        "tempmail.com",
+        "tempmail.dev",
+        "tempmail.net",
+        "tempmailo.com",
+        "temporaryemail.net",
+        "temporary-mail.net",
+        "tempr.email",
+        "throwawaymail.com",
+        "trash-mail.com",
+        "trash-mail.de",
+        "trashmail.com",
+        "trashmail.me",
+        "trashmail.net",
+        "trashmailer.com",
+        "trashymail.com",
+        "weg-werf-email.de",
+        "wegwerfmail.de",
+        "wegwerfmail.net",
+        "wegwerfmail.org",
+        "yomail.info",
+        "yopmail.com",
+        "yopmail.fr",
+        "yopmail.net",
+    ]
+)
 
 
 class DBSettings(BaseModel):
@@ -282,6 +393,13 @@ class Settings(BaseSettings):
         default=3,
         description="Welcome bonus days granted to a newly registered user who joined via referral link.",  # noqa: E501
     )
+    REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "Allow referral welcome bonus grants for users who have not linked Telegram. "
+            "Disposable email domains are still blocked until Telegram is linked."
+        ),
+    )
     LEGACY_REFS: bool = Field(
         default=True,
         description="Allow legacy referral links like ref_<telegram_id> to continue working. Defaults to True when unset.",  # noqa: E501
@@ -346,6 +464,13 @@ class Settings(BaseSettings):
     TRIAL_DURATION_DAYS: int = Field(default=3)
     TRIAL_TRAFFIC_LIMIT_GB: Optional[float] = Field(default=5.0)
     TRIAL_TRAFFIC_STRATEGY: str = Field(default="NO_RESET")
+    TRIAL_WITHOUT_TELEGRAM_ENABLED: bool = Field(
+        default=True,
+        description=(
+            "Allow trial activation for users who have not linked Telegram. "
+            "Disposable email domains are still blocked until Telegram is linked."
+        ),
+    )
     TRIAL_SQUAD_UUIDS: Optional[str] = Field(
         default=None,
         description=(
@@ -449,6 +574,13 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = Field(default=None)
     SMTP_FROM_EMAIL: Optional[str] = Field(default=None)
     SMTP_FROM_NAME: Optional[str] = Field(default=None)
+    DISPOSABLE_EMAIL_DOMAINS: str = Field(
+        default=DEFAULT_DISPOSABLE_EMAIL_DOMAINS,
+        description=(
+            "Disposable email domains treated as requiring Telegram for trial and "
+            "referral welcome bonus abuse protection. Accepts commas or one domain per line."
+        ),
+    )
     SMTP_STARTTLS: bool = Field(default=True)
     SMTP_USE_SSL: bool = Field(default=False)
     EMAIL_CODE_TTL_SECONDS: int = Field(default=10 * 60)
@@ -632,6 +764,16 @@ class Settings(BaseSettings):
             if trial_squads:
                 return trial_squads
         return self.parsed_user_squad_uuids
+
+    @computed_field
+    @property
+    def disposable_email_domains(self) -> List[str]:
+        domains: List[str] = []
+        for domain in _split_csv(self.DISPOSABLE_EMAIL_DOMAINS):
+            normalized = domain.strip().lower().lstrip("@.")
+            if normalized and normalized not in domains:
+                domains.append(normalized)
+        return domains
 
     @computed_field
     @property

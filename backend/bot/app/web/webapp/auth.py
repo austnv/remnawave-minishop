@@ -1012,11 +1012,51 @@ async def _request_email_code(
 
 
 def _telegram_id_for_user(user: User) -> Optional[int]:
-    if user.telegram_id:
-        return int(user.telegram_id)
-    if user.user_id and int(user.user_id) > 0:
-        return int(user.user_id)
+    telegram_id = getattr(user, "telegram_id", None)
+    if telegram_id:
+        return int(telegram_id)
+    user_id = getattr(user, "user_id", None)
+    if user_id and int(user_id) > 0:
+        return int(user_id)
     return None
+
+
+def _user_has_linked_telegram(user: User) -> bool:
+    return bool(getattr(user, "telegram_id", None))
+
+
+def _email_only_telegram_required_reason(
+    settings: Settings,
+    user: User,
+    *,
+    without_telegram_enabled_attr: str,
+) -> Optional[str]:
+    if _user_has_linked_telegram(user):
+        return None
+    if is_disposable_email(getattr(user, "email", None), settings):
+        return "disposable_email"
+    if not bool(getattr(settings, without_telegram_enabled_attr, True)):
+        return "telegram_required"
+    return None
+
+
+def _trial_telegram_required_reason(settings: Settings, user: User) -> Optional[str]:
+    return _email_only_telegram_required_reason(
+        settings,
+        user,
+        without_telegram_enabled_attr="TRIAL_WITHOUT_TELEGRAM_ENABLED",
+    )
+
+
+def _referral_welcome_telegram_required_reason(
+    settings: Settings,
+    user: User,
+) -> Optional[str]:
+    return _email_only_telegram_required_reason(
+        settings,
+        user,
+        without_telegram_enabled_attr="REFERRAL_WELCOME_BONUS_WITHOUT_TELEGRAM_ENABLED",
+    )
 
 
 def _panel_description_for_user(user: User) -> str:
@@ -1434,6 +1474,21 @@ async def _apply_referral_welcome_bonus_if_needed(
         return None
 
     settings: Settings = request.app["settings"]
+    if _referral_welcome_telegram_required_reason(settings, user):
+        return None
+
+    return await _grant_referral_welcome_bonus_if_eligible(request, session, user)
+
+
+async def _grant_referral_welcome_bonus_if_eligible(
+    request: web.Request,
+    session: AsyncSession,
+    user: User,
+) -> Optional[datetime]:
+    if not user.referred_by_id:
+        return None
+
+    settings: Settings = request.app["settings"]
     referral_welcome_days = max(
         0,
         int(getattr(settings, "REFERRAL_WELCOME_BONUS_DAYS", 0) or 0),
@@ -1453,6 +1508,67 @@ async def _apply_referral_welcome_bonus_if_needed(
         int(user.user_id),
         referral_welcome_days,
         reason="referral_welcome_bonus",
+    )
+
+
+def _webapp_datetime_text(value: Optional[datetime]) -> Optional[str]:
+    if not value:
+        return None
+    normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return normalized.strftime("%d.%m.%Y %H:%M")
+
+
+async def referral_welcome_bonus_claim_route(request: web.Request) -> web.Response:
+    user_id = _require_user_id(request)
+    rate_limit_response = await _enforce_webapp_rate_limit(
+        request,
+        user_id=user_id,
+        action="referral_welcome_claim",
+    )
+    if rate_limit_response:
+        return rate_limit_response
+
+    settings: Settings = request.app["settings"]
+    async_session_factory: sessionmaker = request.app["async_session_factory"]
+    async with async_session_factory() as session:
+        try:
+            db_user = await user_dal.get_user_by_id(session, user_id)
+            if not db_user or db_user.is_banned:
+                await session.rollback()
+                return _json_error(403, "access_denied", "Access denied")
+
+            reason = _referral_welcome_telegram_required_reason(settings, db_user)
+            if reason:
+                await session.rollback()
+                return _json_error(400, "referral_welcome_telegram_required", reason)
+
+            end_date = await _grant_referral_welcome_bonus_if_eligible(
+                request,
+                session,
+                db_user,
+            )
+            if not end_date:
+                await session.rollback()
+                return _json_error(
+                    400,
+                    "referral_welcome_unavailable",
+                    "Referral welcome bonus is not available",
+                )
+
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logger.exception("Referral welcome bonus claim failed")
+            return _json_error(500, "referral_welcome_failed", "Referral welcome bonus failed")
+
+    await _invalidate_webapp_user_caches(settings, user_id, include_devices=True)
+    return web.json_response(
+        {
+            "ok": True,
+            "claimed": True,
+            "end_date": end_date.isoformat() if isinstance(end_date, datetime) else None,
+            "end_date_text": _webapp_datetime_text(end_date),
+        }
     )
 
 

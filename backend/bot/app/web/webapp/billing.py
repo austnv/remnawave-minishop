@@ -1,6 +1,7 @@
 # ruff: noqa: F401,F403,F405,I001
 from ._runtime import *  # noqa: F403,F405
 
+from bot.app.web.webapp.auth import _trial_telegram_required_reason
 from bot.app.web.webapp.cache_helpers import invalidate_webapp_user_caches
 from db.dal import message_log_dal
 
@@ -390,6 +391,13 @@ async def activate_trial_route(request: web.Request) -> web.Response:
         db_user = await user_dal.get_user_by_id(session, user_id)
         if not db_user or db_user.is_banned:
             return _json_error(403, "access_denied", "Access denied")
+        telegram_required_reason = _trial_telegram_required_reason(settings, db_user)
+        if telegram_required_reason:
+            return _json_error(
+                400,
+                "trial_telegram_required",
+                telegram_required_reason,
+            )
 
         activation_result = await subscription_service.activate_trial_subscription(session, user_id)
         if not activation_result or not activation_result.get("activated"):
