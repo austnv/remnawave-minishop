@@ -67,7 +67,7 @@ from .shared import (
 router = Router(name="user_subscription_payments_paykilla_router")
 _LOG = "paykilla"
 
-PAYKILLA_DEFAULT_PAYMENT_CURRENCIES = "USDTTRC"
+PAYKILLA_DEFAULT_PAYMENT_CURRENCIES = "USDTTRC,BTC,ETH,USDTBSC,USDTTON"
 PAYKILLA_DEFAULT_INVOICE_CURRENCIES = "USD,EUR"
 PAYKILLA_DEFAULT_EXCHANGE_RATE_URL = "https://open.er-api.com/v6/latest/{source}"
 PAYKILLA_DEFAULT_MIN_PAYMENT_AMOUNT = 10.0
@@ -336,7 +336,7 @@ def _invoice_text(title: Any, payment_db_id: int) -> str:
 
 def _payment_currencies(config: PaykillaConfig) -> List[str]:
     currencies = list(parse_supported_currency_codes(config.PAYMENT_CURRENCIES))
-    return currencies or ["USDTTRC"]
+    return currencies or list(parse_supported_currency_codes(PAYKILLA_DEFAULT_PAYMENT_CURRENCIES))
 
 
 def _invoice_currencies(config: PaykillaConfig) -> tuple[str, ...]:
@@ -1425,8 +1425,8 @@ _CONFIG_MANIFEST = (
         "string",
         "Accepted crypto tickers",
         description=(
-            "Comma-separated PayKilla tickers sent as paymentCurrencies, e.g. USDTTRC. "
-            "Add BTC/ETH only when enabled for the merchant account."
+            "Comma-separated PayKilla tickers sent as paymentCurrencies. "
+            "Default: USDTTRC,BTC,ETH,USDTBSC,USDTTON."
         ),
         placeholder=PAYKILLA_DEFAULT_PAYMENT_CURRENCIES,
         subsection="PayKilla",

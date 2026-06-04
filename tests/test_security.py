@@ -258,7 +258,10 @@ class PaykillaServiceTests(unittest.TestCase):
 
         self.assertEqual(body["purpose"], "Tunnel Shop payment 556")
         self.assertRegex(body["purpose"], r"^[A-Za-z0-9_\s.,]+$")
-        self.assertEqual(body["paymentCurrencies"], ["USDTTRC"])
+        self.assertEqual(
+            body["paymentCurrencies"],
+            ["USDTTRC", "BTC", "ETH", "USDTBSC", "USDTTON"],
+        )
         self.assertEqual(body["description"], body["purpose"])
         self.assertTrue(body["expiredAt"].endswith("Z"))
         self.assertTrue(body["userPaysNetworkFee"])
