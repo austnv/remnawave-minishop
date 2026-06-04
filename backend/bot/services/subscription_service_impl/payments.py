@@ -14,6 +14,7 @@ class PaymentContextMixin:
         "severpay": "SeverPay",
         "wata": "Wata",
         "cryptopay": "Crypto Pay",
+        "paykilla": "PayKilla",
         "telegram_stars": "Telegram Stars",
     }
 

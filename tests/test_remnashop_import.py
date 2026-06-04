@@ -185,6 +185,22 @@ def test_remnashop_crypto_provider_currency_is_not_imported_as_setting_override(
     }
     assert "HELEKET_CURRENCY" not in heleket["overrides"]
 
+    paykilla = remnashop_payment_gateway_overrides(
+        {
+            "type": "PAYKILLA",
+            "currency": "USD",
+            "is_active": True,
+            "settings": {"public_key": "public", "secret_key": "secret"},
+        }
+    )
+    assert paykilla["overrides"] == {
+        "PAYKILLA_ENABLED": True,
+        "PAYKILLA_API_KEY": "public",
+        "PAYKILLA_SECRET_KEY": "secret",
+    }
+    assert "PAYKILLA_CURRENCY" not in paykilla["overrides"]
+    assert any("source currency was USD" in warning for warning in paykilla["warnings"])
+
 
 def test_remnashop_unsupported_gateway_is_reported_without_overrides():
     result = remnashop_payment_gateway_overrides(

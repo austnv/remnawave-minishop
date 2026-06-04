@@ -203,6 +203,7 @@ class RemnashopMigrationDocumentationFactsTests(unittest.TestCase):
             "/webhook/wata",
             "/webhook/cryptopay",
             "/webhook/heleket",
+            "/webhook/paykilla",
             "/webhook/freekassa",
             "/webhook/platega",
             "/tg/webhook",

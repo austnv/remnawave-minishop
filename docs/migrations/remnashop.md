@@ -46,7 +46,7 @@ App, а не веб-кабинетом Remnashop. В Minishop `SUBSCRIPTION_MINI
 
 Платежные провайдеры берутся из таблицы Remnashop `payment_gateways`.
 Поддерживаются и автоматически маппятся: Telegram Stars, YooKassa, WATA,
-CryptoPay, Heleket, FreeKassa и Platega. Для них importer переносит флаги
+CryptoPay, Heleket, PayKilla, FreeKassa и Platega. Для них importer переносит флаги
 включения, API-ключи/merchant IDs и прямые технические параметры, без которых
 провайдер не сможет работать: YooKassa receipt email/VAT, FreeKassa second
 secret/payment method/server IP и Platega payment method.
@@ -55,7 +55,8 @@ Provider currency и supported-currency ограничения не перено
 в Minishop валюта платежа управляется тарифами и `DEFAULT_CURRENCY_SYMBOL`.
 Если старый gateway Remnashop был настроен на нестандартную валюту, importer
 оставит предупреждение в JSON-сводке; проверьте `CRYPTOPAY_ASSET`,
-`HELEKET_CURRENCY`, `HELEKET_SUPPORTED_CURRENCIES` или
+`HELEKET_CURRENCY`, `HELEKET_SUPPORTED_CURRENCIES`, `PAYKILLA_CURRENCY`,
+`PAYKILLA_PAYMENT_CURRENCIES` или
 `PLATEGA_SUPPORTED_CURRENCIES` вручную.
 
 Провайдеры YooMoney, Cryptomus, MulenPay, PayMaster, RoboKassa и UrlPay сейчас
@@ -77,6 +78,7 @@ Remnashop может хранить секреты в формате `enc_...`. 
 - WATA webhook/callback URL: `WEBHOOK_BASE_URL` + `/webhook/wata`;
 - CryptoBot/Crypto Pay webhook URL: `WEBHOOK_BASE_URL` + `/webhook/cryptopay`;
 - Heleket payment webhook/callback URL: `WEBHOOK_BASE_URL` + `/webhook/heleket`;
+- PayKilla webhook URL: `WEBHOOK_BASE_URL` + `/webhook/paykilla`;
 - FreeKassa notification/result URL: `WEBHOOK_BASE_URL` + `/webhook/freekassa`;
 - Platega webhook URL: `WEBHOOK_BASE_URL` + `/webhook/platega`;
 - Telegram webhook `WEBHOOK_BASE_URL` + `/tg/webhook` выставляется ботом

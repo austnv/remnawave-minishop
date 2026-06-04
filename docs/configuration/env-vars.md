@@ -197,7 +197,7 @@
 
 | Переменная | Назначение |
 | --- | --- |
-| `PAYMENT_METHODS_ORDER` | Порядок кнопок оплаты: `severpay,wata,freekassa,platega,yookassa,stars,cryptopay,heleket`. |
+| `PAYMENT_METHODS_ORDER` | Порядок кнопок оплаты: `severpay,wata,freekassa,platega,yookassa,stars,cryptopay,heleket,paykilla`. |
 | `SUBSCRIPTION_PURCHASE_DESCRIPTION_ENABLED` | Показывать описание подписки перед выбором срока. |
 | `SUBSCRIPTION_PURCHASE_DESCRIPTION_RU` / `SUBSCRIPTION_PURCHASE_DESCRIPTION_EN` | Локализованное описание подписки. |
 | `PAYMENT_<METHOD>_WEBAPP_LABEL_RU` / `PAYMENT_<METHOD>_WEBAPP_LABEL_EN` | Текст кнопки провайдера в Web App. |
@@ -213,6 +213,7 @@
 | `WATA_ENABLED` | Включает Wata. |
 | `CRYPTOPAY_ENABLED` | Включает CryptoPay. |
 | `HELEKET_ENABLED` | Включает Heleket. |
+| `PAYKILLA_ENABLED` | Включает PayKilla. |
 
 Конкретные ключи отображения:
 
@@ -271,6 +272,12 @@ PAYMENT_HELEKET_WEBAPP_ICON
 PAYMENT_HELEKET_TELEGRAM_LABEL_RU
 PAYMENT_HELEKET_TELEGRAM_LABEL_EN
 PAYMENT_HELEKET_TELEGRAM_EMOJI
+PAYMENT_PAYKILLA_WEBAPP_LABEL_RU
+PAYMENT_PAYKILLA_WEBAPP_LABEL_EN
+PAYMENT_PAYKILLA_WEBAPP_ICON
+PAYMENT_PAYKILLA_TELEGRAM_LABEL_RU
+PAYMENT_PAYKILLA_TELEGRAM_LABEL_EN
+PAYMENT_PAYKILLA_TELEGRAM_EMOJI
 ```
 
 ### YooKassa
@@ -356,6 +363,33 @@ PAYMENT_HELEKET_TELEGRAM_EMOJI
 | `HELEKET_LIFETIME_SECONDS` | TTL инвойса: 300..43200. |
 | `HELEKET_VERIFY_WEBHOOK_SIGNATURE` | Проверять подпись webhook. |
 | `HELEKET_TRUSTED_IPS` | Список доверенных IP webhook-источников. |
+
+### PayKilla
+
+Для приема оплат нужен API key типа **HMAC** с правом **INVOICE**. Право **WITHDRAWAL** для оплаты подписок не требуется; включайте его только для отдельной интеграции выплат.
+
+Webhook настраивается в PayKilla Dashboard: **Settings -> Webhooks**. Укажите `WEBHOOK_BASE_URL` + `/webhook/paykilla`, например `https://bot.example.com/webhook/paykilla`. Включите события `INVOICE_PAID` и `INVOICE_EXPIRED` как минимум. Рекомендуемый набор галочек: `INVOICE_PAID`, `PAYMENT_COMPLETED`, `PAYMENT_FAILED`, `PAYMENT_OVERPAID`, `PAYMENT_UNDERPAID`, `PAYMENT_PARTIAL`, `INVOICE_EXPIRED`, `COMPLIANCE_FAILED`. Если хотите видеть промежуточные статусы в логах PayKilla, дополнительно включите `INVOICE_CREATED`, `PAYMENT_PENDING`, `TRANSACTION_CONFIRMED` и `TRANSACTION_FINAL`.
+
+| Переменная | Назначение |
+| --- | --- |
+| `PAYKILLA_BASE_URL` | Базовый URL API, по умолчанию `https://account-api.paykilla.com`. |
+| `PAYKILLA_WIDGET_URL` | URL hosted checkout, по умолчанию `https://gopay.paykilla.com`. |
+| `PAYKILLA_API_KEY` / `PAYKILLA_V2_API_KEY` | Public HMAC key с правом `INVOICE`. |
+| `PAYKILLA_SECRET_KEY` / `PAYKILLA_V2_SECRET_KEY` | Secret HMAC key для подписи API-запросов и проверки webhook. |
+| `PAYKILLA_CURRENCY` | Валюта инвойса. Для RUB/USD/EUR/AED/GBP используется `FIAT_BASED`, для остальных - `FIXED_AMOUNT`. |
+| `PAYKILLA_PAYMENT_CURRENCIES` | Crypto tickers для оплаты, например `USDTTRC,BTC,ETH`. |
+| `PAYKILLA_SUPPORTED_CURRENCIES` | Валюты инвойса, разрешенные в этом магазине. |
+| `PAYKILLA_INVOICE_TYPE` | Необязательный override: `FIAT_BASED`, `FIXED_AMOUNT` или `OPEN_AMOUNT`. |
+| `PAYKILLA_RETURN_URL` | URL кнопки возврата на checkout-странице. |
+| `PAYKILLA_SUCCESS_URL` | URL после успешной оплаты; используется с auto-redirect. |
+| `PAYKILLA_CANCEL_URL` | URL после отмены оплаты. |
+| `PAYKILLA_LIFETIME_SECONDS` | TTL инвойса, отправляется как `expiredAt`. |
+| `PAYKILLA_RECV_WINDOW_MS` | `recvWindow` для подписанных API-запросов. |
+| `PAYKILLA_USER_PAYS_SERVICE_FEE` | `true`, если пользователь оплачивает service fee. |
+| `PAYKILLA_USER_PAYS_NETWORK_FEE` | `true`, если пользователь оплачивает network fee. |
+| `PAYKILLA_VERIFY_WEBHOOK_SIGNATURE` | Проверять `X-API-SIGN` по raw body webhook. |
+| `PAYKILLA_WEBHOOK_URL` | Точный публичный webhook URL для проверки подписи, если он отличается от `WEBHOOK_BASE_URL` + `/webhook/paykilla`. |
+| `PAYKILLA_TRUSTED_IPS` | Необязательный список доверенных IP webhook-источников. |
 
 ## Тарифы и legacy-цены
 

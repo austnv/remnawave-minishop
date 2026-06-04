@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -19,6 +20,12 @@ from bot.app.web.webapp_auth import (
 from bot.payment_providers.cryptopay import CryptoPayService
 from bot.payment_providers.freekassa import FreeKassaService
 from bot.payment_providers.heleket import HeleketConfig, HeleketService, _compute_signature
+from bot.payment_providers.paykilla import (
+    PaykillaConfig,
+    PaykillaService,
+    _sign_query,
+    _webhook_signature,
+)
 from bot.payment_providers.yookassa import yookassa_webhook_route
 from bot.services.email_templates import render_login_code
 from bot.utils.request_security import request_client_ip
@@ -197,6 +204,79 @@ class HeleketServiceTests(unittest.TestCase):
         service = self._make_service("payment-api-key")
 
         self.assertFalse(service._verify_signature({"order_id": "435", "sign": "bad"}))
+
+
+class PaykillaServiceTests(unittest.TestCase):
+    def _make_service(self, *, webhook_url: str = "https://shop.example/webhook/paykilla"):
+        service = PaykillaService.__new__(PaykillaService)
+        service.config = PaykillaConfig(
+            ENABLED=True,
+            API_KEY="public-key",
+            SECRET_KEY="secret-key",
+            WEBHOOK_URL=webhook_url,
+        )
+        service.settings = SimpleNamespace(
+            WEBHOOK_BASE_URL="https://shop.example",
+            trusted_proxies=["127.0.0.1"],
+        )
+        return service
+
+    def test_sign_query_uses_timestamp_and_recv_window_only(self):
+        query, signature = _sign_query(1738800000000, 5000, "secret-key")
+        expected = hmac.new(
+            b"secret-key",
+            b"timestamp=1738800000000&recvWindow=5000",
+            hashlib.sha256,
+        ).hexdigest()
+
+        self.assertEqual(query, "timestamp=1738800000000&recvWindow=5000")
+        self.assertEqual(signature, expected)
+
+    def test_verify_webhook_signature_accepts_raw_body_signature(self):
+        service = self._make_service()
+        raw_body = (
+            b'{"id":"evt_1","priority":"HIGH","eventType":"INVOICE_PAID",'
+            b'"data":{"id":"inv_1","clientOrderId":"42"}}'
+        )
+        timestamp = str(int(time.time() * 1000))
+        signature = _webhook_signature(
+            timestamp=timestamp,
+            method="POST",
+            url="https://shop.example/webhook/paykilla",
+            raw_body=raw_body,
+            secret_key="secret-key",
+        )
+        request = SimpleNamespace(
+            headers={
+                "X-API-KEY": "public-key",
+                "X-API-TIMESTAMP": timestamp,
+                "X-API-RECV-WINDOW": "5000",
+                "X-API-SIGN": signature,
+            },
+            method="POST",
+            scheme="https",
+            host="shop.example",
+            path_qs="/webhook/paykilla",
+        )
+
+        self.assertTrue(service._verify_webhook_signature(request, raw_body))
+
+    def test_verify_webhook_signature_rejects_invalid_signature(self):
+        service = self._make_service()
+        request = SimpleNamespace(
+            headers={
+                "X-API-KEY": "public-key",
+                "X-API-TIMESTAMP": str(int(time.time() * 1000)),
+                "X-API-RECV-WINDOW": "5000",
+                "X-API-SIGN": "bad",
+            },
+            method="POST",
+            scheme="https",
+            host="shop.example",
+            path_qs="/webhook/paykilla",
+        )
+
+        self.assertFalse(service._verify_webhook_signature(request, b"{}"))
 
 
 class WebAppSecurityTests(unittest.IsolatedAsyncioTestCase):

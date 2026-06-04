@@ -75,6 +75,7 @@ SUPPORTED_REMNASHOP_PROVIDER_TYPES = {
     "TELEGRAM_STARS",
     "YOOKASSA",
     "HELEKET",
+    "PAYKILLA",
     "CRYPTOPAY",
     "FREEKASSA",
     "PLATEGA",
@@ -93,6 +94,7 @@ PAYMENT_WEBHOOK_PATHS = {
     "wata": "/webhook/wata",
     "cryptopay": "/webhook/cryptopay",
     "heleket": "/webhook/heleket",
+    "paykilla": "/webhook/paykilla",
     "freekassa": "/webhook/freekassa",
     "platega": "/webhook/platega",
 }
@@ -477,6 +479,26 @@ def remnashop_payment_gateway_overrides(
             )
         return _provider_mapping_result(gateway_type, ["heleket"], overrides, warnings)
 
+    if gateway_type == "PAYKILLA":
+        _add_override(overrides, "PAYKILLA_ENABLED", active)
+        _add_override(
+            overrides,
+            "PAYKILLA_API_KEY",
+            settings.get("api_key") or settings.get("public_key") or settings.get("publicKey"),
+        )
+        _add_override(
+            overrides,
+            "PAYKILLA_SECRET_KEY",
+            settings.get("secret_key") or settings.get("secretKey"),
+        )
+        if currency and currency != "RUB":
+            warnings.append(
+                f"PayKilla source currency was {currency}; Minishop keeps payment currency "
+                "controlled by tariffs/default currency. Configure PAYKILLA_CURRENCY and "
+                "PAYKILLA_PAYMENT_CURRENCIES manually if this instance needs a different default."
+            )
+        return _provider_mapping_result(gateway_type, ["paykilla"], overrides, warnings)
+
     if gateway_type == "FREEKASSA":
         _add_override(overrides, "FREEKASSA_ENABLED", active)
         _add_override(overrides, "FREEKASSA_MERCHANT_ID", settings.get("shop_id"))
@@ -539,6 +561,7 @@ def remnashop_post_migration_actions(
                     "wata": "WATA merchant dashboard -> webhook/callback URL",
                     "cryptopay": "CryptoBot/Crypto Pay app -> webhook URL",
                     "heleket": "Heleket merchant dashboard -> payment webhook/callback URL",
+                    "paykilla": "PayKilla Dashboard -> Settings -> Webhooks",
                     "freekassa": "FreeKassa shop settings -> notification/result URL",
                     "platega": "Platega merchant/project settings -> webhook URL",
                 }.get(provider_id, "Payment provider dashboard -> webhook/callback URL"),

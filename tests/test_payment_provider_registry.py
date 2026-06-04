@@ -64,6 +64,7 @@ _PROVIDER_MODULES = {
     "stars": "StarsService",
     "wata": "WataService",
     "heleket": "HeleketService",
+    "paykilla": "PaykillaService",
 }
 
 
@@ -125,6 +126,7 @@ def test_service_keys_and_statuses_come_from_provider_specs():
         "stars_service",
         "cryptopay_service",
         "heleket_service",
+        "paykilla_service",
     }
     assert set(pending_statuses()) >= {
         "pending",
@@ -136,6 +138,7 @@ def test_service_keys_and_statuses_come_from_provider_specs():
         "pending_cryptopay",
         "pending_stars",
         "pending_heleket",
+        "pending_paykilla",
     }
 
 
@@ -152,6 +155,7 @@ def test_provider_labels_and_emojis_include_storage_keys_and_method_aliases():
     assert emojis["stars"] == get_provider_spec("stars").default_telegram_emoji
     assert emojis["telegram_stars"] == get_provider_spec("stars").default_telegram_emoji
     assert emojis["cryptopay"] == get_provider_spec("cryptopay").default_telegram_emoji
+    assert labels["paykilla"] == "PayKilla"
 
 
 def test_provider_presentation_resolves_defaults_and_overrides():

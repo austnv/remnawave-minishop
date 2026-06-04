@@ -76,6 +76,7 @@ def test_shell_installer_prints_remnashop_webhook_checklist():
     assert "/webhook/wata" in script
     assert "/webhook/cryptopay" in script
     assert "/webhook/heleket" in script
+    assert "/webhook/paykilla" in script
     assert "/webhook/freekassa" in script
     assert "/webhook/platega" in script
     assert "/tg/webhook" in script

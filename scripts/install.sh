@@ -874,6 +874,7 @@ remnashop_webhook_checklist() {
     printf '  WATA merchant dashboard -> webhook/callback URL: %s/webhook/wata\n' "$base_url"
     printf '  CryptoBot/Crypto Pay app -> webhook URL: %s/webhook/cryptopay\n' "$base_url"
     printf '  Heleket merchant dashboard -> payment webhook/callback URL: %s/webhook/heleket\n' "$base_url"
+    printf '  PayKilla Dashboard -> Settings -> Webhooks URL: %s/webhook/paykilla\n' "$base_url"
     printf '  FreeKassa shop settings -> notification/result URL: %s/webhook/freekassa\n' "$base_url"
     printf '  Platega merchant/project settings -> webhook URL: %s/webhook/platega\n' "$base_url"
     printf '  Telegram webhook: %s/tg/webhook (configured automatically on bot startup)\n' "$base_url"
