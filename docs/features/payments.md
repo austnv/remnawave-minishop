@@ -24,27 +24,21 @@
 
 ## Webhook URL провайдеров
 
-Все платежные webhook URL строятся от `WEBHOOK_BASE_URL` — публичного HTTPS-адреса backend/webhook-домена.
+Все платежные webhook URL строятся от `WEBHOOK_BASE_URL` - публичного HTTPS-адреса backend/webhook-домена. Это должен быть домен, который проксируется на backend-сервер вебхуков (`backend:8080`), а не `SUBSCRIPTION_MINI_APP_URL` frontend/Mini App. Если `WEBHOOK_BASE_URL=https://bot.example.com`, то полный адрес получается как `https://bot.example.com` + путь из таблицы.
 
-Это должен быть домен, который проксируется на backend-сервер вебхуков (`backend:8080`), а не frontend/Mini App домен из `SUBSCRIPTION_MINI_APP_URL`.
+| Провайдер | Что указать в кабинете провайдера | Комментарий |
+| --- | --- | --- |
+| YooKassa | `WEBHOOK_BASE_URL` + `/webhook/yookassa` | Например `https://bot.example.com/webhook/yookassa`. |
+| FreeKassa | `WEBHOOK_BASE_URL` + `/webhook/freekassa` | Используйте как notification/webhook URL; при IP-фильтрации заполните `FREEKASSA_TRUSTED_IPS`. |
+| Platega | `WEBHOOK_BASE_URL` + `/webhook/platega` | Один общий webhook для основной, СБП/карты и crypto-кнопки Platega. |
+| SeverPay | `WEBHOOK_BASE_URL` + `/webhook/severpay` | Укажите как callback/webhook URL, если поле есть в кабинете мерчанта. |
+| Wata | `WEBHOOK_BASE_URL` + `/webhook/wata` | Если включена проверка подписи, настройте `WATA_WEBHOOK_VERIFY_SIGNATURE` и `WATA_PUBLIC_KEY`. |
+| CryptoPay | `WEBHOOK_BASE_URL` + `/webhook/cryptopay` | Указывается в настройках Crypto Bot / CryptoPay webhook. |
+| Heleket | `WEBHOOK_BASE_URL` + `/webhook/heleket` | При необходимости включите `HELEKET_VERIFY_WEBHOOK_SIGNATURE` и `HELEKET_TRUSTED_IPS`. |
+| PayKilla | `WEBHOOK_BASE_URL` + `/webhook/paykilla` | Указывается в PayKilla Dashboard -> Settings -> Webhooks; включите события оплаты инвойсов. |
+| Telegram Stars | Отдельный платежный webhook не нужен | Stars-события приходят через webhook Telegram-бота: `WEBHOOK_BASE_URL` + `/tg/webhook`. |
 
-Если `WEBHOOK_BASE_URL=https://bot.example.com`, полный webhook URL получается как `https://bot.example.com` + путь из таблицы.
-
-| Провайдер | URL |
-| --- | --- |
-| YooKassa | `WEBHOOK_BASE_URL` + `/webhook/yookassa` |
-| FreeKassa | `WEBHOOK_BASE_URL` + `/webhook/freekassa` |
-| Platega | `WEBHOOK_BASE_URL` + `/webhook/platega` |
-| SeverPay | `WEBHOOK_BASE_URL` + `/webhook/severpay` |
-| Wata | `WEBHOOK_BASE_URL` + `/webhook/wata` |
-| CryptoPay | `WEBHOOK_BASE_URL` + `/webhook/cryptopay` |
-| Heleket | `WEBHOOK_BASE_URL` + `/webhook/heleket` |
-| PayKilla | `WEBHOOK_BASE_URL` + `/webhook/paykilla` |
-| Telegram Stars | `WEBHOOK_BASE_URL` + `/tg/webhook` |
-
-После настройки сделайте тестовый платеж и проверьте, что в логах `backend` виден входящий `POST` на нужный путь.
-
-Если провайдер сообщает, что адрес недоступен, проверьте DNS, HTTPS и reverse proxy для `WEBHOOK_BASE_URL`. Путь должен начинаться с `/webhook/...` без `/api`, `/auth` и frontend-домена.
+После настройки сделайте тестовый платеж и проверьте, что в логах `backend` видно входящий `POST` на нужный путь. Если провайдер сообщает, что адрес недоступен, сначала проверьте DNS/HTTPS и reverse proxy для `WEBHOOK_BASE_URL`, затем убедитесь, что путь начинается ровно с `/webhook/...` без `/api`, `/auth` и frontend-домена.
 
 ## YooKassa
 
