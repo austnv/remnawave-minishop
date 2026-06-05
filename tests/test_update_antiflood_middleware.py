@@ -75,9 +75,12 @@ class UpdateAntiFloodMiddlewareTests(unittest.IsolatedAsyncioTestCase):
         with patch("bot.middlewares.update_antiflood.get_redis", AsyncMock(return_value=None)):
             self.assertEqual(await middleware(handler, event, {}), "ok")
             self.assertEqual(await middleware(handler, event, {}), "ok")
-            self.assertIsNone(await middleware(handler, event, {}))
+            dropped_data = {}
+            self.assertIsNone(await middleware(handler, event, dropped_data))
 
         self.assertEqual(handler.await_count, 2)
+        self.assertTrue(dropped_data["antiflood_dropped"])
+        self.assertTrue(dropped_data["skip_action_log"])
 
     async def test_antiflood_can_be_disabled(self):
         middleware = UpdateAntiFloodMiddleware(

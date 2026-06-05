@@ -94,7 +94,7 @@ class UpdateAntiFloodMiddleware(BaseMiddleware):
                     chat_type,
                     getattr(event, "event_type", "unknown"),
                 )
-                data["antiflood_dropped"] = True
+                _mark_dropped(data)
                 return None
 
         if not bool(getattr(self.settings, "TELEGRAM_ANTIFLOOD_ENABLED", True)):
@@ -112,7 +112,7 @@ class UpdateAntiFloodMiddleware(BaseMiddleware):
                 actor_key,
                 cooldown[0],
             )
-            data["antiflood_dropped"] = True
+            _mark_dropped(data)
             await _quietly_answer_callback(event)
             return None
 
@@ -126,7 +126,7 @@ class UpdateAntiFloodMiddleware(BaseMiddleware):
                 actor_key,
                 action_key or getattr(event, "event_type", "unknown"),
             )
-            data["antiflood_dropped"] = True
+            _mark_dropped(data)
             return None
 
         return await handler(event, data)
@@ -300,6 +300,11 @@ async def _quietly_answer_callback(update: Update) -> None:
         await callback.answer()
     except Exception:
         pass
+
+
+def _mark_dropped(data: Dict[str, Any]) -> None:
+    data["antiflood_dropped"] = True
+    data["skip_action_log"] = True
 
 
 def _default_action_rules(settings: Settings) -> Dict[str, RateLimitRule]:
