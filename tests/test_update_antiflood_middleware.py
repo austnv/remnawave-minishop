@@ -9,6 +9,7 @@ def _settings(**overrides):
     base = {
         "REDIS_URL": None,
         "REDIS_KEY_PREFIX": "test-shop",
+        "TELEGRAM_DROP_NON_PRIVATE_UPDATES": True,
         "TELEGRAM_ANTIFLOOD_ENABLED": True,
         "TELEGRAM_ANTIFLOOD_WINDOW_SECONDS": 60,
         "TELEGRAM_ANTIFLOOD_MAX_UPDATES_PER_WINDOW": 180,
@@ -123,6 +124,33 @@ class UpdateAntiFloodMiddlewareTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(await middleware(handler, _inline_update(), {}))
 
         self.assertEqual(handler.await_count, 5)
+
+    async def test_non_private_message_is_dropped_before_handler(self):
+        middleware = UpdateAntiFloodMiddleware(_settings())
+        handler = AsyncMock(return_value="ok")
+
+        result = await middleware(
+            handler,
+            _message_update(chat_id=-100123, chat_type="supergroup"),
+            {},
+        )
+
+        self.assertIsNone(result)
+        handler.assert_not_awaited()
+
+    async def test_non_private_drop_can_be_disabled(self):
+        middleware = UpdateAntiFloodMiddleware(_settings(TELEGRAM_DROP_NON_PRIVATE_UPDATES=False))
+        handler = AsyncMock(return_value="ok")
+
+        with patch("bot.middlewares.update_antiflood.get_redis", AsyncMock(return_value=None)):
+            result = await middleware(
+                handler,
+                _callback_update(chat_id=-100123, chat_type="group"),
+                {},
+            )
+
+        self.assertEqual(result, "ok")
+        handler.assert_awaited_once()
 
 
 if __name__ == "__main__":

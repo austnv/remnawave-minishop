@@ -220,6 +220,7 @@ class Settings(BaseSettings):
     PANEL_SYNC_LIFETIME_TRAFFIC_MIN_DELTA_BYTES: int = Field(default=104857600)
     WEBAPP_RATE_LIMIT_TTL_SECONDS: int = Field(default=60)
     WEBAPP_RATE_LIMIT_MAX_REQUESTS: int = Field(default=30)
+    TELEGRAM_DROP_NON_PRIVATE_UPDATES: bool = Field(default=True)
     TELEGRAM_ANTIFLOOD_ENABLED: bool = Field(default=True)
     TELEGRAM_ANTIFLOOD_WINDOW_SECONDS: int = Field(default=60)
     TELEGRAM_ANTIFLOOD_MAX_UPDATES_PER_WINDOW: int = Field(default=180)

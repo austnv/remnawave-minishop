@@ -77,6 +77,17 @@ class UpdateAntiFloodMiddleware(BaseMiddleware):
         event: Update,
         data: Dict[str, Any],
     ) -> Any:
+        if bool(getattr(self.settings, "TELEGRAM_DROP_NON_PRIVATE_UPDATES", True)):
+            chat_type = _message_or_callback_chat_type(event)
+            if chat_type is not None and chat_type != "private":
+                logger.info(
+                    "Telegram update dropped outside private chat: chat_type=%s update_type=%s",
+                    chat_type,
+                    getattr(event, "event_type", "unknown"),
+                )
+                data["antiflood_dropped"] = True
+                return None
+
         if not bool(getattr(self.settings, "TELEGRAM_ANTIFLOOD_ENABLED", True)):
             return await handler(event, data)
 
@@ -156,6 +167,18 @@ def _update_actor_key(update: Update) -> Optional[str]:
         return f"user:{int(user_id)}"
     if chat_id is not None:
         return f"chat:{int(chat_id)}"
+    return None
+
+
+def _message_or_callback_chat_type(update: Update) -> Optional[str]:
+    if update.message and update.message.chat:
+        return str(update.message.chat.type)
+    if (
+        update.callback_query
+        and update.callback_query.message
+        and update.callback_query.message.chat
+    ):
+        return str(update.callback_query.message.chat.type)
     return None
 
 
