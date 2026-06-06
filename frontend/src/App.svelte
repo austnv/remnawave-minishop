@@ -375,6 +375,9 @@
   $: plans = data?.plans?.length ? data.plans : MOCK_SOURCE.data.plans;
   $: methods = data?.payment_methods?.length ? data.payment_methods : [];
   $: appSettings = data?.settings || MOCK_SOURCE.data.settings;
+  $: rawEmailAuthEnabled =
+    data?.settings?.email_auth_enabled ?? appSettings?.email_auth_enabled ?? CFG.emailAuthEnabled;
+  $: emailAuthEnabled = rawEmailAuthEnabled !== false && rawEmailAuthEnabled !== "false";
   $: subscriptionPurchaseDescription = String(
     appSettings?.subscription_purchase_description || ""
   ).trim();
@@ -489,7 +492,7 @@
   );
   $: telegramNotificationsStartLink = String(user?.telegram_notifications_start_link || "");
   $: hasUnlinkedIdentity =
-    !user?.telegram_linked || !user?.email || telegramNotificationsNeedPrompt;
+    !user?.telegram_linked || (emailAuthEnabled && !user?.email) || telegramNotificationsNeedPrompt;
   $: referralBonusDetails = Array.isArray(referral?.bonus_details) ? referral.bonus_details : [];
   $: referralWelcomeBonusDays = Math.max(0, Number(referral?.welcome_bonus_days || 0));
   $: referralOneBonusPerReferee = Boolean(referral?.one_bonus_per_referee);
@@ -533,9 +536,15 @@
       changeConfirmOpen ||
       topupModalOpen ||
       deviceTopupModalOpen ||
-      linkEmailOpen ||
-      setPasswordOpen
+      (emailAuthEnabled && linkEmailOpen) ||
+      (emailAuthEnabled && setPasswordOpen)
   );
+  $: if (!emailAuthEnabled && linkEmailOpen) {
+    accountStore.closeLinkEmailDialog();
+  }
+  $: if (!emailAuthEnabled && setPasswordOpen) {
+    accountStore.closeSetPasswordDialog();
+  }
   $: if (!tariffMode && !$billingStore.selectedPlan && plans.length) {
     billingStore.update((s) => ({ ...s, selectedPlan: plans[Math.min(1, plans.length - 1)] }));
   }
@@ -1163,8 +1172,14 @@
   }
 
   function openSettingsLinkEmailDialog() {
+    if (!emailAuthEnabled) return;
     const authDemo = MOCK_SOURCE.data?.auth_demo || {};
     accountStore.openLinkEmailDialog(demoAuthLogin ? authDemo.email || "3252a8@proton.me" : "");
+  }
+
+  function openSettingsSetPasswordDialog() {
+    if (!emailAuthEnabled) return;
+    accountStore.openSetPasswordDialog();
   }
 
   async function linkTelegramFromSettings() {
@@ -2597,6 +2612,7 @@
               <SettingsScreen
                 {currentLang}
                 {currentLanguageOption}
+                {emailAuthEnabled}
                 {emailLinkStatus}
                 {isAdmin}
                 {languageBusy}
@@ -2625,7 +2641,7 @@
                 {openAdminPanel}
                 {openExternalLink}
                 openLinkEmailDialog={openSettingsLinkEmailDialog}
-                openSetPasswordDialog={accountStore.openSetPasswordDialog}
+                openSetPasswordDialog={openSettingsSetPasswordDialog}
                 {setLanguageMenuOpen}
                 {t}
                 updateAccountLanguage={accountStore.updateAccountLanguage}
@@ -2654,13 +2670,13 @@
             {disconnectDevice}
             {linkEmailBusy}
             {linkEmailIsError}
-            {linkEmailOpen}
+            linkEmailOpen={emailAuthEnabled && linkEmailOpen}
             {linkEmailPending}
             {linkEmailResendCooldown}
             {linkEmailStatus}
             {setPasswordBusy}
             {setPasswordIsError}
-            {setPasswordOpen}
+            setPasswordOpen={emailAuthEnabled && setPasswordOpen}
             {setPasswordPending}
             {setPasswordResendCooldown}
             {setPasswordStatus}

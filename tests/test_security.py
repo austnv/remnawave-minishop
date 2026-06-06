@@ -70,6 +70,30 @@ class RequestSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 403)
         request.json.assert_not_awaited()
 
+    async def test_account_email_routes_reject_when_email_auth_disabled(self):
+        settings = SimpleNamespace(email_auth_configured=False)
+        handlers = [
+            account_routes.account_email_request_route,
+            account_routes.account_email_verify_route,
+            account_routes.account_password_request_route,
+            account_routes.account_password_confirm_route,
+        ]
+
+        with patch.object(account_routes, "_require_user_id", return_value=42):
+            for handler in handlers:
+                request = SimpleNamespace(
+                    app={"settings": settings},
+                    json=AsyncMock(side_effect=AssertionError("request.json() must not be called")),
+                    headers={},
+                    cookies={},
+                )
+
+                response = await handler(request)
+
+                self.assertEqual(response.status, 503, handler.__name__)
+                self.assertIn("email_auth_not_configured", response.text)
+                request.json.assert_not_awaited()
+
 
 class FreeKassaServiceTests(unittest.TestCase):
     def _make_service(self) -> FreeKassaService:
