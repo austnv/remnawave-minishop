@@ -412,13 +412,13 @@
     if (!Number.isFinite(uid) || uid === 0) return;
     const next = normalizeSection("users");
     sidebarOpen = false;
+    usersStore.setActive(next);
     if (active !== next) {
       active = next;
       paymentsStore.closePayment({ skipPush: true });
       supportStore.closeTicketView({ skipPush: true });
       onSectionChange(next, uid);
     }
-    usersStore.setActive(next);
     usersStore.openUser(uid);
   }
 
