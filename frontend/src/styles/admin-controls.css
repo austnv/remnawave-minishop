@@ -85,6 +85,14 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
+.admin-screen-wrap .admin-pagination-jump-input,
+.admin-dialog .admin-pagination-jump-input {
+  width: 64px;
+  height: 32px;
+  padding: 0 8px;
+  text-align: center;
+}
+
 .admin-btn {
   display: inline-flex;
   align-items: center;

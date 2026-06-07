@@ -129,11 +129,14 @@
     userLogsPageSize,
   } = $usersStore);
 
-  $: userLogsHasMore =
-    Number(userLogsTotal || 0) > (Number(userLogsPage || 0) + 1) * Number(userLogsPageSize || 20);
-  $: userReferralsHasMore =
-    Number(userReferralsTotal || 0) >
-    (Number(userReferralsPage || 0) + 1) * Number(userReferralsPageSize || 25);
+  $: userLogsPageCount = Math.max(
+    1,
+    Math.ceil(Number(userLogsTotal || 0) / Number(userLogsPageSize || 20))
+  );
+  $: userReferralsPageCount = Math.max(
+    1,
+    Math.ceil(Number(userReferralsTotal || 0) / Number(userReferralsPageSize || 25))
+  );
 
   $: openedUserAvatarUrl = openedUser ? resolvedAvatarUrl(openedUser) : "";
   $: referralInviter = openedUserDetail?.referral?.inviter || null;
@@ -738,13 +741,19 @@
 
               {#if userLogsLoaded && userLogsTotal > userLogsPageSize}
                 <AdminPagination
-                  meta={`${at("page_short", {}, "Стр.")} ${userLogsPage + 1}`}
+                  page={userLogsPage}
+                  pageCount={userLogsPageCount}
+                  total={userLogsTotal}
+                  pageLabel={at("page_short", {}, "Стр.")}
+                  ofLabel={at("pagination_of", {}, "из")}
+                  totalLabel={at("total", {}, "Всего")}
+                  jumpLabel={at("page_short", {}, "Стр.")}
+                  jumpAriaLabel={at("pagination_jump_aria", {}, "Перейти к странице")}
+                  goLabel={at("pagination_go", {}, "Перейти")}
                   prevLabel={at("back", {}, "Назад")}
                   nextLabel={at("next", {}, "Далее")}
-                  prevDisabled={userLogsPage === 0 || userLogsLoading}
-                  nextDisabled={!userLogsHasMore || userLogsLoading}
-                  onPrev={() => usersStore.setUserLogsPage(Math.max(0, userLogsPage - 1))}
-                  onNext={() => usersStore.setUserLogsPage(userLogsPage + 1)}
+                  disabled={userLogsLoading}
+                  onPageChange={(page) => usersStore.setUserLogsPage(page)}
                 />
               {/if}
             </Tabs.Content>
@@ -1244,20 +1253,19 @@
 
     {#if userReferralsTotal > userReferralsPageSize}
       <AdminPagination
-        meta={at(
-          "pagination_meta",
-          {
-            current: userReferralsPage + 1,
-            total: Math.max(1, Math.ceil(userReferralsTotal / userReferralsPageSize)),
-          },
-          `${userReferralsPage + 1}/${Math.max(1, Math.ceil(userReferralsTotal / userReferralsPageSize))}`
-        )}
+        page={userReferralsPage}
+        pageCount={userReferralsPageCount}
+        total={userReferralsTotal}
+        pageLabel={at("page_short", {}, "Стр.")}
+        ofLabel={at("pagination_of", {}, "из")}
+        totalLabel={at("total", {}, "Всего")}
+        jumpLabel={at("page_short", {}, "Стр.")}
+        jumpAriaLabel={at("pagination_jump_aria", {}, "Перейти к странице")}
+        goLabel={at("pagination_go", {}, "Перейти")}
         prevLabel={at("prev_page", {}, "Назад")}
         nextLabel={at("next_page", {}, "Вперёд")}
-        prevDisabled={userReferralsLoading || userReferralsPage <= 0}
-        nextDisabled={userReferralsLoading || !userReferralsHasMore}
-        onPrev={() => usersStore.setUserReferralsPage(userReferralsPage - 1)}
-        onNext={() => usersStore.setUserReferralsPage(userReferralsPage + 1)}
+        disabled={userReferralsLoading}
+        onPageChange={(page) => usersStore.setUserReferralsPage(page)}
       />
     {/if}
   </div>
