@@ -2,8 +2,11 @@ import json
 import re
 import subprocess
 import sys
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+
+from PIL import Image
 
 from bot.middlewares.i18n import JsonI18n
 from bot.services import email_templates as email_templates_module
@@ -316,6 +319,39 @@ def test_uploaded_webapp_logo_is_embedded_inline(tmp_path, monkeypatch):
     assert inline_logo.content_id == "webapp-logo"
     assert inline_logo.content_type == "image/png"
     assert inline_logo.data == logo_body
+
+
+def test_uploaded_webp_logo_is_embedded_as_transparent_png(tmp_path, monkeypatch):
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir()
+    filename = "logo-2222222222222222.webp"
+    source = Image.new("RGBA", (3, 3), (0, 0, 0, 0))
+    source.putpixel((1, 1), (255, 0, 0, 255))
+    raw = BytesIO()
+    source.save(raw, format="WEBP", lossless=True)
+    (uploads_dir / filename).write_bytes(raw.getvalue())
+    monkeypatch.setattr(email_templates_module, "_WEBAPP_UPLOADED_LOGO_DIR", uploads_dir)
+
+    settings = _settings()
+    settings.WEBAPP_LOGO_URL = f"/webapp-uploaded-logo/{filename}"
+
+    content = render_login_code(
+        settings,
+        code="123456",
+        language_code="en",
+        purpose="login",
+        i18n=_i18n("en"),
+    )
+
+    assert 'src="cid:webapp-logo"' in content.html
+    assert len(content.inline_images) == 1
+    inline_logo = content.inline_images[0]
+    assert inline_logo.content_type == "image/png"
+
+    with Image.open(BytesIO(inline_logo.data)) as converted:
+        assert converted.mode == "RGBA"
+        assert converted.getpixel((0, 0))[3] == 0
+        assert converted.getpixel((1, 1))[3] == 255
 
 
 def test_public_https_webapp_logo_remains_external():
