@@ -709,14 +709,6 @@
                     onValueChange={handleTrialSquadSelect}
                   />
                 {/key}
-                <Input
-                  class="input"
-                  type="text"
-                  placeholder={valueForKey("USER_SQUAD_UUIDS", settingsDirty, settingsFieldMap) ||
-                    "uuid-a,uuid-b"}
-                  value={valueForKey("TRIAL_SQUAD_UUIDS", settingsDirty, settingsFieldMap)}
-                  oninput={(event) => setSetting("TRIAL_SQUAD_UUIDS", event.currentTarget.value)}
-                />
                 {#if isSettingDirty("TRIAL_SQUAD_UUIDS", settingsDirty)}
                   <AdminButton
                     size="sm"
