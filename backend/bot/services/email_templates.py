@@ -16,8 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
-from config.webapp_themes_config import effective_webapp_theme_accent
-
 if TYPE_CHECKING:
     from bot.middlewares.i18n import JsonI18n
     from config.settings import Settings
@@ -82,6 +80,8 @@ def _theme_accent(settings: Settings) -> str:
         catalog = getattr(settings, "webapp_themes_catalog", None)
         if catalog is None:
             return primary
+        from config.webapp_themes_config import effective_webapp_theme_accent
+
         return _safe_color(effective_webapp_theme_accent(catalog, primary))
     except Exception:
         return primary
