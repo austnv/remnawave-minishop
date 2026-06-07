@@ -1660,7 +1660,9 @@
   font-size: 13px;
   text-align: center;
   outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .admin-pagination-jump-input:focus {
@@ -3667,6 +3669,7 @@
   display: grid;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .admin-row-editor-line {
@@ -3698,7 +3701,8 @@
 }
 
 .admin-row-editor-line.admin-row-editor-drag {
-  grid-template-columns: 24px minmax(90px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr)
+  grid-template-columns:
+    24px minmax(90px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr)
     var(--admin-row-editor-action-size);
 }
 
@@ -3910,6 +3914,59 @@
     font-size: 11px;
   }
 
+  .admin-tariff-dialog {
+    width: min(100%, calc(100vw - 24px));
+    gap: 12px;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .admin-tariff-dialog .dialog-head {
+    gap: 10px;
+  }
+
+  .admin-tariff-dialog .dialog-title-copy {
+    min-width: 0;
+  }
+
+  .admin-tariff-dialog .admin-tabs-list {
+    width: 100%;
+  }
+
+  .admin-tariff-dialog .admin-tabs-trigger {
+    flex: 0 0 auto;
+    padding-inline: 10px;
+  }
+
+  .admin-tariff-dialog .admin-tabs-content,
+  .admin-tariff-dialog .admin-editor-section,
+  .admin-tariff-dialog .admin-editor-section-title {
+    min-width: 0;
+  }
+
+  .admin-tariff-dialog .admin-editor-section {
+    padding: 10px;
+  }
+
+  .admin-tariff-dialog .admin-editor-section-head {
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .admin-tariff-dialog .admin-editor-section-head > .admin-editor-section-actions,
+  .admin-tariff-dialog .admin-editor-section-actions {
+    width: 100%;
+  }
+
+  .admin-tariff-dialog .admin-editor-section-actions .admin-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-row-editor-line.admin-row-editor-header {
+    display: none;
+  }
+
   .admin-form-row.admin-form-row-3,
   .admin-row-editor-line,
   .admin-row-editor-line.admin-row-editor-4,
@@ -3917,6 +3974,27 @@
   .admin-row-editor-line.admin-row-editor-period,
   .admin-row-editor-line.admin-row-editor-drag {
     grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .admin-row-editor-line:not(.admin-row-editor-header) {
+    padding: 10px;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--admin-surface-2) 58%, transparent);
+  }
+
+  .admin-row-editor-line .ui-sortable-handle.ui-sortable-handle {
+    width: 100%;
+    height: 28px;
+    min-height: 28px;
+    border: 1px dashed var(--admin-border);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--admin-muted) 8%, transparent);
+  }
+
+  .admin-row-editor-line .admin-btn {
+    justify-self: end;
   }
 
   .admin-dialog-actions {
@@ -3981,6 +4059,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
+  min-width: 0;
   padding: 4px;
   border-radius: 10px;
   background: var(--admin-surface-2);
