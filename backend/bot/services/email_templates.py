@@ -17,8 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
-from PIL import Image, ImageOps, UnidentifiedImageError
-
 if TYPE_CHECKING:
     from bot.middlewares.i18n import JsonI18n
     from config.settings import Settings
@@ -154,6 +152,11 @@ def _email_logo_payload(filename: str, content_type: str, body: bytes) -> Tuple[
 
 
 def _static_raster_logo_to_png(body: bytes) -> Optional[bytes]:
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+    except ImportError:
+        return None
+
     try:
         with Image.open(io.BytesIO(body)) as image:
             image.seek(0)
