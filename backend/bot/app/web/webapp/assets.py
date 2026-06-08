@@ -1454,10 +1454,15 @@ def _resolve_webapp_js_asset_name() -> str:
 
 
 def _resolve_webapp_admin_js_asset_name() -> str:
-    # The admin bundle is lazy-loaded from the already running Mini App. In
-    # deployments where nginx serves static files in front of aiohttp, stale
-    # hashed admin filenames can 404 even though the runtime build asset exists.
-    return _set_cached_asset_name("admin-js", "subscription_webapp_admin.js")
+    # The admin bundle is lazy-loaded from the already running Mini App. It now
+    # ships content-hashed alongside the main bundle (same build, deterministic
+    # hashes, served immutable), so iOS WebViews fetch fresh admin assets on every
+    # deploy. The App.svelte loader falls back to the bare runtime build name if a
+    # hashed asset ever 404s.
+    return _resolve_hashed_js_asset_name(
+        kind="admin-js",
+        base_name="subscription_webapp_admin",
+    )
 
 
 def _resolve_hashed_js_asset_name(*, kind: str, base_name: str) -> str:
@@ -1487,9 +1492,11 @@ def _resolve_webapp_css_asset_name() -> str:
 
 
 def _resolve_webapp_admin_css_asset_name() -> str:
-    # Keep the lazy-loaded admin stylesheet on the stable build filename for
-    # the same reason as the JS bundle above.
-    return _set_cached_asset_name("admin-css", "subscription_webapp_admin.css")
+    # Content-hashed and immutable, same rationale as the admin JS bundle above.
+    return _resolve_hashed_css_asset_name(
+        kind="admin-css",
+        base_name="subscription_webapp_admin",
+    )
 
 
 def _resolve_hashed_css_asset_name(*, kind: str, base_name: str) -> str:

@@ -1009,7 +1009,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
                     r"^subscription_webapp\.css\?v=[0-9a-f]{8}$",
                 )
 
-    def test_resolve_webapp_admin_asset_names_use_stable_runtime_builds(self):
+    def test_resolve_webapp_admin_asset_names_prefer_latest_hashed_builds(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             asset_dir = Path(tmpdir)
             (asset_dir / "subscription_webapp_admin.js").write_text(
@@ -1032,13 +1032,35 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             os.utime(new_css, (2, 2))
 
             with patch.object(webapp_assets, "ASSET_DIR", asset_dir):
+                webapp_assets._ASSET_NAME_CACHE.clear()
                 self.assertEqual(
                     subscription_webapp._resolve_webapp_admin_js_asset_name(),
-                    "subscription_webapp_admin.js",
+                    "subscription_webapp_admin.min.22222222.js",
                 )
                 self.assertEqual(
                     subscription_webapp._resolve_webapp_admin_css_asset_name(),
-                    "subscription_webapp_admin.css",
+                    "subscription_webapp_admin.22222222.css",
+                )
+
+    def test_resolve_webapp_admin_asset_names_fall_back_to_runtime_builds(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            asset_dir = Path(tmpdir)
+            (asset_dir / "subscription_webapp_admin.js").write_text(
+                "console.log('admin fallback');", encoding="utf-8"
+            )
+            (asset_dir / "subscription_webapp_admin.css").write_text(
+                ".admin{color:red}", encoding="utf-8"
+            )
+
+            with patch.object(webapp_assets, "ASSET_DIR", asset_dir):
+                webapp_assets._ASSET_NAME_CACHE.clear()
+                self.assertRegex(
+                    subscription_webapp._resolve_webapp_admin_js_asset_name(),
+                    r"^subscription_webapp_admin\.js\?v=[0-9a-f]{8}$",
+                )
+                self.assertRegex(
+                    subscription_webapp._resolve_webapp_admin_css_asset_name(),
+                    r"^subscription_webapp_admin\.css\?v=[0-9a-f]{8}$",
                 )
 
     async def test_js_asset_route_sets_immutable_cache_control_for_minified_asset(self):
