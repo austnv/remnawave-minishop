@@ -1609,7 +1609,7 @@ async def _initiate_yk_payment(
             await payment_dal.update_payment_status_by_db_id(
                 session,
                 payment_db_id=db_payment_record.payment_id,
-                new_status=payment_response_yk.get("status", "pending"),
+                new_status="pending_yookassa",
                 yk_payment_id=payment_response_yk.get("id"),
             )
             if selected_method_internal_id is not None:
@@ -1677,12 +1677,11 @@ async def _initiate_yk_payment(
         return True
 
     if payment_response_yk and payment_method_id:
-        status_to_store = payment_response_yk.get("status", "pending")
         try:
             await payment_dal.update_payment_status_by_db_id(
                 session,
                 payment_db_id=db_payment_record.payment_id,
-                new_status=status_to_store,
+                new_status="pending_yookassa",
                 yk_payment_id=payment_response_yk.get("id"),
             )
             if selected_method_internal_id is not None:
@@ -2934,7 +2933,7 @@ async def create_webapp_payment(ctx: WebAppPaymentContext) -> web.Response:
         await payment_dal.update_payment_status_by_db_id(
             ctx.session,
             payment.payment_id,
-            response.get("status", "pending"),
+            "pending_yookassa",
             yk_payment_id=response.get("id"),
         )
         await ctx.session.commit()

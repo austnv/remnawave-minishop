@@ -356,7 +356,7 @@ async def render_link_or_fail(
     payment as ``failed_creation``. Every link-style provider used to inline
     this same sequence.
     """
-    if api_success and provider_payment_id:
+    if api_success and provider_payment_id and payment_url:
         await safe_store_provider_payment_id(
             session,
             payment,

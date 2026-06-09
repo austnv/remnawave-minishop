@@ -663,7 +663,6 @@ async def pay_platega_callback_handler(
     )
     transaction_id = first_value(response_data, "transactionId", "id")
     redirect_url = first_value(response_data, "redirect", "url", "paymentUrl")
-    provider_status = str((response_data or {}).get("status") or payment_record.status)
     # Platega requires *both* a transaction id and a redirect url to count as a
     # usable payment — neither field is sufficient on its own. Skipping the
     # persistence step when the redirect is missing matches the pre-refactor
@@ -680,7 +679,6 @@ async def pay_platega_callback_handler(
         api_success=success,
         payment_url=redirect_url,
         provider_payment_id=persistable_id,
-        new_status=provider_status if persistable_id else None,
         log_prefix=_LOG,
     )
 
@@ -766,7 +764,6 @@ async def _create_webapp_payment(ctx: WebAppPaymentContext, variant: str) -> web
             first_value(response_data, "redirect", "url", "paymentUrl") if success else None
         ),
         provider_payment_id=first_value(response_data, "transactionId", "id"),
-        new_status=str((response_data or {}).get("status") or payment.status),
         log_prefix="Platega",
     )
 

@@ -129,13 +129,19 @@ async def find_recent_pending_provider_payment(
     Used to reuse an existing provider payment link instead of creating a new one
     on repeated user clicks. A generic or provider-specific payment id must be
     populated so the caller can verify the remote payment link.
+
+    Status matching is case-insensitive and also accepts the generic ``pending``
+    alias so legacy rows (e.g. Platega ``PENDING`` or YooKassa ``pending``) stay
+    reusable after provider APIs overwrite the internal pending status.
     """
     from datetime import datetime, timedelta, timezone
 
     conditions = [
         Payment.user_id == user_id,
         Payment.provider == provider,
-        Payment.status.in_((pending_status, "pending")),
+        func.lower(Payment.status).in_(
+            tuple({str(pending_status).lower(), "pending"})
+        ),
         or_(
             Payment.provider_payment_id.isnot(None),
             Payment.yookassa_payment_id.isnot(None),

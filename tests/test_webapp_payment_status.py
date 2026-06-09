@@ -210,6 +210,85 @@ class WebAppPaymentStatusTests(IsolatedAsyncioTestCase):
             )
         )
 
+    async def test_platega_reuses_tariff_upgrade_pending_transaction(self):
+        payment = SimpleNamespace(
+            payment_id=35,
+            amount=150.0,
+            currency="RUB",
+            provider_payment_id="transaction-35",
+            provider_payment_url="https://platega.example/pay/35",
+        )
+        service = object.__new__(PlategaService)
+        service.get_transaction = AsyncMock(
+            return_value=(
+                True,
+                {
+                    "id": "transaction-35",
+                    "status": "PENDING",
+                    "paymentDetails": {"amount": 150.0, "currency": "RUB"},
+                    "payload": json.dumps(
+                        {
+                            "payment_db_id": 35,
+                            "user_id": 734546943,
+                            "months": 1,
+                            "sale_mode": "tariff_upgrade@main",
+                            "traffic_gb": None,
+                            "hwid_devices": None,
+                            "source": "webapp",
+                            "platega_variant": "sbp",
+                        }
+                    ),
+                },
+            )
+        )
+
+        url = await service.try_reuse_pending_transaction(
+            payment,
+            user_id=734546943,
+            sale_mode="tariff_upgrade@main",
+            variant="sbp",
+        )
+
+        self.assertEqual(url, "https://platega.example/pay/35")
+
+    async def test_render_link_or_fail_skips_id_without_payment_url(self):
+        from bot.payment_providers.shared.callbacks import render_link_or_fail
+
+        payment = SimpleNamespace(payment_id=77, status="pending_platega")
+        session = AsyncMock()
+        callback = SimpleNamespace(message=SimpleNamespace(edit_text=AsyncMock()), answer=AsyncMock())
+
+        with patch(
+            "bot.payment_providers.shared.callbacks.safe_store_provider_payment_id",
+            AsyncMock(return_value=True),
+        ) as store_id, patch(
+            "bot.payment_providers.shared.callbacks.render_payment_link",
+            AsyncMock(),
+        ) as render_link, patch(
+            "bot.payment_providers.shared.callbacks.safe_mark_failed_creation",
+            AsyncMock(),
+        ) as mark_failed, patch(
+            "bot.payment_providers.shared.callbacks.notify_payment_gateway_failure",
+            AsyncMock(),
+        ):
+            await render_link_or_fail(
+                callback,
+                translator=lambda key, **kwargs: key,
+                current_lang="ru",
+                i18n=None,
+                parts=SimpleNamespace(),
+                session=session,
+                payment=payment,
+                api_success=True,
+                payment_url=None,
+                provider_payment_id="transaction-77",
+                log_prefix="Platega",
+            )
+
+        store_id.assert_not_awaited()
+        render_link.assert_not_awaited()
+        mark_failed.assert_awaited_once()
+
     async def test_freekassa_reuses_matching_new_order(self):
         payment = SimpleNamespace(
             payment_id=77,
