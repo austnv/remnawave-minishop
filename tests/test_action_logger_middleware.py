@@ -7,9 +7,7 @@ from bot.middlewares.action_logger_middleware import ActionLoggerMiddleware
 
 class ActionLoggerMiddlewareTests(unittest.IsolatedAsyncioTestCase):
     async def test_skip_action_log_flag_suppresses_database_logging(self):
-        middleware = ActionLoggerMiddleware(
-            SimpleNamespace(ADMIN_IDS=[], LOG_ADMIN_ACTIONS=True)
-        )
+        middleware = ActionLoggerMiddleware(SimpleNamespace(ADMIN_IDS=[], LOG_ADMIN_ACTIONS=True))
         event = SimpleNamespace(event_type="message")
         data = {
             "session": object(),
