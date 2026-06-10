@@ -426,16 +426,10 @@ class HeleketService(HttpClientMixin):
         if str(data.get("order_id") or "") != str(payment.payment_id):
             return None
         try:
-            if not decimal_amounts_equal(data.get("amount"), getattr(payment, "amount", None)):
-                return None
             expired_at = int(data.get("expired_at") or 0)
         except (TypeError, ValueError):
             return None
         if expired_at and expired_at <= int(time.time()):
-            return None
-        provider_currency = normalize_payment_currency_code(data.get("currency"))
-        payment_currency = normalize_payment_currency_code(getattr(payment, "currency", None))
-        if provider_currency != payment_currency:
             return None
         return (
             str(data.get("url") or "").strip()

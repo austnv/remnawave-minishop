@@ -330,19 +330,6 @@ class PlategaService(HttpClientMixin):
         if str(data.get("id") or "") != transaction_id:
             return None
 
-        details = data.get("paymentDetails") or {}
-        if not isinstance(details, dict):
-            return None
-        try:
-            if not decimal_amounts_equal(details.get("amount"), getattr(payment, "amount", None)):
-                return None
-        except (TypeError, ValueError):
-            return None
-        provider_currency = normalize_payment_currency_code(details.get("currency"))
-        payment_currency = normalize_payment_currency_code(getattr(payment, "currency", None))
-        if provider_currency != payment_currency:
-            return None
-
         try:
             payload = json.loads(str(data.get("payload") or ""))
         except (TypeError, ValueError, json.JSONDecodeError):

@@ -359,6 +359,19 @@ class WataService(HttpClientMixin):
         if not success or not isinstance(data, dict):
             return None
 
+        returned_ids = {
+            str(data.get("id") or "").strip(),
+            str(data.get("paymentLinkId") or "").strip(),
+            str(data.get("payment_link_id") or "").strip(),
+        }
+        returned_ids.discard("")
+        if returned_ids and provider_payment_id not in returned_ids:
+            return None
+
+        order_id = first_value(data, "orderId", "order_id")
+        if order_id is not None and str(order_id) != str(payment.payment_id):
+            return None
+
         status = _normalized_wata_status(data) or str(data.get("status") or "").strip().lower()
         if status and status not in _WATA_LINK_OPENED_STATUSES:
             return None

@@ -295,23 +295,16 @@ class FreeKassaService(HttpClientMixin):
         if not success:
             return None
 
-        expected_currency = normalize_payment_currency_code(getattr(payment, "currency", None))
         for order in response_data.get("orders") or []:
             if not isinstance(order, dict):
                 continue
             try:
                 is_new = int(order.get("status", -1)) == 0
-                amount_matches = decimal_amounts_equal(
-                    order.get("amount"),
-                    getattr(payment, "amount", None),
-                )
             except (TypeError, ValueError):
                 continue
-            if not is_new or not amount_matches:
+            if not is_new:
                 continue
             if str(order.get("merchant_order_id") or "") != str(payment.payment_id):
-                continue
-            if normalize_payment_currency_code(order.get("currency")) != expected_currency:
                 continue
             fk_order_id = str(order.get("fk_order_id") or "").strip()
             if fk_order_id:

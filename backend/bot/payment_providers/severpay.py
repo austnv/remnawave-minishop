@@ -38,7 +38,6 @@ from .shared import (
     PaymentSuccessRequest,
     build_payment_record_payload,
     create_webapp_payment_record,
-    decimal_amounts_equal,
     describe_payment,
     finalize_successful_payment,
     finalize_webapp_link_payment,
@@ -290,15 +289,6 @@ class SeverPayService(HttpClientMixin):
         if provider_payment_id not in returned_ids:
             return None
         if str(data.get("order_id") or "") != str(payment.payment_id):
-            return None
-        try:
-            if not decimal_amounts_equal(data.get("amount"), getattr(payment, "amount", None)):
-                return None
-        except (TypeError, ValueError):
-            return None
-        provider_currency = normalize_payment_currency_code(data.get("currency"))
-        payment_currency = normalize_payment_currency_code(getattr(payment, "currency", None))
-        if provider_currency != payment_currency:
             return None
         return payment_url
 

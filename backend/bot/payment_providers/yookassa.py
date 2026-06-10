@@ -63,7 +63,6 @@ from .shared import (
     append_hwid_renewal_note,
     build_success_message,
     create_webapp_payment_record,
-    decimal_amounts_equal,
     format_human_units,
     format_number_for_payload,
     is_traffic_sale_base,
@@ -2961,12 +2960,6 @@ async def reuse_webapp_payment(ctx: WebAppPaymentContext, payment: Any) -> Optio
     if not info or str(info.get("status") or "").strip().lower() != "pending":
         return None
     if bool(info.get("paid")):
-        return None
-    if not decimal_amounts_equal(info.get("amount_value"), getattr(payment, "amount", None)):
-        return None
-    provider_currency = normalize_payment_currency_code(info.get("amount_currency"))
-    payment_currency = normalize_payment_currency_code(getattr(payment, "currency", None))
-    if provider_currency != payment_currency:
         return None
 
     metadata = info.get("metadata") or {}
