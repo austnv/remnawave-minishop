@@ -41,9 +41,18 @@
 | `DB_POOL_RECYCLE_SECONDS` | `.env` | Период recycling DB-соединений. |
 | `REDIS_URL` | Compose | Redis для FSM, кеша, rate-limit, очередей и locks. В Compose задается автоматически. |
 | `REDIS_KEY_PREFIX` | `.env` | Префикс Redis-ключей. |
-| `TRUSTED_PROXIES` | `.env` | IP/CIDR обратных прокси, которым доверяется `X-Forwarded-For`. |
+| `TRUSTED_PROXIES` | `.env` | IP/CIDR обратных прокси, которым доверяется `X-Forwarded-For`. По умолчанию включает loopback и private ranges для Docker/LAN/Kubernetes proxy. |
 | `HTTP_BIND` / `HTTPS_BIND` | Caddy Compose | Адреса публикации Caddy-варианта. |
 | `NEWT_ID` / `NEWT_SECRET` | Dev Compose | Доступы Newt в dev-compose. |
+
+`TRUSTED_PROXIES` нужен не только для логов: платежные webhook-обработчики с IP-фильтром
+сравнивают allowlist провайдера с client IP после обработки `X-Forwarded-For`. Если внешний
+proxy не передает этот заголовок или его IP не входит в `TRUSTED_PROXIES`, backend увидит IP
+proxy/Docker gateway и может отклонить валидный webhook. Для Caddy/Nginx/Newt из
+`deploy/examples` дефолта достаточно; в кастомной инфраструктуре добавьте CIDR своего proxy
+или сузьте значение до конкретных proxy IP. Trust-all вариант записывается как
+`0.0.0.0/0,::/0`, но он безопасен только если backend не доступен напрямую, а внешний proxy
+очищает входящий `X-Forwarded-For`.
 
 ## Кеши, rate limits и worker
 
@@ -66,6 +75,7 @@
 | `ADMIN_PANEL_STATS_CACHE_TTL_SECONDS` | TTL статистики Remnawave в админке. |
 | `ADMIN_DB_STATS_CACHE_TTL_SECONDS` | TTL дорогих DB-агрегатов админки. |
 | `ADMIN_USERS_LIST_CACHE_TTL_SECONDS` | TTL списка пользователей админки. |
+| `ADMIN_BROADCAST_AUDIENCE_COUNTS_CACHE_TTL_SECONDS` | TTL счетчиков целевых групп рассылки в админке. |
 | `PROFILE_SYNC_CACHE_TTL_SECONDS` | Минимальная пауза между sync Telegram-профиля пользователя. |
 | `PANEL_SYNC_LIFETIME_TRAFFIC_MIN_INTERVAL_SECONDS` | Минимальная пауза записи lifetime-трафика. |
 | `PANEL_SYNC_LIFETIME_TRAFFIC_MIN_DELTA_BYTES` | Дельта lifetime-трафика для более ранней записи. |
@@ -212,6 +222,7 @@
 | `PAYMENT_METHODS_ORDER` | Порядок кнопок оплаты: `severpay,wata,freekassa,platega,yookassa,stars,cryptopay,heleket,paykilla`. |
 | `SUBSCRIPTION_PURCHASE_DESCRIPTION_ENABLED` | Показывать описание подписки перед выбором срока. |
 | `SUBSCRIPTION_PURCHASE_DESCRIPTION_RU` / `SUBSCRIPTION_PURCHASE_DESCRIPTION_EN` | Локализованное описание подписки. |
+| `PAYMENT_REQUEST_TIMEOUT_SECONDS` | Общий таймаут одного API-запроса к платёжному провайдеру, в секундах. По умолчанию `20`. |
 | `PAYMENT_<METHOD>_WEBAPP_LABEL_RU` / `PAYMENT_<METHOD>_WEBAPP_LABEL_EN` | Текст кнопки провайдера в Web App. |
 | `PAYMENT_<METHOD>_WEBAPP_ICON` | Lucide-иконка кнопки в Web App. |
 | `PAYMENT_<METHOD>_TELEGRAM_LABEL_RU` / `PAYMENT_<METHOD>_TELEGRAM_LABEL_EN` | Текст кнопки в Telegram. |

@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from aiohttp import web
 from PIL import Image, ImageOps
 
 from bot.app.web import subscription_webapp
@@ -330,7 +331,18 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("https://fonts.googleapis.com", html)
         self.assertNotIn('id="logo-preload"', html)
         self.assertNotIn('href=""', html)
+        self.assertNotIn("<title>/minishop</title>", html)
+        self.assertIn("<title>Subscription</title>", html)
         self.assertLess(html.index("/subscription_webapp.css"), html.index("WEBAPP_JS_SCRIPT"))
+
+    def test_mobile_bottom_nav_many_items_uses_compact_phone_layout(self):
+        css_path = Path(__file__).resolve().parents[1] / "frontend/src/styles/webapp.css"
+        css = css_path.read_text(encoding="utf-8")
+
+        self.assertIn("@media (max-width: 460px)", css)
+        self.assertIn(".bottom-nav.bottom-nav-many", css)
+        self.assertIn(".bottom-nav.bottom-nav-many .bottom-nav-label", css)
+        self.assertIn("display: none;", css)
 
     def test_https_webapp_logo_uses_same_origin_proxy(self):
         settings = SimpleNamespace(WEBAPP_LOGO_URL="https://cdn.example.com/logo.png")
@@ -476,6 +488,7 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(response.content_type, "image/png")
         self.assertEqual(response.body, b"touch-icon")
+        self.assertEqual(response.headers["Cache-Control"], "no-cache")
 
     async def test_current_favicon_alias_serves_default_icon_when_unconfigured(self):
         settings = SimpleNamespace(
@@ -492,6 +505,23 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(response.content_type, "image/png")
         self.assertGreater(len(response.body), 0)
+        self.assertEqual(response.headers["Cache-Control"], "no-cache")
+
+    async def test_current_favicon_alias_redirect_is_not_cached(self):
+        settings = SimpleNamespace(
+            WEBAPP_ENABLED=True,
+            WEBAPP_LOGO_URL="",
+            WEBAPP_FAVICON_USE_CUSTOM=True,
+            WEBAPP_FAVICON_URL="/uploaded-icon.png",
+            WEBAPP_LOGO_FAVICON_URL="",
+        )
+        request = SimpleNamespace(app={"settings": settings}, path="/icon-192.png")
+
+        with self.assertRaises(web.HTTPFound) as exc:
+            await webapp_assets.webapp_current_favicon_route(request)
+
+        self.assertEqual(exc.exception.location, "/uploaded-icon.png")
+        self.assertEqual(exc.exception.headers["Cache-Control"], "no-cache")
 
     async def test_default_logo_route_serves_bundled_logo(self):
         settings = SimpleNamespace(WEBAPP_ENABLED=True)
@@ -549,6 +579,18 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('href="/apple-touch-icon.png"', template)
         self.assertIn('href="/favicon.ico"', template)
 
+    def test_frontend_runtime_fallback_title_is_not_minishop_path(self):
+        app_source = Path("frontend/src/App.svelte").read_text(encoding="utf-8")
+        browser_source = Path("frontend/src/lib/webapp/browser.js").read_text(encoding="utf-8")
+        preview_source = Path("frontend/src/PreviewBoard.svelte").read_text(encoding="utf-8")
+        admin_source = Path("frontend/src/admin/AdminPanel.svelte").read_text(encoding="utf-8")
+
+        self.assertNotIn('title: "/minishop"', app_source)
+        self.assertNotIn('CFG.title || "/minishop"', app_source)
+        self.assertNotIn('brand.title || "/minishop"', browser_source)
+        self.assertNotIn('config.title || "/minishop"', preview_source)
+        self.assertNotIn('brandTitle = "/minishop"', admin_source)
+
     def test_frontend_nginx_proxies_root_icon_aliases(self):
         nginx_conf = Path("deploy/docker/frontend/nginx.conf").read_text(encoding="utf-8")
 
@@ -556,6 +598,19 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("favicon\\.ico", nginx_conf)
         self.assertIn("/webapp-default-logo.webp", nginx_conf)
         self.assertIn("proxy_pass http://backend:8081;", nginx_conf)
+
+    def test_frontend_nginx_proxies_shell_routes_for_dynamic_head(self):
+        nginx_conf = Path("deploy/docker/frontend/nginx.conf").read_text(encoding="utf-8")
+        marker = 'location ~ "^/(?:$|login/password$|home$|install$|trial$|s/[a-f0-9]{32}$'
+
+        self.assertIn(marker, nginx_conf)
+        start = nginx_conf.index(marker)
+        shell_block = nginx_conf[start : nginx_conf.index("\n\n", start)]
+
+        self.assertIn("proxy_pass http://backend:8081;", shell_block)
+        self.assertIn("proxy_set_header Host $host;", shell_block)
+        self.assertIn("devices$", shell_block)
+        self.assertIn("admin(?:/.*)?$", shell_block)
 
     def test_home_logo_scale_rules_beat_late_loaded_admin_brand_styles(self):
         css = Path("frontend/src/styles/webapp.css").read_text(encoding="utf-8")
@@ -592,10 +647,8 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             root = Path(tmpdir)
             uploads = root / "uploads"
             favicons = root / "favicons"
-            emoji = root / "emoji"
             uploads.mkdir()
             favicons.mkdir()
-            emoji.mkdir()
             (uploads / "logo-1111111111111111.png").write_bytes(b"keep")
             (uploads / "logo-2222222222222222.png").write_bytes(b"remove")
             (favicons / "aaaaaaaaaaaaaaaa").mkdir()
@@ -604,10 +657,6 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             (favicons / "aaaaaaaaaaaaaaaa" / "icon-180.png").write_bytes(b"keep")
             (favicons / "bbbbbbbbbbbbbbbb" / "icon-180.png").write_bytes(b"keep")
             (favicons / "cccccccccccccccc" / "icon-180.png").write_bytes(b"remove")
-            # Emoji logos were removed; any leftover emoji cache files are purged.
-            (emoji / "1f929.512.gif").write_bytes(b"remove")
-            (emoji / "1f929.512.webp").write_bytes(b"remove")
-            (emoji / "1f525.512.gif").write_bytes(b"remove")
             settings = SimpleNamespace(
                 WEBAPP_LOGO_URL="/webapp-uploaded-logo/logo-1111111111111111.png",
                 WEBAPP_FAVICON_URL="/webapp-favicon/aaaaaaaaaaaaaaaa/icon-180.png",
@@ -617,7 +666,6 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(admin_themes, "WEBAPP_UPLOADED_LOGO_DIR", uploads),
                 patch.object(admin_themes, "WEBAPP_FAVICON_DIR", favicons),
-                patch.object(admin_themes, "WEBAPP_EMOJI_CACHE_DIR", emoji),
             ):
                 admin_themes.prune_unused_appearance_assets(settings)
 
@@ -626,9 +674,6 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((favicons / "aaaaaaaaaaaaaaaa").exists())
             self.assertTrue((favicons / "bbbbbbbbbbbbbbbb").exists())
             self.assertFalse((favicons / "cccccccccccccccc").exists())
-            self.assertFalse((emoji / "1f929.512.gif").exists())
-            self.assertFalse((emoji / "1f929.512.webp").exists())
-            self.assertFalse((emoji / "1f525.512.gif").exists())
 
     async def test_persist_appearance_upload_writes_overrides_and_clears_caches(self):
         settings = SimpleNamespace()
@@ -935,7 +980,26 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
                     "subscription_webapp.min.22222222.js",
                 )
 
-    def test_resolve_webapp_admin_asset_names_use_stable_runtime_builds(self):
+    def test_resolve_webapp_asset_names_version_stable_fallbacks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            asset_dir = Path(tmpdir)
+            (asset_dir / "subscription_webapp.js").write_text(
+                "console.log('fallback');", encoding="utf-8"
+            )
+            (asset_dir / "subscription_webapp.css").write_text(".app{color:red}", encoding="utf-8")
+
+            with patch.object(webapp_assets, "ASSET_DIR", asset_dir):
+                webapp_assets._ASSET_NAME_CACHE.clear()
+                self.assertRegex(
+                    subscription_webapp._resolve_webapp_js_asset_name(),
+                    r"^subscription_webapp\.js\?v=[0-9a-f]{8}$",
+                )
+                self.assertRegex(
+                    subscription_webapp._resolve_webapp_css_asset_name(),
+                    r"^subscription_webapp\.css\?v=[0-9a-f]{8}$",
+                )
+
+    def test_resolve_webapp_admin_asset_names_prefer_latest_hashed_builds(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             asset_dir = Path(tmpdir)
             (asset_dir / "subscription_webapp_admin.js").write_text(
@@ -958,13 +1022,35 @@ class WebAppAssetTests(unittest.IsolatedAsyncioTestCase):
             os.utime(new_css, (2, 2))
 
             with patch.object(webapp_assets, "ASSET_DIR", asset_dir):
+                webapp_assets._ASSET_NAME_CACHE.clear()
                 self.assertEqual(
                     subscription_webapp._resolve_webapp_admin_js_asset_name(),
-                    "subscription_webapp_admin.js",
+                    "subscription_webapp_admin.min.22222222.js",
                 )
                 self.assertEqual(
                     subscription_webapp._resolve_webapp_admin_css_asset_name(),
-                    "subscription_webapp_admin.css",
+                    "subscription_webapp_admin.22222222.css",
+                )
+
+    def test_resolve_webapp_admin_asset_names_fall_back_to_runtime_builds(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            asset_dir = Path(tmpdir)
+            (asset_dir / "subscription_webapp_admin.js").write_text(
+                "console.log('admin fallback');", encoding="utf-8"
+            )
+            (asset_dir / "subscription_webapp_admin.css").write_text(
+                ".admin{color:red}", encoding="utf-8"
+            )
+
+            with patch.object(webapp_assets, "ASSET_DIR", asset_dir):
+                webapp_assets._ASSET_NAME_CACHE.clear()
+                self.assertRegex(
+                    subscription_webapp._resolve_webapp_admin_js_asset_name(),
+                    r"^subscription_webapp_admin\.js\?v=[0-9a-f]{8}$",
+                )
+                self.assertRegex(
+                    subscription_webapp._resolve_webapp_admin_css_asset_name(),
+                    r"^subscription_webapp_admin\.css\?v=[0-9a-f]{8}$",
                 )
 
     async def test_js_asset_route_sets_immutable_cache_control_for_minified_asset(self):

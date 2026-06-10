@@ -90,6 +90,7 @@ docker compose logs -f backend worker frontend
 - `WEBAPP_SESSION_SECRET`, `WEBHOOK_SECRET_TOKEN` - стабильные секреты;
 - `SUBSCRIPTION_MINI_APP_URL` - публичный HTTPS URL Mini App/frontend, например `https://app.domain.com/`;
 - `PANEL_API_URL`, `PANEL_API_KEY`, `PANEL_WEBHOOK_SECRET` - доступ к Remnawave;
+- `TRUSTED_PROXIES` - оставьте дефолт для Docker/Caddy/Nginx/Newt или укажите IP/CIDR своего reverse proxy, чтобы IP allowlist платежных webhook видел реального провайдера;
 - остальные настройки удобнее задать в Web App админке.
 
 В Remnawave Panel укажите `WEBHOOK_URL` как публичный адрес Minishop с путем `/webhook/panel`, например `https://app.example.com/webhook/panel`. Секрет вебхука задается в самой Remnawave Panel; это же значение вставьте в `PANEL_WEBHOOK_SECRET` в `.env` или в **Система -> Настройки -> Remnawave Panel** в админке.
@@ -98,10 +99,12 @@ docker compose logs -f backend worker frontend
 
 Для каталога тарифов используется `TARIFFS_CONFIG_PATH` со значением по умолчанию `data/tariffs.json`. Пример формата лежит в [data/tariffs.example.json](data/tariffs.example.json), подробности - в [docs/features/tariffs.md](docs/features/tariffs.md).
 
+В Docker этот файл должен быть доступен не только `backend` и `worker`, но и одноразовому сервису `migrate`: мигратор читает каталог тарифов при привязке существующих подписок к тарифу по умолчанию. В текущих compose-файлах весь `/app/data` уже смонтирован в `migrate`, `backend` и `worker`; если переносите compose вручную, сохраните одинаковый mount для всех трех сервисов.
+
 В compose-примерах `/app/data` монтируется из папки `./data` рядом с `docker-compose.yml`. Заранее создайте каталог и отдайте его пользователю контейнера. Это нужно для сохранения `data/tariffs.json`, каталога тем `data/themes` и кеша логотипа Web App:
 
 ```bash
-mkdir -p data/themes data/webapp-logo
+mkdir -p data/themes data/webapp-logo data/tariffs
 touch data/locales-overrides.json
 chown -R 10001:10001 data
 chmod -R u+rwX data

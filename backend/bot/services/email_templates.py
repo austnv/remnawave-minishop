@@ -10,13 +10,12 @@ copy goes through the shared `JsonI18n` instance so translations live in
 from __future__ import annotations
 
 import html
+import io
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
-
-from config.webapp_themes_config import effective_webapp_theme_accent
 
 if TYPE_CHECKING:
     from bot.middlewares.i18n import JsonI18n
@@ -44,6 +43,7 @@ _LOGO_CONTENT_TYPES = {
     ".svg": "image/svg+xml",
     ".webp": "image/webp",
 }
+_EMAIL_LOGO_PNG_FALLBACK_EXTENSIONS = {".ico", ".webp"}
 
 
 @dataclass(frozen=True)
@@ -82,6 +82,8 @@ def _theme_accent(settings: Settings) -> str:
         catalog = getattr(settings, "webapp_themes_catalog", None)
         if catalog is None:
             return primary
+        from config.webapp_themes_config import effective_webapp_theme_accent
+
         return _safe_color(effective_webapp_theme_accent(catalog, primary))
     except Exception:
         return primary
@@ -129,11 +131,47 @@ def _inline_uploaded_logo(settings: Settings) -> Optional[EmailInlineImage]:
     if not body or len(body) > _WEBAPP_LOGO_MAX_BYTES:
         return None
 
+    content_type, body = _email_logo_payload(filename, content_type, body)
+
     return EmailInlineImage(
         content_id=_EMAIL_LOGO_CONTENT_ID,
         content_type=content_type,
         data=body,
     )
+
+
+def _email_logo_payload(filename: str, content_type: str, body: bytes) -> Tuple[str, bytes]:
+    suffix = Path(filename).suffix.lower()
+    if suffix not in _EMAIL_LOGO_PNG_FALLBACK_EXTENSIONS:
+        return content_type, body
+
+    png_body = _static_raster_logo_to_png(body)
+    if png_body and len(png_body) <= _WEBAPP_LOGO_MAX_BYTES:
+        return "image/png", png_body
+    return content_type, body
+
+
+def _static_raster_logo_to_png(body: bytes) -> Optional[bytes]:
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+    except ImportError:
+        return None
+
+    try:
+        with Image.open(io.BytesIO(body)) as image:
+            image.seek(0)
+            if getattr(image, "is_animated", False):
+                return None
+            source = ImageOps.exif_transpose(image).convert("RGBA")
+    except (OSError, UnidentifiedImageError, ValueError, EOFError):
+        return None
+
+    if source.width < 1 or source.height < 1 or source.width > 8192 or source.height > 8192:
+        return None
+
+    output = io.BytesIO()
+    source.save(output, format="PNG", optimize=True)
+    return output.getvalue()
 
 
 def _email_logo(settings: Settings) -> Tuple[Optional[str], Tuple[EmailInlineImage, ...]]:
@@ -198,7 +236,7 @@ def _layout(
         logo_block = (
             f'<img src="{html.escape(logo_url, quote=True)}" width="64" height="64" '
             f'alt="" style="display:block;border:0;outline:none;text-decoration:none;'
-            f'border-radius:16px;">'
+            f'border-radius:16px;background:transparent;background-color:transparent;">'
         )
 
     layout_html = f"""<!DOCTYPE html>

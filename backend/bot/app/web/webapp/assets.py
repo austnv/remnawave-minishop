@@ -18,6 +18,8 @@ _GZIP_BODY_CACHE: Dict[str, bytes] = {}
 _ASSET_NAME_CACHE: Dict[tuple[str, str], tuple[float, str]] = {}
 _I18N_PAYLOAD_CACHE: Dict[tuple[int, str, tuple[tuple[str, int, int], ...]], Dict[str, Any]] = {}
 _ASSET_NAME_CACHE_TTL_SECONDS = 30.0
+WEBAPP_HTML_CACHE_CONTROL = "no-store, no-cache, must-revalidate, max-age=0"
+WEBAPP_LEGACY_ASSET_CACHE_CONTROL = "no-store, no-cache, must-revalidate, max-age=0"
 
 
 async def health_route(request: web.Request) -> web.Response:
@@ -48,7 +50,7 @@ async def _css_asset_route(request: web.Request, *, base_name: str) -> web.Respo
         allow_precompressed=bool(asset_hash),
     )
     response.headers["Cache-Control"] = (
-        "public, max-age=31536000, immutable" if asset_hash else "no-cache"
+        "public, max-age=31536000, immutable" if asset_hash else WEBAPP_LEGACY_ASSET_CACHE_CONTROL
     )
     return response
 
@@ -382,11 +384,15 @@ async def webapp_current_favicon_route(request: web.Request) -> web.Response:
     favicon_url = _resolve_webapp_favicon_url(settings, _resolve_webapp_logo_url(settings))
     digest = _webapp_generated_favicon_digest(favicon_url)
     if digest:
-        return _webapp_favicon_file_response(digest, target_filename)
+        response = _webapp_favicon_file_response(digest, target_filename)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
     redirect_url = _webapp_redirectable_favicon_url(favicon_url, target_filename)
     if redirect_url:
-        raise web.HTTPFound(location=redirect_url)
+        redirect = web.HTTPFound(location=redirect_url)
+        redirect.headers["Cache-Control"] = "no-cache"
+        raise redirect
 
     raise web.HTTPNotFound(text="webapp_favicon_not_found")
 
@@ -897,7 +903,7 @@ async def _js_asset_route(request: web.Request, *, base_name: str) -> web.Respon
         strip_dev_mock=not asset_hash,
     )
     response.headers["Cache-Control"] = (
-        "public, max-age=31536000, immutable" if asset_hash else "no-cache"
+        "public, max-age=31536000, immutable" if asset_hash else WEBAPP_LEGACY_ASSET_CACHE_CONTROL
     )
     return response
 
@@ -1136,9 +1142,11 @@ async def index_route(request: web.Request) -> web.Response:
     bootstrap = _build_webapp_bootstrap_payload(request)
     config = bootstrap["config"]
     html = _strip_marked_block(html, DEV_MOCK_START_MARKER, DEV_MOCK_END_MARKER)
+    css_asset_name = _resolve_webapp_css_asset_name()
+    js_asset_name = _resolve_webapp_js_asset_name()
     html = html.replace(
         'href="/subscription_webapp.css"',
-        f'href="/{_resolve_webapp_css_asset_name()}"',
+        f'href="/{css_asset_name}"',
         1,
     )
     initial_theme_markup = _initial_theme_head_markup(request, initial_theme, primary_color)
@@ -1165,7 +1173,7 @@ async def index_route(request: web.Request) -> web.Response:
     )
     html = html.replace(
         WEBAPP_JS_PLACEHOLDER,
-        f'<script src="/{_resolve_webapp_js_asset_name()}" defer></script>',
+        f'<script src="/{js_asset_name}" defer></script>',
     )
     brand_asset_url = cached["logo_url"]
     if brand_asset_url:
@@ -1178,7 +1186,9 @@ async def index_route(request: web.Request) -> web.Response:
             1,
         )
     response = web.Response(text=html, content_type="text/html", charset="utf-8")
-    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Cache-Control"] = WEBAPP_HTML_CACHE_CONTROL
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 
@@ -1444,10 +1454,15 @@ def _resolve_webapp_js_asset_name() -> str:
 
 
 def _resolve_webapp_admin_js_asset_name() -> str:
-    # The admin bundle is lazy-loaded from the already running Mini App. In
-    # deployments where nginx serves static files in front of aiohttp, stale
-    # hashed admin filenames can 404 even though the runtime build asset exists.
-    return _set_cached_asset_name("admin-js", "subscription_webapp_admin.js")
+    # The admin bundle is lazy-loaded from the already running Mini App. It now
+    # ships content-hashed alongside the main bundle (same build, deterministic
+    # hashes, served immutable), so iOS WebViews fetch fresh admin assets on every
+    # deploy. The App.svelte loader falls back to the bare runtime build name if a
+    # hashed asset ever 404s.
+    return _resolve_hashed_js_asset_name(
+        kind="admin-js",
+        base_name="subscription_webapp_admin",
+    )
 
 
 def _resolve_hashed_js_asset_name(*, kind: str, base_name: str) -> str:
@@ -1466,7 +1481,7 @@ def _resolve_hashed_js_asset_name(*, kind: str, base_name: str) -> str:
     if minified_assets:
         minified_assets.sort(reverse=True)
         return _set_cached_asset_name(kind, minified_assets[0][1])
-    return _set_cached_asset_name(kind, f"{base_name}.js")
+    return _set_cached_asset_name(kind, _stable_asset_name_with_version(f"{base_name}.js"))
 
 
 def _resolve_webapp_css_asset_name() -> str:
@@ -1477,9 +1492,11 @@ def _resolve_webapp_css_asset_name() -> str:
 
 
 def _resolve_webapp_admin_css_asset_name() -> str:
-    # Keep the lazy-loaded admin stylesheet on the stable build filename for
-    # the same reason as the JS bundle above.
-    return _set_cached_asset_name("admin-css", "subscription_webapp_admin.css")
+    # Content-hashed and immutable, same rationale as the admin JS bundle above.
+    return _resolve_hashed_css_asset_name(
+        kind="admin-css",
+        base_name="subscription_webapp_admin",
+    )
 
 
 def _resolve_hashed_css_asset_name(*, kind: str, base_name: str) -> str:
@@ -1498,7 +1515,19 @@ def _resolve_hashed_css_asset_name(*, kind: str, base_name: str) -> str:
     if hashed_assets:
         hashed_assets.sort(reverse=True)
         return _set_cached_asset_name(kind, hashed_assets[0][1])
-    return _set_cached_asset_name(kind, f"{base_name}.css")
+    return _set_cached_asset_name(kind, _stable_asset_name_with_version(f"{base_name}.css"))
+
+
+def _stable_asset_name_with_version(filename: str) -> str:
+    path = ASSET_DIR / filename
+    try:
+        stat = path.stat()
+    except OSError:
+        return filename
+
+    raw_version = f"{filename}:{int(stat.st_mtime_ns)}:{int(stat.st_size)}"
+    version = hashlib.sha256(raw_version.encode("utf-8")).hexdigest()[:8]
+    return f"{filename}?v={version}"
 
 
 def _get_cached_asset_name(kind: str) -> Optional[str]:

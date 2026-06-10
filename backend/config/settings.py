@@ -138,6 +138,17 @@ DEFAULT_DISPOSABLE_EMAIL_DOMAINS = "\n".join(
     ]
 )
 
+DEFAULT_TRUSTED_PROXIES = ",".join(
+    [
+        "127.0.0.1",
+        "::1",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "fc00::/7",
+    ]
+)
+
 
 class DBSettings(BaseModel):
     user: str
@@ -215,6 +226,7 @@ class Settings(BaseSettings):
     ADMIN_PANEL_STATS_CACHE_TTL_SECONDS: int = Field(default=15)
     ADMIN_DB_STATS_CACHE_TTL_SECONDS: int = Field(default=5)
     ADMIN_USERS_LIST_CACHE_TTL_SECONDS: int = Field(default=3)
+    ADMIN_BROADCAST_AUDIENCE_COUNTS_CACHE_TTL_SECONDS: int = Field(default=30)
     PROFILE_SYNC_CACHE_TTL_SECONDS: int = Field(default=900)
     PANEL_SYNC_LIFETIME_TRAFFIC_MIN_INTERVAL_SECONDS: int = Field(default=3600)
     PANEL_SYNC_LIFETIME_TRAFFIC_MIN_DELTA_BYTES: int = Field(default=104857600)
@@ -309,7 +321,7 @@ class Settings(BaseSettings):
 
     WEBHOOK_BASE_URL: Optional[str] = None
     TRUSTED_PROXIES: Optional[str] = Field(
-        default="127.0.0.1,::1",
+        default=DEFAULT_TRUSTED_PROXIES,
         description="Comma-separated list of reverse proxy IPs or CIDRs trusted to forward X-Forwarded-For.",  # noqa: E501
     )
 
@@ -330,6 +342,11 @@ class Settings(BaseSettings):
     SUBSCRIPTION_PURCHASE_DESCRIPTION_EN: str = Field(
         default=DEFAULT_SUBSCRIPTION_PURCHASE_DESCRIPTION_EN,
         description="English subscription description shown before purchase/renewal options.",
+    )
+    PAYMENT_REQUEST_TIMEOUT_SECONDS: float = Field(
+        default=20,
+        ge=1,
+        description="Maximum total time for one payment provider API request, in seconds.",
     )
 
     MONTH_1_ENABLED: bool = Field(default=True, alias="1_MONTH_ENABLED")
@@ -1251,9 +1268,10 @@ class Settings(BaseSettings):
     TELEMETRY_ENABLED: bool = Field(
         default=True,
         description=(
-            "Send an anonymous daily install heartbeat (version, OS, locale, "
-            "user-count range). No personal data. Opt out here, via the web "
-            "admin, or by clearing TELEMETRY_ENDPOINT/TELEMETRY_API_KEY."
+            "Send an anonymous daily install heartbeat (version, official/custom "
+            "image provenance, OS, locale, user-count range). No personal data. "
+            "Opt out here, via the web admin, or by clearing "
+            "TELEMETRY_ENDPOINT/TELEMETRY_API_KEY."
         ),
     )
     TELEMETRY_ENDPOINT: str = Field(

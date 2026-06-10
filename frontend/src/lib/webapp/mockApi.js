@@ -762,6 +762,29 @@ function demoApiResponse(path, cleanPath, options, context) {
   }
   if (cleanPath === "/admin/sync") return { ok: true, status: "queued" };
 
+  if (cleanPath === "/admin/health") {
+    return {
+      ok: true,
+      alerts: [
+        {
+          id: "provider_not_configured:wata",
+          severity: "error",
+          sections: ["settings"],
+          message_key: "provider_not_configured",
+          params: { provider: "Wata" },
+        },
+        {
+          id: "mini_app_url_missing",
+          severity: "warning",
+          sections: ["settings"],
+          message_key: "mini_app_url_missing",
+          params: {},
+        },
+      ],
+      checked_at: new Date().toISOString(),
+    };
+  }
+
   if (cleanPath === "/admin/payments") {
     const page = paged(DEMO_DATASET.adminPayments || [], params, 25);
     return {
@@ -1529,6 +1552,8 @@ export async function mockApi(path, options = {}, context = {}) {
       ],
       log_count: 18,
       subscription_url: "https://panel.example.com/sub/aBcDeFgHiJkLmNoP",
+      last_vpn_connected_at: "2026-06-05T08:42:00Z",
+      vpn_connection_status: "connected",
       referral: {
         code: "ABCD1234",
         bot_link: "https://t.me/preview_bot?start=ref_uABCD1234",

@@ -12,6 +12,7 @@ from aiohttp import web
 
 from bot.app.web import admin_api, subscription_webapp
 from bot.app.web.admin_api_impl import settings as admin_settings_routes
+from bot.app.web.web_server import TrustedProxyAccessLogger
 from bot.app.web.webapp import account as account_routes
 from bot.app.web.webapp_auth import (
     create_telegram_oauth_nonce,
@@ -37,15 +38,94 @@ from db.database_setup import redacted_database_url
 
 
 class RequestSecurityTests(unittest.IsolatedAsyncioTestCase):
-    async def test_request_client_ip_uses_last_forwarded_for_value_for_trusted_proxy(self):
+    async def test_request_client_ip_uses_rightmost_untrusted_forwarded_ip(self):
         request = SimpleNamespace(
             remote="127.0.0.1",
             headers={"X-Forwarded-For": "203.0.113.10, 198.51.100.7"},
         )
 
         self.assertEqual(
+            request_client_ip(
+                request,
+                trusted_proxies=["127.0.0.1", "198.51.100.0/24"],
+            ),
+            "203.0.113.10",
+        )
+
+    async def test_request_client_ip_ignores_spoofed_forwarded_prefix(self):
+        request = SimpleNamespace(
+            remote="127.0.0.1",
+            headers={"X-Forwarded-For": "198.51.100.200, 203.0.113.10"},
+        )
+
+        self.assertEqual(
+            request_client_ip(request, trusted_proxies=["127.0.0.1"]),
+            "203.0.113.10",
+        )
+
+    async def test_request_client_ip_ignores_forwarded_for_from_untrusted_remote(self):
+        request = SimpleNamespace(
+            remote="203.0.113.50",
+            headers={"X-Forwarded-For": "198.51.100.200, 192.0.2.10"},
+        )
+
+        self.assertEqual(
+            request_client_ip(request, trusted_proxies=["127.0.0.1"]),
+            "203.0.113.50",
+        )
+
+    async def test_request_client_ip_uses_leftmost_forwarded_ip_when_all_hops_are_trusted(self):
+        request = SimpleNamespace(
+            remote="127.0.0.1",
+            headers={"X-Forwarded-For": "172.18.0.4, 172.18.0.5"},
+        )
+
+        self.assertEqual(
+            request_client_ip(request, trusted_proxies=["127.0.0.1", "172.16.0.0/12"]),
+            "172.18.0.4",
+        )
+
+    async def test_request_client_ip_keeps_last_forwarded_ip_without_remote(self):
+        request = SimpleNamespace(
+            remote=None,
+            headers={"X-Forwarded-For": "203.0.113.10, 198.51.100.7"},
+        )
+
+        self.assertEqual(
             request_client_ip(request, trusted_proxies=["127.0.0.1"]),
             "198.51.100.7",
+        )
+
+    async def test_request_client_ip_skips_trusted_forwarded_proxy_chain(self):
+        request = SimpleNamespace(
+            remote="172.19.0.6",
+            headers={"X-Forwarded-For": "203.0.113.10, 172.19.0.7"},
+        )
+
+        self.assertEqual(
+            request_client_ip(request, trusted_proxies=["172.19.0.0/16"]),
+            "203.0.113.10",
+        )
+
+    async def test_access_logger_uses_forwarded_ip_only_for_trusted_proxy(self):
+        trusted_request = SimpleNamespace(
+            remote="172.19.0.6",
+            headers={"X-Forwarded-For": "203.0.113.10, 172.19.0.7"},
+            app={"settings": SimpleNamespace(trusted_proxies=["172.19.0.0/16"])},
+        )
+        untrusted_request = SimpleNamespace(
+            remote="172.19.0.6",
+            headers={"X-Forwarded-For": "203.0.113.10, 172.19.0.7"},
+            app={"settings": SimpleNamespace(trusted_proxies=["127.0.0.1"])},
+        )
+
+        self.assertEqual(
+            TrustedProxyAccessLogger._format_a(trusted_request, object(), 0),
+            "203.0.113.10",
+        )
+        self.assertEqual(
+            TrustedProxyAccessLogger._format_a(untrusted_request, object(), 0),
+            "172.19.0.6",
         )
 
     async def test_yookassa_webhook_rejects_untrusted_ip_before_reading_body(self):
@@ -70,6 +150,30 @@ class RequestSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 403)
         request.json.assert_not_awaited()
 
+    async def test_account_email_routes_reject_when_email_auth_disabled(self):
+        settings = SimpleNamespace(email_auth_configured=False)
+        handlers = [
+            account_routes.account_email_request_route,
+            account_routes.account_email_verify_route,
+            account_routes.account_password_request_route,
+            account_routes.account_password_confirm_route,
+        ]
+
+        with patch.object(account_routes, "_require_user_id", return_value=42):
+            for handler in handlers:
+                request = SimpleNamespace(
+                    app={"settings": settings},
+                    json=AsyncMock(side_effect=AssertionError("request.json() must not be called")),
+                    headers={},
+                    cookies={},
+                )
+
+                response = await handler(request)
+
+                self.assertEqual(response.status, 503, handler.__name__)
+                self.assertIn("email_auth_not_configured", response.text)
+                request.json.assert_not_awaited()
+
 
 class FreeKassaServiceTests(unittest.TestCase):
     def _make_service(self) -> FreeKassaService:
@@ -77,6 +181,7 @@ class FreeKassaServiceTests(unittest.TestCase):
 
         settings = SimpleNamespace(
             DEFAULT_CURRENCY_SYMBOL="RUB",
+            PAYMENT_REQUEST_TIMEOUT_SECONDS=15,
             trusted_proxies=["127.0.0.1"],
         )
         config = FreeKassaConfig(
